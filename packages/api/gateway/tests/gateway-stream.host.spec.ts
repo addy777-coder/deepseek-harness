@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket, { type RawData } from 'ws'
 import { Context, Service, symbols } from '@deepseek-ai/cordis'
 import { apply as applyConnection, inject as connectionInject } from '@deepseek-ai/dsh-client-connection'
+import { apply as applyWebConnection, inject as webConnectionInject } from '@deepseek-ai/dsh-client-connection/web'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import {
@@ -52,9 +53,9 @@ function browserCookie(ctx: Context): string {
   const existing = browserCookies.get(ctx)
   if (existing !== undefined) return existing
   const origin = `http://127.0.0.1:${String(ctx.webServer.port)}`
-  const target = new URL(ctx.connection.authenticatedUrl(origin))
+  const target = new URL(ctx.webConnection.authenticatedUrl(origin))
   let setCookie: string | undefined
-  ctx.connection.authorizeIndex({
+  ctx.webConnection.authorizeIndex({
     method: 'GET',
     url: `${target.pathname}${target.search}`,
     headers: { host: target.host },
@@ -1006,6 +1007,7 @@ async function setup(
   await ctx.plugin(TypertGatewayService, gatewayConfig)
   if (transport) {
     await ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
+    await ctx.plugin({ inject: [...webConnectionInject], apply: applyWebConnection })
   }
   await ctx.plugin(FeedService)
   ctx.typert.register({

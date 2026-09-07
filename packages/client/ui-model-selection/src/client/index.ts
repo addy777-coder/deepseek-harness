@@ -54,7 +54,9 @@ function optionsOf(directory: ModelDirectoryState, t: TranslateNS<'model'>): Sel
       rows.push({
         id: rowId(group.id, model.id),
         label: model.name,
-        detail: model.description !== undefined ? `${group.name} · ${model.description}` : group.name,
+        detail: [group.name, model.description, model.inputModalities?.includes('image') === true
+          ? t('tag.vision')
+          : undefined].filter(value => value !== undefined).join(' · '),
         ...(directory.current !== null
           && directory.current.provider === group.id
           && directory.current.model === model.id

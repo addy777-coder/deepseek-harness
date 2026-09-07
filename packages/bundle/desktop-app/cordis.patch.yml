@@ -1,0 +1,14 @@
+# The dsh-desktop-app bundle adds the Electron carrier to dsh-gui-app.
+
+- insert:
+    - id: desktop-transport
+      name: '@deepseek-ai/dsh-desktop-transport'
+
+    - id: desktop-directory-picker
+      name: '@deepseek-ai/dsh-host-directory-picker-native'
+
+    - id: desktop-directory-picker-ui
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-native'
+
+    - id: ui-desktop
+      name: '@deepseek-ai/dsh-client-ui-desktop'

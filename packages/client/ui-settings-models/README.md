@@ -1,5 +1,5 @@
 ---
-description: "Models settings and product-onboarding plugin for the dsh web client: provider rows, API-key management, model lists, and the DeepSeek first-run dialogs."
+description: "Models settings and product-onboarding plugin for the dsh web client: provider rows, API-key management, model capabilities, image recognition, and the DeepSeek first-run dialogs."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-settings-models` is the Models settings page of the dsh web client: users configure API keys (stored write-only under the profile's credential reference), edit each provider's model list, and hand-declare custom pi-ai routes, with provider rows and one editor card at a time. The page joins the provider directory, the settings document, and the credential descriptions into one shared snapshot, so a row's state stays consistent across all three. It also walks first-run users through two ordered dialogs — a versioned internal-testing notice and the conditional official-DeepSeek credential step.
+`dsh-client-ui-settings-models` is the Models settings page of the dsh web client: users configure API keys, edit each provider's model list and image capability, choose the global image-recognition model, and hand-declare custom pi-ai routes. The page joins provider, model, settings, and credential facts into revision-aware views, so provider rows, visual tags, and the recognition selector stay consistent. It also walks first-run users through two ordered dialogs — a versioned internal-testing notice and the conditional official-DeepSeek credential step.
 
 ## Table of Contents
 
@@ -33,7 +33,11 @@ The primary field on an editor card is a single **API key** input — the page n
 
 ### Editing a provider
 
-The collapsed 自定义设置 fold carries the curated extras: `baseURL` for both families (the deepseek placeholder shows the public endpoint), each adapter's model catalog, and the **display name** and **API protocol** of a pi-ai route the adapter does not ship. Profile `headers` remain deployment configuration in `settings.yaml` or Cordis config and have no Models-page editor. The Provider ID stays fixed: it is the settings key, the name every other namespace and every logged session references, and the stem of a credential reference the page cannot read back to move. Reasoning effort is deliberately not among the editable fields: it is a per-model capability, so a provider-scoped control could only be set to a value some models reject. Each DeepSeek row edits `id`, optional display `name`, and optional `contextWindow`/`maxTokens`; existing fields outside that curated set survive edits.
+The collapsed 自定义设置 fold carries the curated extras: `baseURL` for both families, each adapter's model catalog, and the **display name** and **API protocol** of a pi-ai route the adapter does not ship. Each model row edits id, display name, capacities, and **Supports image input**; the switch writes the adapter's existing per-model modality field and a confirmed image model gains a **Vision** tag. Endpoint discovery cannot prove modalities, so a newly adopted model starts text-only until the user enables the switch. Profile headers and other advanced fields remain in `settings.yaml`, while fields outside the curated set survive edits.
+
+### Image recognition
+
+The page binds the live `image-recognition` settings namespace to one exact provider/model selector above the provider rows. It lists only currently registered models whose resolved metadata explicitly includes image input and keeps a saved missing route visible so the user can clear it. Saving never sends a test image. The card states that images go to the selected model's provider, and a provider editor refuses to delete that model or disable its image capability until another recognition model is saved.
 
 ### Adding and deleting providers
 
@@ -59,11 +63,11 @@ The page never holds a full settings section: it holds only the REDACTED descrip
 
 ### Validation
 
-A typed API key is judged on its own field: after trimming, it must be non-empty and every character must be printable ASCII (`[\x21-\x7E]`), which is exactly what an HTTP header value can carry — the twin of `normalizeApiKey` in `@deepseek-ai/dsh-llm`, mirrored here because the source-plane split forbids importing it. A value matching a pasted `NAME=value` environment line or wrapped in matching quotes is refused as the same format failure. Empty ids, duplicate ids, empty explicit names, and unreadable, non-positive, or fractional capacities fail before any write. DeepSeek's `models` is one replace-by-value array: the editor shows inherited effective rows until the first model edit materializes the complete array in the user layer, while reset unsets that override.
+A typed API key is judged on its own field: after trimming, it must be non-empty and every character must be printable ASCII (`[\x21-\x7E]`), which is exactly what an HTTP header value can carry — the twin of `normalizeApiKey` in `@deepseek-ai/dsh-llm`, mirrored here because the source-plane split forbids importing it. A value matching a pasted `NAME=value` environment line or wrapped in matching quotes is refused as the same format failure. Empty ids, duplicate ids, empty explicit names, unreadable capacities, and a change that invalidates the saved recognition model fail before any write. DeepSeek's `models` is one replace-by-value array: the editor shows inherited effective rows until the first model edit materializes the complete array in the user layer, while reset unsets that override. Model discovery copies declared modalities from an installed catalog and defaults an endpoint-only candidate to `[text]`.
 
 ### Concurrency and credentials
 
-Each settings write carries the card's current `revision`, so a concurrent write from another tab or an external `settings.yaml` edit is refused as `settings/conflict`. After settings commit, the card adopts the returned redacted user subtree and revision before storing the credential, so a failed credential stage retries only that stage. Deletion removes a configured, writable credential only when the profile names the page's derived `<ROUTE>_API_KEY` target, then unsets the profile; both operations are idempotent. Once loaded, the page subscribes to forwarded `settings/document-updated`, `credentials/reference-updated`, and `llm/adapters-updated` owner events, plus local `connection/reset`, so external edits converge without polling.
+Each settings write carries the card's current `revision`, so a concurrent write from another tab or an external `settings.yaml` edit is refused as `settings/conflict`. After settings commit, the card adopts the returned redacted user subtree and revision before storing the credential, so a failed credential stage retries only that stage. Deletion removes a configured, writable credential only when the profile names the page's derived `<ROUTE>_API_KEY` target, then unsets the profile; both operations are idempotent. Once loaded, the page subscribes to forwarded `settings/document-updated`, `credentials/reference-updated`, and `llm/adapters-updated` owner events, plus local `connection/reset`, so provider rows and the image-recognition catalog converge without polling. The recognition write uses the namespace revision held when its draft began; a stale draft is discarded or retried against the new Host state instead of overwriting it.
 
 ### Onboarding coordinator
 
@@ -102,7 +106,7 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define the editor's field coverage and the page's reach; they are current package constraints, not a settings roadmap.
 
-- **Only the API key and curated fold fields are editable on the card** — the hand-written editor traded schema-generic field coverage for the mockup layout. Retry policy, timeouts, DeepSeek model descriptions, and other advanced fields remain in `settings.yaml`; existing model fields the editor does not show are preserved.
+- **Only the API key and curated fold fields are editable on the card** — the hand-written editor covers endpoint, identity, model capacities, and image capability rather than every schema field. Retry policy, timeouts, DeepSeek model descriptions, and other advanced fields remain in `settings.yaml`; existing model fields the editor does not show are preserved.
 - **Credential cleanup is intentionally narrow** — deleting a row removes the configured, writable credential only when its reference is the exact `<ROUTE>_API_KEY` target this page derives. Custom references, environment credentials, and unidentifiable targets are retained because the row cannot prove ownership of them.
 - **Only pi-ai routes can be hand-declared** — the custom-provider card writes into `llm-pi-ai`, the one namespace whose profiles describe a whole provider. A `llm-deepseek` route is a composition fact, not something this page can create.
 - **Interrogation covers OpenAI-compatible endpoints** — the adapter reads only that model-list response format, so a gateway speaking another protocol reports that it cannot be asked and its models are entered by hand.
@@ -118,4 +122,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published. A nav-entry-only section plugin rendering a fixed empty content column — it emits no cordis events and owns no cross-plugin mutable relation.
+**Runtime invariant:** No companion is published. Each controller derives its view from revisioned Host settings and model catalogs, and no independent observation can diverge from those owners.

@@ -53,6 +53,29 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
 afterEach(cleanup)
 
 describe('ModelSelect reasoning effort', () => {
+  it('labels models that explicitly accept image input', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups: [{
+        id: 'provider',
+        name: 'Provider',
+        models: [{ id: 'vision', name: 'Vision Model', inputModalities: ['text', 'image'] }],
+      }],
+      current: { provider: 'provider', model: 'vision' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择模型，当前 Vision Model' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByRole('menuitemradio', { name: /Vision Model/ }).textContent).toContain('视觉')
+  })
+
   it('renders effort names without descriptions and submits the effort as part of the session selection', async () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
     const select = vi.fn(async (selection: ModelSelection) => {

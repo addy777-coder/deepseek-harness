@@ -1,5 +1,5 @@
 ---
-description: "Browser-host wire layer for the web GUI: Remote RPC, event-stream delivery with reconnect, exact Fetch routes, the /api HTTP bridge, and the browser-trust fence."
+description: "Carrier-neutral GUI Connection for Remote RPC, event-stream recovery, and exact Fetch routes, plus the authenticated HTTP adapter used by the Web profile."
 kind: "package-reference"
 ---
 
@@ -9,12 +9,12 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The package carries browser-to-Host Remote calls, exact Fetch responses, and connection generations. The Client plugin mounts `ctx.connection` with current-page loopback state, a generic RPC carrier, the active generation and its Host facts, observable recovery state, an immediate reconnect command, and the registration point for one generation source. A generation becomes visible when its source reports ready; source completion, failure, withdrawal, or an explicit stop clears it before `ConnectionController` applies its retry policy.
+The package carries GUI-to-Host Remote calls, exact Fetch responses, and connection generations without choosing HTTP or Electron IPC. The Host plugin owns RPC, Fetch-route, and logical-channel registries; physical carriers adapt those handlers. The Client plugin mounts `ctx.connection` with a generic RPC carrier, active generation facts, observable recovery state, an immediate reconnect command, and one generation-source registration point. The `./web` adapter adds browser cookies, Host/Origin checks, and HTTP routes without placing those concerns in the shared core.
 
 ## Table of Contents
 
 - [Use this package](#use-this-package)
-- [Browser authentication and request trust](#browser-authentication-and-request-trust)
+- [Web authentication and request trust](#browser-authentication-and-request-trust)
 - [Connection generation](#connection-generation)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
@@ -25,14 +25,14 @@ The package carries browser-to-Host Remote calls, exact Fetch responses, and con
 <a id="use-this-package"></a>
 ## Use this package
 
-The browser uses HTTP POST for Remote unary calls. API Gateway owns the `/api/remote.mux` WebSocket and its logical streams; in-process compositions provide equivalent Remote streams through `connection.rpc.open` without opening a WebSocket. The Host half owns the sole `/api` route, Fetch bridge, browser authentication, Host/Origin checks, and exact `GET`/`HEAD` route registry. Typert Gateway claims generated Remote endpoints, feature packages register non-JSON responses such as Session-log downloads, and unclaimed requests return 404. Loopback hostname classification remains package-internal to the browser-facing Client state.
+The Client calls logical channels through `ctx.connection.rpc`. The Web page uses HTTP POST and API Gateway's `/api/remote.mux` WebSocket; DSH Desktop supplies Fetch and stream hooks over MessagePort and uses the virtual `http://dsh.internal` origin while its page remains on `file://`. The Host core composes shared `/api` RPC dispatch, exact `GET`/`HEAD` routes such as Session-log downloads, and ordinary logical channels. A carrier chooses how to expose those handlers; unclaimed requests return 404.
 
 -----
 
 <a id="browser-authentication-and-request-trust"></a>
-## Browser authentication and request trust
+## Web authentication and request trust
 
-Every Host RPC method and WebSocket stream requires one browser session; there is no method-specific loopback tier. Each process mints a random launch token. `dsh-web-app` prints and opens the ordinary root URL with `?token=...`; `frontend-static` delegates root and index requests to `ctx.connection.authorizeIndex`, which accepts that token only on `GET /`, writes an authority-bound signed cookie, and redirects to clean `/`. A missing, expired, malformed, or wrong-authority cookie returns 401 before RPC dispatch. Static assets remain public. The HTTP carrier accepts no query token outside the root exchange and no Authorization-header token.
+Every Web RPC method and WebSocket stream requires one browser session; there is no method-specific loopback tier. Each Web adapter activation mints a random launch token. `dsh-web-app` prints and opens the ordinary root URL with `?token=...`; `frontend-static` delegates root and index requests to `ctx.webConnection.authorizeIndex`, which accepts that token only on `GET /`, writes an authority-bound signed cookie, and redirects to clean `/`. A missing, expired, malformed, or wrong-authority cookie returns 401 before RPC dispatch. Static assets remain public. The HTTP carrier accepts no query token outside the root exchange and no Authorization-header token. Desktop does not mount this adapter and uses no cookie.
 
 The cookie signing secret is the owner-scoped `client-connection/browser-session` grant record in `ctx.credentials`. The local provider persists it in `$DSH_HOME/.credentials.yaml`; `BrowserAuth` loads or creates the record during Connection activation and retains the secret in memory, so request authentication is synchronous. Deleting or replacing the record takes effect on the next Connection activation. Cookies carry an absolute issue/expiry interval, defaulting to 30 days through `cookieMaxAgeDays`, and bind the normalized hostname plus port in both their deterministic name and signed payload. They are host-only, `Path=/`, `HttpOnly`, and `SameSite=Strict`; they deliberately omit `Secure` because the shipped server uses loopback HTTP.
 
@@ -58,7 +58,7 @@ None; this package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **The `/api` bridge buffers each request body in memory** — `maxRequestBodyBytes` (default 300 MiB, sized for the default 200 MiB aggregate image limit after base64 expansion plus envelope headroom) is therefore also the per-request resident bound; a streaming body path would be needed to lower it without shrinking the image limits.
+- **The Web `/api` bridge buffers each request body in memory** — `maxRequestBodyBytes` (default 300 MiB, sized for the default 200 MiB aggregate image limit after base64 expansion plus envelope headroom) is therefore also the per-request resident bound; other carriers own their own body limits.
 - **The browser cookie is not marked `Secure`** — loopback HTTP is the shipped transport, so exposing the same authority over plaintext networking can expose the bearer cookie in transit.
 - **There is no logout operation** — clearing the browser cookie ends one browser session; deleting the owner credential record and restarting `dsh` revokes every session.
 
@@ -73,4 +73,4 @@ None.
 
 </details>
 
-**Runtime invariant:** No companion is published. Browser-session verification reads the credential record asynchronously at the request that authorizes work, while the credentials companion owns record commit-event lifetime. Stream/reconnect sequencing and rpcId round-trip discipline are exercised directly by behavior specs, and route register/dispose symmetry is audited by the webserver companion.
+**Runtime invariant:** No companion is published. The registries have one owner and effect-scoped contributions; browser-session verification reads its credential during Web adapter activation, while the credentials companion owns record commit-event lifetime. Stream/reconnect sequencing and rpcId round-trip discipline are exercised directly by behavior specs, and Web route register/dispose symmetry is audited by the webserver companion.

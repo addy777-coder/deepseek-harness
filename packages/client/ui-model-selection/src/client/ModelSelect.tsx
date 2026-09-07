@@ -300,7 +300,12 @@ export function ModelSelect(
                             onClick={() => { choose({ provider: group.id, model: model.id }) }}
                           >
                             <span className={css.optionCopy}>
-                              <span className={css.modelName}>{model.name}</span>
+                              <span className={css.modelLine}>
+                                <span className={css.modelName}>{model.name}</span>
+                                {model.inputModalities?.includes('image') === true
+                                  ? <span className={css.visionTag}>{t('tag.vision')}</span>
+                                  : null}
+                              </span>
                             </span>
                             <span className={css.check}>
                               {selected ? <IconCheckOutline16 /> : null}

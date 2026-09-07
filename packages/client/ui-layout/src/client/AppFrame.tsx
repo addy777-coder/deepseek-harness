@@ -15,17 +15,19 @@ import type { ReactNode } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
+import type { LayoutInjected } from './index.ts'
 import css from './AppFrame.module.css'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.titlebar'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
+  & LayoutInjected
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode }) {
@@ -95,6 +97,7 @@ export function AppFrame({
   renderSlot,
   SessionProvider,
   t,
+  focused = false,
 }: AppFrameProps) {
   const panels = useStore(s => s)
   const detailsSession = useSessions((s) => {
@@ -145,11 +148,20 @@ export function AppFrame({
   // absorbs the squeeze.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
-  const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
+  const sidebarCollapsed = focused || (narrow ? !panels.narrowExpanded : panels.sidebar === 0)
   const sidebarPreference = sidebarCollapsed
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
-  const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  // The solver reserves the closed sidebar rail. A focused task window omits
+  // that rail, so return its width to the available viewport before solving.
+  const computedColumns = computeColumns(
+    focused ? viewport + SIDEBAR_COLLAPSED : viewport,
+    sidebarPreference,
+    detailsSession === undefined ? 0 : panels.details,
+  )
+  const cols = focused
+    ? { ...computedColumns, sidebar: 0 }
+    : computedColumns
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -172,7 +184,9 @@ export function AppFrame({
   }, [actions])
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
 
-  return (
+  const titlebar = renderSlot('shell.titlebar', {})
+
+  const frame = (
     <div
       ref={frameRef}
       className={css.frame}
@@ -185,7 +199,7 @@ export function AppFrame({
         productTitle={productTitle}
         {...documentTitle === undefined ? {} : { title: documentTitle }}
       />
-      <div className={css.sidebarCol}>
+      {!focused && <div className={css.sidebarCol}>
         {/* Render-site slot call with live concession output: a closed
             sidebar keeps the mounted slot at the compact-rail width, and the
             component sees its rendered state as owner params decided here
@@ -195,7 +209,7 @@ export function AppFrame({
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
         })}
-      </div>
+      </div>}
       <>
         {/* Both column occupants stay at fixed tree positions from first
             paint — no loading gate: a bare status line reads worse than
@@ -211,8 +225,11 @@ export function AppFrame({
         {renderSlot('shell.overlay', {})}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!focused && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )
+  return titlebar === null
+    ? frame
+    : <div className={css.desktopShell}>{titlebar}{frame}</div>
 }

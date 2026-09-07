@@ -30,9 +30,9 @@ Under **Model catalog**, choose **Fetch available models** to query the base URL
 
 ### Image input
 
-A model you enter by hand is treated as text-only until it says otherwise, because nothing can ask an endpoint which modalities it accepts. Attaching an image to such a model is refused before it is sent, naming the model.
+A model you enter by hand is treated as text-only until you say otherwise, because nothing can ask an endpoint which modalities it accepts. Expand that model under **Model catalog**, enable **Supports image input**, and save. The row and model selectors then show a **Vision** tag.
 
-A vision model on a custom provider therefore needs one line. The form has no field for it; add `input` to the model in `$DSH_HOME/settings.yaml`:
+The switch writes `input: [text, image]` for a pi-ai model and `inputModalities: [text, image]` for a direct DeepSeek model. The equivalent pi-ai setting is:
 
 ```yaml
 llm-pi-ai:
@@ -78,6 +78,16 @@ llm-pi-ai:
 Every list must name at least one modality except a model's own, where an empty list means the same as omitting it. An unknown modality is refused wherever it is written.
 
 Both fields state a claim about your endpoint rather than checking it. A model that declares images its endpoint does not serve is not caught here; the provider rejects the request instead.
+
+### Image recognition for text-only models
+
+The **Image recognition** card at the top of **Settings → Models** lets one selected vision model supply image information to text-only conversation models. Mark the visual model with **Supports image input** first, then select it under **Image recognition model** and save. The setting stores both provider and model, so equal model ids on different providers remain distinct.
+
+When a text-only model encounters a user upload, `read_image` result, MCP result, ACP prompt, or Subagent follow-up, the selected vision model receives only the source message's text and ordered images. Its factual report and exact route are stored in the session before the text request. The ordinary Chat view hides this internal context; Trajectory and session exports retain it for diagnosis and replay.
+
+Each source message is recognized once. Reattaching the same image in a new message runs recognition again with that message's text. A failed, canceled, empty, tool-calling, or truncated recognition stops the text request without storing a partial report; the original image remains available for the next retry.
+
+Leaving **Image recognition model** unconfigured keeps text-only image admission disabled. The app never chooses a provider automatically or sends a billed test image while saving. Images go to the selected recognition model's provider even when the conversation model uses another provider.
 
 ### Request compatibility
 
@@ -129,7 +139,8 @@ If a saved default names a provider that was deleted, the composer displays **Se
 - **The gateway refuses every request although the key and URL are right** — Its request shape differs from OpenAI's. Start with `compat.supportsDeveloperRole: false` and `compat.maxTokensField: max_tokens` on the route.
 - **Only reasoning models fail** — pi-ai sends their system prompt as the `developer` role, which the gateway rejects. Set `compat.supportsDeveloperRole: false`.
 - **A compat switch is refused as having no value** — A key written with nothing after the colon. Give it a value, or remove the key to keep the installed catalog's.
-- **An image is refused before sending** — The model declares no image modality. Give a custom provider's model `input: [text, image]`; DeepSeek's own chat-completions route is text-only and cannot be configured otherwise.
+- **An image is refused before sending** — The conversation model declares no image modality and no valid image recognition model is configured. Enable **Supports image input** on a vision model, select it under **Image recognition model**, or switch the conversation to a vision model.
+- **The configured image recognition model is unavailable** — Its provider was removed, its model disappeared, or image capability was disabled. Return to **Settings → Models** and select another model or clear the setting.
 - **The provider rejects a request carrying an image** — The model declares images its endpoint does not actually serve. Remove `image` from whichever list granted it — the model's `input`, or the route's `defaultInput` — then start a new session: the attached image stays in the session log, so the same request repeats until the session moves off it.
 
 ## Advanced configuration

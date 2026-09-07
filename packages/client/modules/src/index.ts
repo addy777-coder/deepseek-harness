@@ -25,7 +25,6 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -43,8 +42,51 @@ export type {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** The web plugin table (provided by the client-modules node half). */
+    /** Client startup injections shared by served and embedded GUI shells. */
+    clientBoot: ClientBootRegistry
+    /** The client plugin table and immutable bundle artifacts. */
     clientModules: ClientModuleRegistry
+  }
+}
+
+/** One immutable client bundle or source-map response. */
+export interface ClientModuleArtifact {
+  /** Detached response bytes; callers may transfer or mutate this copy. */
+  readonly body: Uint8Array
+  /** Response media type captured when the graph was composed. */
+  readonly contentType: string
+}
+
+/** A producer evaluated each time a shell requests its startup injection table. */
+export type ClientBootInjectionProducer = () => readonly IndexInjection[]
+
+/** Registry for transport-neutral client startup injections. */
+export class ClientBootRegistry extends Service {
+  private readonly producers = new Set<ClientBootInjectionProducer>()
+
+  /** @param ctx - owning Client Modules context. */
+  constructor(ctx: Context) {
+    super(ctx, 'clientBoot')
+  }
+
+  /**
+   * Register one startup-injection producer for the caller fiber's lifetime.
+   * @param producer - function reading current Host state at collection time.
+   * @returns disposer removing this producer.
+   */
+  register(producer: ClientBootInjectionProducer): () => Promise<void> {
+    return this.ctx.effect(() => {
+      this.producers.add(producer)
+      return () => { this.producers.delete(producer) }
+    }, 'clientBoot.register()')
+  }
+
+  /**
+   * Collect a fresh ordered startup table.
+   * @returns a new table containing producer-owned immutable rows in registration order.
+   */
+  collect(): IndexInjection[] {
+    return [...this.producers].flatMap(producer => [...producer()])
   }
 }
 
@@ -176,8 +218,6 @@ interface ComboArtifact extends ComboArtifactBase {
 /** One generated initial-load response and its wire descriptor. */
 type BatchArtifact = ComboArtifact & { descriptor: WebBootBatch }
 
-/** Versioned code is immutable; mismatched revisions are rejected instead of serving newer bytes. */
-const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable'
 /** Generated request URLs stay below conservative browser and intermediary request-target limits. */
 const MAX_COMBO_URL_BYTES = 3 * 1024
 const HASH_REVISION_LENGTH = 12
@@ -531,7 +571,7 @@ window.__ModuleLoader__={
  * boot activation audit reports it).
  */
 export class ClientModuleRegistry extends Service {
-  static inject = ['webServer', 'loader']
+  static inject = ['loader']
 
   private readonly table = new Map<string, WebPluginRecord>()
   private readonly sources = new Map<string, ClientPackageSource>()
@@ -552,10 +592,11 @@ export class ClientModuleRegistry extends Service {
 
   /**
    * Build the service: subscribe, seed, and run the activation flush.
-   * @param ctx - plugin context carrying webServer and loader.
+   * @param ctx - plugin context carrying the Loader.
    */
   constructor(ctx: Context) {
     super(ctx, 'clientModules')
+    const boot = new ClientBootRegistry(ctx)
     // Subscribe before seeding so a fiber arriving mid-activation lands in the
     // same dirty set (Set idempotence makes the overlap harmless). An entry-less
     // fiber is a child plugin or a manual mount — never a loader row; O(1) drop.
@@ -582,13 +623,7 @@ export class ClientModuleRegistry extends Service {
       throw new ClientPackageCompositionError(failures)
     }
 
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
-      'client-modules: bundle route',
-    )
-    ctx.on('webserver/index-inject', (table) => {
-      table.push(...bootInjections(this.composed))
-    })
+    boot.register(() => bootInjections(this.composed))
   }
 
   /**
@@ -597,6 +632,18 @@ export class ClientModuleRegistry extends Service {
    */
   graph(): WebBootGraph {
     return this.composed
+  }
+
+  /**
+   * Read one graph-advertised immutable artifact.
+   * @param resourceUrl - absolute bundle URL including its revision query.
+   * @returns detached bytes and media type, or undefined for an unknown URL.
+   */
+  artifact(resourceUrl: string): ClientModuleArtifact | undefined {
+    const response = this.responses.get(resourceUrl) ?? this.previousBatchResponses.get(resourceUrl)
+    return response === undefined
+      ? undefined
+      : { body: Uint8Array.from(response.body), contentType: response.contentType }
   }
 
   /**
@@ -999,29 +1046,6 @@ export class ClientModuleRegistry extends Service {
     this.notifyGraphChanged()
   }
 
-  private readonly serveBundle = (req: IncomingMessage, res: ServerResponse): void => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.writeHead(405)
-      res.end()
-      return
-    }
-    /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server requests. */
-    const requestUrl = new URL(req.url ?? '/', 'http://x')
-    const resourceUrl = `${requestUrl.pathname}${requestUrl.search}`
-    const response = this.responses.get(resourceUrl) ?? this.previousBatchResponses.get(resourceUrl)
-    if (response !== undefined) {
-      res.writeHead(200, {
-        'content-type': response.contentType,
-        'cache-control': IMMUTABLE_CACHE,
-      })
-      res.end(req.method === 'HEAD' ? undefined : response.body)
-      return
-    }
-    // Anything else under /plugins (including unadvertised combinations and
-    // /plugins/events when the HMR row is absent) is an unknown resource.
-    res.writeHead(404)
-    res.end()
-  }
 }
 
 export default ClientModuleRegistry

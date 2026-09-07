@@ -695,7 +695,12 @@ function fixtureMessageIdReplacements(logs: readonly string[], fixtures: readonl
 /** Apply literal fixture replacements without changing any other fresh value. */
 function applyFixtureReplacements(content: string, replacements: readonly FixtureReplacement[]): string {
   let stable = content
-  for (const { from, to } of replacements) stable = stable.split(from).join(to)
+  for (const { from, to } of replacements) {
+    const encodedFrom = JSON.stringify(from).slice(1, -1)
+    const encodedTo = JSON.stringify(to).slice(1, -1)
+    stable = stable.split(encodedFrom).join(encodedTo)
+    if (encodedFrom !== from) stable = stable.split(from).join(to)
+  }
   return stable
 }
 

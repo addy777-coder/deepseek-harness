@@ -69,11 +69,11 @@ Each browser session composes its own agent from the shipped presets (the `stand
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The bundle is one patch plus one runtime glue plugin. The storage stack and projection cache come from `dsh-base`; the web overlay's workspace and message-feedback rows consume that shared `storageDomain` service. The patch restates the surface-specific values the base deliberately omits, inserts the web-only host rows and browser roster, then moves the agent plane behind presets. The glue plugin owns dist serving, trust sampling, prompt sections, the bash variable, and the readiness announcements.
+The bundle is one carrier patch plus one runtime glue plugin. `dsh-gui-app` below it owns the workspace, controllers, Connection core, client-module registry, and shared UI roster. The Web patch adds the HTTP server, adaptive directory picker, browser authentication, static frontend, `/plugins` adapter, and client HMR. The glue plugin owns dist serving, trust sampling, Web prompt sections, the bash variable, and readiness announcements.
 
 ### Patch semantics
 
-A patch replaces the targeted row's whole `config`, so each web row restates every key it owns: the persona, the `DSH_TOOLS_MODE` PTC mode opt-in, and the `session-query-sqlite` values on the base rows, then `insert` adds the web host rows, transport, and browser roster. The per-agent tool rows the base mounts process-wide are disabled here and the preset roster takes over; the reasoning for each host-plane versus preset-plane decision is inline in the patch.
+A patch replaces the targeted row's whole `config`, so the Web carrier keeps its complete HTTP settings on its own rows. Its insert list adds the server, picker chooser, authenticated Connection adapter, frontend fallback, client-module Web adapter, startup provider, runtime glue, browser brand, and client HMR. Shared GUI and agent-plane decisions remain in `dsh-gui-app`; each row's carrier-specific reason is inline in this patch.
 
 ### Readiness
 
@@ -89,7 +89,7 @@ The URL line and browser handoff are readiness signals: supervisors RPC as soon 
 |---|---|
 | [`src/index.ts`](src/index.ts) | The `web-app` glue plugin: dist resolution, LAN trust sampling, prompt sections, bash variable, URL line, browser handoff |
 | [`src/startup.ts`](src/startup.ts) | The `web-startup` provider: `--host`, `--port`, `--trusted-host`, `--no-open`, `--help` |
-| [`cordis.patch.yml`](cordis.patch.yml) | The web patch: restated base values, web host rows, browser roster, agent plane behind presets |
+| [`cordis.patch.yml`](cordis.patch.yml) | The Web carrier patch: HTTP, browser authentication, static assets, module routes, startup, brand, and HMR |
 | — | No runtime invariant companion is published; every contribution (frontend-static child plugin, prompt section, bashEnv registration) is registry-disposed with the fiber, and each owning registry's package carries that relation's invariant; the package holds no mutable state of its own to audit. |
 | [`tests/web-app.spec.ts`](tests/web-app.spec.ts) | Dist resolution, fallback seat, prompt sections, readiness |
 | [`tests/startup.spec.ts`](tests/startup.spec.ts) | Command-line parsing over a real Loader tree |

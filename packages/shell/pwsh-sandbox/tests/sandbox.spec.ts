@@ -183,6 +183,19 @@ describe.skipIf(!pwshAvailable())('SandboxPwshExecutor', () => {
     expect(result.sandbox).toEqual({ mode: 'read-only', denied: false, enforcement: 'full' })
   }, 30_000)
 
+  it('applies runner environment additions after caller values', async () => {
+    const { executor } = await setup(argv => ({
+      ...passthrough(argv),
+      env: { DSH_RUNNER_PROBE: 'runner' },
+    }))
+    const result = await executor.run(executor.resolve({
+      command: '[Console]::Out.Write($env:DSH_RUNNER_PROBE)',
+      env: { DSH_RUNNER_PROBE: 'caller' },
+      sandboxPolicy: RO,
+    }))
+    expect(result.stdout.text).toBe('runner')
+  }, 30_000)
+
   it('advertises the deployment default mode and stamps the deployment policy when none rides the request', async () => {
     const { executor, calls } = await setup()
     expect(executor.sandboxMode).toBe('workspace-write')

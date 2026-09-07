@@ -19,6 +19,16 @@
     - text: 关闭
   - heading "模型" [level=2]
   - paragraph: 填入各提供方的 API 密钥即可使用其模型。
+  - region "图片识别":
+    - text: 图片识别 视觉
+    - paragraph: 会话模型仅支持文本时，图片会发送给此模型，并将其事实描述提供给会话模型。图片会发送到该模型的提供方。
+    - text: 图片识别模型
+    - combobox "图片识别模型":
+      - option "未配置"
+      - option "minimax-cn · MiniMax-M3"
+      - option "Acme Gateway · acme-large" [selected]
+    - button "取消"
+    - button "保存图片识别模型" [disabled]
   - list:
     - listitem:
       - text: minimax-cn
@@ -55,11 +65,19 @@
             - text: acme-large
           - textbox "显示名称 1":
             - /placeholder: 显示名称
-          - button "容量 1"
+          - button "模型设置 1" [expanded]
           - button "删除模型 1"
+          - checkbox "支持图片输入"
+          - text: 支持图片输入 上下文窗口
+          - textbox "上下文窗口 1":
+            - /placeholder: 256K
+          - text: 最大输出 token
+          - textbox "最大输出 token 1":
+            - /placeholder: 32K
           - button "添加模型"
+      - paragraph: 该模型是当前已保存的图片识别模型。删除它或关闭图片能力前，请先选择其他图片识别模型。
       - button "取消"
-      - button "保存"
+      - button "保存" [disabled]
   - button "添加提供方":
     - img
     - text: 添加提供方

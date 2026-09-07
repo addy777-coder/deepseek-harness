@@ -1,0 +1,16 @@
+.mark {
+  display: grid;
+  place-items: center;
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+}
+
+.name {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}

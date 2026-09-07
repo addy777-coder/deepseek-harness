@@ -73,6 +73,8 @@ export interface ProviderEditorProps {
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
   readOnly: boolean
+  /** Current saved recognition route whose image capability this provider must preserve. */
+  protectedImageRecognition?: { provider: string; model: string } | null
   /** Render only the credential field and actions, without provider settings. */
   credentialOnly?: boolean
   /** Require a newly entered credential before this editor can submit. */
@@ -214,6 +216,18 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // The model list is validated by the same per-row checker for both families,
   // so a bad row is named by its position rather than by a blanket message.
   const modelFailure = validateDeepSeekModels(schema.getPath(draft, ['models']))
+  const draftModels = schema.getPath(draft, ['models'])
+  const originalModels = schema.getPath(committedOriginal, ['models'])
+  const protectedRecognitionFailure = props.credentialOnly !== true
+    && props.protectedImageRecognition?.provider === props.provider
+    && JSON.stringify(draftModels) !== JSON.stringify(originalModels)
+    && (() => {
+      const target = props.protectedImageRecognition
+      const model = modelDrafts(draftModels).find(entry => entry['id'] === target.model)
+      if (model === undefined) return true
+      const modalities = model[layout === 'deepseek' ? 'inputModalities' : 'input']
+      return Array.isArray(modalities) && !modalities.includes('image')
+    })()
   const keyFailure = apiKeyFailure(keyDraft)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
@@ -498,11 +512,15 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {`${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`}
           </p>
         )}
+      {protectedRecognitionFailure
+        ? <p className={styles['advancedHint']}>{t('recognitionProtected')}</p>
+        : null}
       <EditorFooter
         t={t}
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
+          || protectedRecognitionFailure
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}

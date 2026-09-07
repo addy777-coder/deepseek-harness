@@ -7,7 +7,8 @@ import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/
 import { AttachmentError, admitPromptContent } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import {
-  ReasoningEffortId, createUserMessage, freezeMessage,
+  ImageRecognitionError, ReasoningEffortId, createUserMessage, freezeMessage,
+  hasImageRecognitionTarget,
 } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
@@ -281,7 +282,7 @@ export class SessionCommandController {
   }
 
   /**
-   * Admit one browser prompt after explicit Agent resume and image validation.
+   * Admit one browser prompt after Agent resume and direct-image or recognition validation.
    * @param request - Session identity, prompt content, source metadata, and delivery mode.
    * @returns acknowledgement that the Agent accepted the prompt.
    */
@@ -316,10 +317,12 @@ export class SessionCommandController {
         if (hasImage) {
           const current = this.agents.selectionFor(agent).current
           const model = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
-          if (model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
+          if (model.inputModalities !== undefined
+            && !model.inputModalities.includes('image')
+            && !await hasImageRecognitionTarget(this.ctx)) {
             throw new RemoteError(
               'session/attachment-invalid',
-              `Model "${current.model}" does not support image input.`,
+              `Model "${current.model}" does not support image input; configure an image recognition model in Settings > Models.`,
               { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
             )
           }
@@ -331,6 +334,9 @@ export class SessionCommandController {
       } catch (error) {
         if (remoteErrorOf(error) !== undefined) throw error
         if (error instanceof AttachmentError) {
+          throw new RemoteError('session/attachment-invalid', error.message, { reason: error.code })
+        }
+        if (error instanceof ImageRecognitionError) {
           throw new RemoteError('session/attachment-invalid', error.message, { reason: error.code })
         }
         throw new RemoteError('session/agent-busy', 'prompt rejected', { reason: String(error) })

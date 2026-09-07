@@ -117,7 +117,7 @@ interface RunnerFailureRule {
 }
 ```
 
-`ConfinedArgv` is what the consumer spawns. Besides the replacement argv, it carries the backend's enforcement fact and two orthogonal stderr classifiers. `denialSignatures` identify the confined command being blocked while the sandbox works correctly. `runnerFailureRules` identify the sandbox runner refusing or failing before it executes the command; consumers check these first and surface a sandbox infrastructure failure, never an ordinary task failure.
+`ConfinedArgv` is what the consumer spawns. Besides the replacement argv, it carries runner-only environment additions, the backend's enforcement fact, and two orthogonal stderr classifiers. The consumer merges `env` after caller entries; the runner removes those additions before it starts the wrapped command. `denialSignatures` identify the confined command being blocked while the sandbox works correctly. `runnerFailureRules` identify the sandbox runner refusing or failing before it executes the command; consumers check these first and surface a sandbox infrastructure failure, never an ordinary task failure.
 
 ```ts type-equiv
 /**
@@ -128,6 +128,8 @@ interface RunnerFailureRule {
 interface ConfinedArgv {
   /** The wrapped argv (runner, profile, separator, then the caller's argv). */
   argv: string[]
+  /** Environment additions required by the runner itself, not by the wrapped command. */
+  env?: Readonly<Record<string, string>>
   /** How completely the selected backend enforces the policy's file effects. */
   enforcement: SandboxEnforcement
   /**

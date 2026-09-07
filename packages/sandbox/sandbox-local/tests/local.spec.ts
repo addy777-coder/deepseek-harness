@@ -392,6 +392,7 @@ describe('the windows-acl probe (runner invocation contract)', () => {
     expect(probeWindowsAcl).toHaveBeenCalledTimes(1)
     expect(confined.argv.slice(-4)).toEqual(['--mode', 'read-only', '--', 'true'])
     expect(confined.enforcement).toBe('partial')
+    expect(confined.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
     expect(confined.denialSignatures).toEqual(['access is denied', 'access to the path', 'permission denied'])
     expect(confined.runnerFailureRules).toEqual([{ allowedExitCodes: [127], fatalSignatures: ['windows-acl-run: '] }])
   })
@@ -427,6 +428,7 @@ describe('the windows-acl probe (runner invocation contract)', () => {
     })
     const confined = sandbox.confine(['true'], RO)
     expect(confined.argv.slice(0, 3)).toEqual([process.execPath, '--import', 'tsx/esm'])
+    expect(confined.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
     expect(confined.argv[3]).toMatch(/runner\.ts$/)
   })
 

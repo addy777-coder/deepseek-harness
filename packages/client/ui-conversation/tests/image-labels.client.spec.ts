@@ -23,7 +23,12 @@ describe('attachment rejection copy', () => {
   })
 
   it('maps user-solvable reasons to limit-naming copy', () => {
-    expect(attachmentErrorText(t, 'MODEL_DOES_NOT_SUPPORT_IMAGES')).toBe('当前模型不支持图片，请切换支持图片的模型')
+    expect(attachmentErrorText(t, 'MODEL_DOES_NOT_SUPPORT_IMAGES'))
+      .toBe('当前模型不支持图片，请在“设置 → 模型”中配置图片识别模型，或切换到视觉模型')
+    expect(attachmentErrorText(t, 'IMAGE_RECOGNITION_MODEL_UNAVAILABLE'))
+      .toBe('已配置的图片识别模型当前不可用，请在“设置 → 模型”中重新选择')
+    expect(attachmentErrorText(t, 'IMAGE_RECOGNITION_MODEL_NOT_IMAGE_CAPABLE'))
+      .toBe('已配置的图片识别模型未声明图片能力，请在“设置 → 模型”中重新选择')
     expect(attachmentErrorText(t, 'IMAGE_TOO_MANY_PIXELS')).toBe('图片分辨率过大，请压缩后重试')
     expect(attachmentErrorText(t, 'INVALID_IMAGE')).toBe('仅支持 PNG、JPG、WebP、GIF 格式的图片')
     expect(attachmentErrorText(t, 'IMAGE_TYPE_MISMATCH')).toBe('仅支持 PNG、JPG、WebP、GIF 格式的图片')

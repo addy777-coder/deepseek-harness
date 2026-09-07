@@ -32,6 +32,8 @@ export function attachmentErrorText(
 ): string {
   switch (reason) {
     case 'MODEL_DOES_NOT_SUPPORT_IMAGES': return t('image.modelUnsupported')
+    case 'IMAGE_RECOGNITION_MODEL_UNAVAILABLE': return t('image.recognitionUnavailable')
+    case 'IMAGE_RECOGNITION_MODEL_NOT_IMAGE_CAPABLE': return t('image.recognitionNotCapable')
     case 'IMAGE_TOO_MANY_PIXELS': return t('image.tooManyPixels')
     case 'IMAGE_DIMENSION_TOO_LARGE':
       if (limits !== undefined) return t('image.dimensionTooLarge', { size: limits.maxImageDimension })

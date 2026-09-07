@@ -14,7 +14,7 @@ Both image-reading operations live in `dsh-tool-fs` and publish ordinary logged 
 
 - **`read_image` reads a filesystem path.** Extension selects the declared PNG/JPEG/WebP/GIF media type; the attachment store's magic-byte and pixel validation stays authoritative. Bytes travel `ctx.fs.stat` → bounded `ctx.fs.readBytes` → `ctx.attachments.saveImage` → `fs/observed`. The tool result contains metadata and an `ImageBlock`.
 - **`FileSystem.readBytes(target, signal, maxBytes)`** is a new required provider primitive: the byte bound lives at the seam so no backend can buffer an unbounded file, with the stat-size short-circuit and a one-byte-past-cap stream guard against post-stat growth (`FS_TOO_LARGE`).
-- **Registration is composition-conditional, execution is route-gated.** The tools register only under `ctx.inject(['attachments'], …)`. Before I/O, the strict gate resolves the calling route through `ctx.llm.resolveModelInfo` and requires `image` in `inputModalities`; unknown capability refuses. A text-only route can still consume prior durable images because the shared LLM runtime projects them to placeholders at request assembly.
+- **Registration is composition-conditional, execution is route-gated.** The tools register only under `ctx.inject(['attachments'], …)`. Before I/O, the strict gate resolves the calling route through `ctx.llm.resolveModelInfo`; it accepts declared image input or a valid configured image-recognition route, and otherwise refuses. A text-only route keeps durable images as request-local placeholders beside any durable recognition report.
 - **PTC mode forwards the image out-of-band**: a nested dispatch returns the canonical value (execution-local, no image block) and defers a `user`-role context message carrying the envelope and image, so the picture still reaches the next request.
 - **llm-replay models may declare `inputModalities`**, which lets keyless ACP snapshots cover the image-capable result and the text-only refusal.
 
@@ -27,6 +27,6 @@ Both image-reading operations live in `dsh-tool-fs` and publish ordinary logged 
 
 ## Consequences
 
-- The tools refuse execution on a text-only route, while existing images in session history are represented by request-local placeholders.
+- The tools refuse execution when neither the current route nor a configured recognition route accepts images. Text-only model requests represent durable images with request-local placeholders and receive completed recognition reports as text.
 - Repeated image results accumulate request cost until request projection or compaction removes them; content addressing deduplicates durable bytes.
 - The tool-result card now renders the image itself through the browser's `tool.call.images` slot (see [the tool-card image results note](2026-08-20-tool-card-image-results.md)); a UI without the attachment presentation plugin shows the result's envelope text.

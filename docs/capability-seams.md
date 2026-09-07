@@ -19,6 +19,11 @@ flowchart LR
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
   pkg_compaction_basic["compaction-basic"]
+  svc_imageRecognition["ctx.imageRecognition<br/>Auxiliary image recognition"]
+  pkg_image_recognition_llm["image-recognition-llm"]
+  pkg_acp["acp"]
+  pkg_mcp_client["mcp-client"]
+  pkg_subagent["subagent"]
   pkg_deepseek_llm_api_extensions["deepseek-llm-api-extensions"]
   svc_deepseekLlmApiExtensions["ctx.deepseekLlmApiExtensions<br/>Official DeepSeek request extensions"]
   pkg_session_log_deepseek["session-log-deepseek"]
@@ -112,13 +117,11 @@ flowchart LR
   svc_sessionProjections["ctx.sessionProjections<br/>Session projection units"]
   pkg_session_projection_cache["session-projection-cache"]
   svc_sessionProjectionCache["ctx.sessionProjectionCache<br/>Persisted projection cache"]
-  pkg_subagent["subagent"]
   pkg_skill["skill"]
   svc_skills["ctx.skills<br/>Skill provider registry"]
   pkg_skill_badge["skill-badge"]
   pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
-  pkg_acp["acp"]
   pkg_agent_default_model["agent-default-model"]
   svc_agentDefaultModel["ctx.agentDefaultModel<br/>Default Agent model selection"]
   pkg_headless["headless"]
@@ -204,6 +207,9 @@ flowchart LR
   pkg_client_connection["client-connection"]
   pkg_client_modules["client-modules"]
   pkg_client_hmr["client-hmr"]
+  svc_clientBoot["ctx.clientBoot<br/>Client startup injection registry"]
+  pkg_client_ui_theme["client-ui-theme"]
+  pkg_desktop_transport["desktop-transport"]
   svc_clientModules["ctx.clientModules<br/>Client plugin graph host"]
   pkg_workflow["workflow"]
   svc_workflowEngine["ctx.workflowEngine<br/>Workflow script engine"]
@@ -235,6 +241,7 @@ flowchart LR
   pkg_authorization --> svc_authorization
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
+  pkg_client_modules --> svc_clientBoot
   pkg_client_modules --> svc_clientModules
   pkg_code_runtime --> svc_codeRuntime
   pkg_code_runtime_worker_thread --> svc_codeRuntime
@@ -261,10 +268,12 @@ flowchart LR
   pkg_host_directory_picker_browse --> svc_directoryPicker
   pkg_host_directory_picker_native --> svc_directoryPicker
   pkg_host_webserver --> svc_webServer
+  pkg_image_recognition_llm --> svc_imageRecognition
   pkg_inspector --> svc_inspector
   pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
+  pkg_llm --> svc_imageRecognition
   pkg_llm --> svc_llm
   pkg_llm_deepseek --> svc_llm
   pkg_llm_pi_ai --> svc_llm
@@ -351,7 +360,10 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_clientBoot --> pkg_client_ui_theme
+  svc_clientBoot --> pkg_desktop_transport
   svc_clientModules --> pkg_client_hmr
+  svc_clientModules --> pkg_desktop_transport
   svc_codeRuntime --> pkg_tools
   svc_compaction --> pkg_compaction_basic
   svc_cordisInspect --> pkg_tool_cordis
@@ -365,6 +377,11 @@ flowchart LR
   svc_e2b --> pkg_subprocess_e2b
   svc_fileReferences --> pkg_api_session_controller
   svc_fs --> pkg_tool_fs
+  svc_imageRecognition --> pkg_acp
+  svc_imageRecognition --> pkg_api_session_controller
+  svc_imageRecognition --> pkg_mcp_client
+  svc_imageRecognition --> pkg_subagent
+  svc_imageRecognition --> pkg_tool_fs
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
   svc_invariants --> pkg_scope
@@ -467,6 +484,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |
+| `ctx.imageRecognition` | `seam` | [`llm`](../packages/llm/llm) | [`image-recognition-llm`](../packages/llm/image-recognition-llm) | [`acp`](../packages/acp/acp), [`api-session-controller`](../packages/api/session-controller), [`mcp-client`](../packages/mcp/mcp-client), [`subagent`](../packages/subagent/subagent), [`tool-fs`](../packages/fs/tool-fs) | - | Validates one explicit image-capable route and contributes durable visual reports before text-only model requests. |
 | `ctx.deepseekLlmApiExtensions` | `seam` | [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions) | [`session-log-deepseek`](../packages/session/session-log-deepseek), [`plugin-package-inventory-deepseek`](../packages/llm/plugin-package-inventory-deepseek) | [`llm-deepseek`](../packages/llm/llm-deepseek) | - | Plugins prepare independent top-level fields; the official adapter merges them and commits their delivery state after HTTP acceptance. |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction. |
@@ -528,7 +546,8 @@ flowchart LR
 | `ctx.spillStore` | `seam` | [`spill`](../packages/spill/spill) | [`spill-local`](../packages/spill/spill-local) | [`spill-policy`](../packages/spill/spill-policy) | - | The backend saves oversized tool text and returns a model-facing locator plus retrieval hint; spill-policy is the tools/post-execute consumer that decides when to spill. |
 | `ctx.directoryPicker` | `seam` | [`host-directory-picker`](../packages/host/directory-picker) | [`host-directory-picker-native`](../packages/host/directory-picker-native), [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | [`api-workspace-controller`](../packages/api/workspace-controller) | - | Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement). |
 | `ctx.webServer` | `core` | [`host-webserver`](../packages/host/webserver) | - | [`client-connection`](../packages/client/connection), [`client-modules`](../packages/client/modules), [`client-hmr`](../packages/client/hmr) | - | Plain node:http carrier: named-route registry, index transform taps, and the static dist fallback; web-transport plugins register their own routes. |
-| `ctx.clientModules` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-hmr`](../packages/client/hmr) | - | Composes the __DSH_BOOT__ entry graph from an incremental dsh.client scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers. |
+| `ctx.clientBoot` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-ui-theme`](../packages/client/ui-theme), [`desktop-transport`](../packages/desktop/transport) | - | Collects current Host-produced startup rows for either an HTML index response or a Desktop IPC boot payload. |
+| `ctx.clientModules` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-hmr`](../packages/client/hmr), [`desktop-transport`](../packages/desktop/transport) | - | Composes the client entry graph and immutable bundle artifacts from an incremental dsh.client scan, then notifies rebuilt and graph-changed subscribers. |
 | `ctx.workflowEngine` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-worker-thread`](../packages/workflow/workflow-worker-thread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | One engine per context, as in bash, with no named-provider registry; the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents. |
 | `ctx.webhookRuntime` | `core` | [`webhook`](../packages/webhook/webhook) | - | [`webhook-github`](../packages/webhook/webhook-github) | - | Provider adapters dispatch authenticated deliveries; trusted plugins register independent process-local rules, and the runtime turns non-null results into ordinary Workspace-backed Sessions without delivery or completion state. |
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | [`lsp-stdio`](../packages/lsp/lsp-stdio) | [`tool-lsp`](../packages/lsp/tool-lsp) | - | Provider registration and selection plus normalized query execution over exactly four operations; the seam offers no protocol escape hatch, so a backend translates into the normalized request and result. |

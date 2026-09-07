@@ -1,0 +1,40 @@
+import { defineConfig } from 'tsdown'
+
+export default defineConfig([
+  {
+    name: '@deepseek-ai/dsh-desktop-main',
+    entry: { main: 'lib/types/main/main/main.js' },
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'node24',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    deps: { neverBundle: ['electron'] },
+  },
+  {
+    name: '@deepseek-ai/dsh-desktop-host-bootstrap',
+    entry: { 'host-bootstrap': 'lib/types/main/main/host-bootstrap.js' },
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'node24',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    deps: { neverBundle: specifier => specifier === 'tsx' || specifier.startsWith('tsx/') },
+  },
+  {
+    name: '@deepseek-ai/dsh-desktop-preload',
+    entry: { preload: 'lib/types/main/main/preload.js' },
+    outDir: 'lib',
+    format: ['cjs'],
+    platform: 'node',
+    target: 'node24',
+    fixedExtension: '.cjs',
+    dts: false,
+    clean: false,
+    deps: { neverBundle: ['electron'] },
+  },
+])

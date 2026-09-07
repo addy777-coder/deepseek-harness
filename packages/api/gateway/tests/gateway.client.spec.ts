@@ -2444,6 +2444,19 @@ describe('Remote stream client carrier lifecycle', () => {
     })
   })
 
+  it('uses the internal ws URL for a file-loaded desktop renderer', async () => {
+    await withFakeWebSocket('file://', async () => {
+      FakeWebSocket.autoOpen = false
+      const client = new RemoteStreamMuxClient()
+      client.start()
+      const iterator = client.open('feed/follow', {}, new AbortController().signal)[Symbol.asyncIterator]()
+      const pending = iterator.next()
+      expect(FakeWebSocket.sockets[0]?.url).toBe('ws://dsh.internal/api/remote.mux')
+      await client.close()
+      await expect(pending).rejects.toThrow('Remote stream client disposed')
+    })
+  })
+
   it('fails waiters with one socket attempt and lets the owner start the next attempt', async () => {
     await withFakeWebSocket('null', async () => {
       FakeWebSocket.autoOpen = false

@@ -20,6 +20,15 @@
   - heading "模型" [level=2]
   - paragraph: 填入各提供方的 API 密钥即可使用其模型。
   - status: 已保存 minimax-cn。
+  - region "图片识别":
+    - text: 图片识别 视觉
+    - paragraph: 会话模型仅支持文本时，图片会发送给此模型，并将其事实描述提供给会话模型。图片会发送到该模型的提供方。
+    - text: 图片识别模型
+    - combobox "图片识别模型":
+      - option "未配置" [selected]
+      - option "minimax-cn · MiniMax-M3"
+    - button "取消"
+    - button "保存图片识别模型" [disabled]
   - list:
     - listitem:
       - text: minimax-cn

@@ -117,6 +117,36 @@ function assistantMessage(id: string, text: string) {
 }
 
 describe('Trajectory conversation Definitions', () => {
+  it('retains durable image-recognition context for audit', () => {
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'user/message', {
+        id: 'recognition-1',
+        role: 'user',
+        content: [{ type: 'text', text: 'image report' }],
+        source: {
+          kind: 'image-recognition',
+          sourceMessageId: 'source-1',
+          provider: 'vision',
+          model: 'visual-model',
+          images: [{ attachmentId: 'sha256:image', path: '0.1' }],
+        },
+      }, { surfaceOp: 'append' }),
+    ]))
+
+    expect(current.eventNodes).toMatchObject([{
+      kind: 'context',
+      content: [{ type: 'text', text: 'image report' }],
+      source: {
+        kind: 'image-recognition',
+        sourceMessageId: 'source-1',
+        provider: 'vision',
+        model: 'visual-model',
+      },
+    }])
+  })
+
   it('assembles streaming usage, preserves retry facts, and materializes interruption', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),

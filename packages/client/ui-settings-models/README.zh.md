@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端的模型设置与产品引导插件：提供方行、API 密钥管理、模型列表与 DeepSeek 首次运行弹窗。"
+description: "dsh Web 客户端的模型设置与产品引导插件：提供方行、API 密钥管理、模型能力、图片识别与 DeepSeek 首次运行弹窗。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供方的模型列表，并手工声明自定义 pi-ai 路由；页面以提供方行展示，一次只展开一张编辑卡片。该页面把提供方目录、设置文档与凭据描述合并为一个共享快照，因此行的状态在三个方面始终一致。它还会带首次运行的用户走两个有序弹窗——版本化内测声明，以及按条件显示的官方 DeepSeek 凭据步骤。
+`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥、编辑每个提供方的模型列表与图片能力、选择全局图片识别模型，并手工声明自定义 pi-ai 路由。该页面把提供方、模型、settings 与凭据事实合并为具备 revision 感知的视图，因此提供方行、视觉标签和识别选择器保持一致。它还会带首次运行的用户走两个有序弹窗——版本化内测声明，以及按条件显示的官方 DeepSeek 凭据步骤。
 
 ## 目录
 
@@ -33,7 +33,11 @@ kind: "package-reference"
 
 ### 编辑提供方
 
-收起的「自定义设置」折叠区承载精选的额外字段：两个家族都有 `baseURL`（deepseek 的占位符显示公共端点）、各适配器自己的模型目录，以及适配器未提供的 pi-ai 路由的**显示名称**与 **API 协议**。Profile `headers` 仍是 `settings.yaml` 或 Cordis 配置中的部署配置，Models 页面不提供编辑器。Provider ID 保持固定：它是 settings 的键、其他每个 namespace 与每一条已记录会话引用的名字，也是页面读不回、因而搬不走的凭据引用词干。推理等级刻意不在可编辑字段之列：它是按模型的能力，提供方级的控件只可能被设成某些模型会拒绝的值。每个 DeepSeek 行编辑 `id`、可选显示 `name` 与可选 `contextWindow`/`maxTokens`；该精选集之外的现有字段在编辑后仍会保留。
+收起的「自定义设置」折叠区承载精选的额外字段：两个家族都有 `baseURL`、各适配器自己的模型目录，以及适配器未提供的 pi-ai 路由的**显示名称**与 **API 协议**。每个模型行可以编辑 id、显示名称、容量和**支持图片输入**；该开关会写入适配器已有的模型级模态字段，确认支持图片的模型会获得**视觉**标签。端点发现无法证明模态，因此新采纳的模型在用户开启该开关前按纯文本处理。Profile headers 与其他进阶字段仍留在 `settings.yaml` 中，精选集之外的字段在编辑后仍会保留。
+
+### 图片识别
+
+该页面把实时 `image-recognition` settings namespace 绑定到提供方行上方的一个精确提供方/模型选择器。它只列出已解析元数据明确包含图片输入的当前注册模型，并保留已保存但缺失的路由，以便用户清除。保存绝不会发送测试图片。卡片会说明图片将发送到已选模型的提供方；在保存另一个识别模型之前，提供方编辑器会拒绝删除该模型或关闭其图片能力。
 
 ### 新增与删除提供方
 
@@ -59,11 +63,11 @@ kind: "package-reference"
 
 ### 校验
 
-键入的 API 密钥按其自身字段判定：去除首尾空白后必须非空，且每个字符都必须是可打印 ASCII（`[\x21-\x7E]`），这正是 HTTP 头值能够携带的字符集——与 `@deepseek-ai/dsh-llm` 中的 `normalizeApiKey` 互为镜像，此处复刻是因为源平面拆分禁止导入它。与粘贴的 `NAME=value` 环境行一致或包裹在匹配引号内的值，会作为同样的格式失败被拒绝。空 id、重复 id、空显式名称以及不可读、非正数或小数的容量都会在任何写入之前失败。DeepSeek 的 `models` 是一个按值整体替换的数组：编辑器先显示继承的有效行，直到第一次模型编辑把完整数组物化进用户层，重置则取消该覆盖。
+键入的 API 密钥按其自身字段判定：去除首尾空白后必须非空，且每个字符都必须是可打印 ASCII（`[\x21-\x7E]`），这正是 HTTP 头值能够携带的字符集——与 `@deepseek-ai/dsh-llm` 中的 `normalizeApiKey` 互为镜像，此处复刻是因为源平面拆分禁止导入它。与粘贴的 `NAME=value` 环境行一致或包裹在匹配引号内的值，会作为同样的格式失败被拒绝。空 id、重复 id、空显式名称、不可读容量，以及会使已保存识别模型失效的变更都会在任何写入之前失败。DeepSeek 的 `models` 是一个按值整体替换的数组：编辑器先显示继承的有效行，直到第一次模型编辑把完整数组物化进用户层，重置则取消该覆盖。模型发现会复制已安装 catalog 声明的模态，并把仅来自端点的候选模型默认为 `[text]`。
 
 ### 并发与凭据
 
-每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或外部 `settings.yaml` 编辑的并发写入会以 `settings/conflict` 被拒绝。settings 提交后，卡片会在存储凭据前采纳返回的脱敏用户子树与 revision，因此失败的凭据阶段只重试该阶段。删除只会在 profile 指名本页派生的 `<ROUTE>_API_KEY` 目标时移除已配置且可写的凭据，然后 unset 该 profile；两个操作都幂等。加载完成后，页面订阅转发的 `settings/document-updated`、`credentials/reference-updated` 与 `llm/adapters-updated` 属主事件，以及本地 `connection/reset`，因此外部编辑无需轮询即可收敛。
+每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或外部 `settings.yaml` 编辑的并发写入会以 `settings/conflict` 被拒绝。settings 提交后，卡片会在存储凭据前采纳返回的脱敏用户子树与 revision，因此失败的凭据阶段只重试该阶段。删除只会在 profile 指名本页派生的 `<ROUTE>_API_KEY` 目标时移除已配置且可写的凭据，然后 unset 该 profile；两个操作都幂等。加载完成后，页面订阅转发的 `settings/document-updated`、`credentials/reference-updated` 与 `llm/adapters-updated` 属主事件，以及本地 `connection/reset`，因此提供方行和图片识别目录无需轮询即可收敛。识别写入使用草稿开始时持有的 namespace revision；陈旧草稿会被放弃或基于新的 Host 状态重试，而不会覆盖该状态。
 
 ### 引导协调器
 
@@ -102,7 +106,7 @@ kind: "package-reference"
 
 这些限制定义编辑器的字段覆盖范围与本页的触达范围；它们是当前包约束，不是设置路线图。
 
-- **卡片上只有 API 密钥与精选折叠字段可编辑**：手写编辑器以 schema 通用字段覆盖换取了 mockup 布局。重试策略、超时、DeepSeek 模型说明及其他进阶字段仍留在 `settings.yaml` 中；编辑器未展示的现有模型字段会予以保留。
+- **卡片上只有 API 密钥与精选折叠字段可编辑**：手写编辑器覆盖端点、标识、模型容量与图片能力，而非每个 schema 字段。重试策略、超时、DeepSeek 模型说明及其他进阶字段仍留在 `settings.yaml` 中；编辑器未展示的现有模型字段会予以保留。
 - **凭据清理范围刻意保持狭窄**：删除一行时，仅当其引用与页面派生的 `<ROUTE>_API_KEY` 目标完全一致，才会清除已配置且可写的凭据。自定义引用、环境凭据与无法识别的目标会保留，因为该行无法证明自己拥有它们。
 - **只有 pi-ai 路由可以手工声明**：自定义提供方卡片写入 `llm-pi-ai`——唯一一个其 profile 描述整个提供方的 namespace。`llm-deepseek` 路由是组合面的事实，不是本页能创建的东西。
 - **询问只覆盖 OpenAI 兼容端点**：适配器只读这种模型列表响应格式，因此讲其他协议的网关会报告自己无法被询问，其模型需手工填写。
@@ -118,4 +122,4 @@ kind: "package-reference"
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。这是只贡献 nav entry 的 section 插件，渲染固定空 content column，不发出 Cordis 事件，也不持有跨插件可变关系。
+**运行时 invariant：**未发布 companion。每个 controller 都从带 revision 的 Host settings 和模型目录派生视图，不存在能够与这些所有者独立分歧的观察结果。

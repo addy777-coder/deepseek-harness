@@ -110,6 +110,31 @@ In development, [dsh-client-hmr](../../packages/client/hmr/README.md) is the reg
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxclientboot--clientbootregistry"></a>
+
+### `ctx.clientBoot` — `ClientBootRegistry`
+
+Registry for transport-neutral client startup injections.
+
+```ts cordis-catalog
+/**
+ * Register one startup-injection producer for the caller fiber's lifetime.
+ * @param producer - function reading current Host state at collection time.
+ * @returns disposer removing this producer.
+ */
+register(producer: ClientBootInjectionProducer): () => Promise<void>
+
+/**
+ * Collect a fresh ordered startup table.
+ * @returns a new table containing producer-owned immutable rows in registration order.
+ */
+collect(): IndexInjection[]
+```
+
+Types: [IndexInjection](web-server.md)
+
+Source: [`packages/client/modules/src/index.ts`](../../packages/client/modules/src/index.ts)
+
 <a id="ctxclientmodules--clientmoduleregistry"></a>
 
 ### `ctx.clientModules` — `ClientModuleRegistry`
@@ -122,6 +147,13 @@ The web plugin table service: incremental `dsh.client` scan + wire composition +
  * @returns the graph served as `window.__DSH_BOOT__`.
  */
 graph(): WebBootGraph
+
+/**
+ * Read one graph-advertised immutable artifact.
+ * @param resourceUrl - absolute bundle URL including its revision query.
+ * @returns detached bytes and media type, or undefined for an unknown URL.
+ */
+artifact(resourceUrl: string): ClientModuleArtifact | undefined
 
 /**
  * Absolute path of an entry's client bundle.

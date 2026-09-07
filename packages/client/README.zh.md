@@ -1,15 +1,15 @@
 ---
-description: "web GUI 浏览器侧的包映射：外壳启动、浏览器与宿主通信、共享客户端服务、本地化、开发重载与 UI 功能插件。"
+description: "共享 GUI Client 半侧的包映射：外壳启动、与载体无关的 Host 通信、共享服务、本地化、开发重载与 UI 功能插件。"
 kind: "package-group"
 ---
 
-# client/ — Web GUI 浏览器侧
+# client/ — 共享 GUI Client 半侧
 
 [English](README.md) | 中文
 
 ## 概述
 
-`client/` 组运行 dsh web GUI 的浏览器侧：它启动 web 外壳、加载浏览器侧插件模块、维持浏览器与宿主之间的 RPC 与事件投递，并提供渲染应用所需的共享客户端服务与 UI 功能插件。UI 功能通过 slot 系统组合——每个插件填充已声明的扩展 slot，携带类型化 props 与 store，由外壳渲染组装后的整棵树。本组所有包均为产品包，名为 `@deepseek-ai/dsh-client-<name>`；服务于页面的宿主半侧位于 [`host/`](../host/README.zh.md)。编写规则见 [AGENTS.md](AGENTS.md)，模块图、slot 模型与对象层的说明见下方相关文档。
+`client/` 组在浏览器页面或沙箱化 Electron Renderer 中运行共享 dsh GUI 的 Client 半侧：它启动外壳、加载浏览器兼容插件模块、维持载体到 Host 的 RPC 与事件投递，并提供渲染应用所需的共享服务与 UI 功能插件。UI 功能通过 slot 系统组合——每个插件填充已声明的扩展 slot，携带类型化 props 与 store，由外壳渲染组装后的整棵树。本组所有包均为产品包，名为 `@deepseek-ai/dsh-client-<name>`；HTTP Host 支持位于 [`host/`](../host/README.zh.md)，Electron Host 传输位于 [`desktop/`](../desktop/README.zh.md)。编写规则见 [AGENTS.md](AGENTS.md)，模块图、slot 模型与对象层的说明见下方相关文档。
 
 ## 目录
 
@@ -28,7 +28,7 @@ kind: "package-group"
 |---|---|---|
 | [`web/`](web/README.zh.md) | 启动浏览器外壳 | — |
 | [`modules/`](modules/README.zh.md) | 加载浏览器侧客户端模块 | `ctx.clientModules` / `ctx.modules` |
-| [`connection/`](connection/README.zh.md) | 维护浏览器与宿主之间的 RPC 通信与事件投递 | `ctx.connection` |
+| [`connection/`](connection/README.zh.md) | 维护与载体无关的 RPC 通信和 Web 认证适配器 | `ctx.connection` |
 | [`store/`](store/README.zh.md) | 提供不依赖 React 的 observable 与 snapshot-store 原语 | — |
 | [`hmr/`](hmr/README.zh.md) | 在开发期间刷新客户端插件 | — |
 | [`locale/`](locale/README.zh.md) | 提供本地化偏好与消息词典 | `ctx.locale` |
@@ -71,6 +71,7 @@ kind: "package-group"
 | [`ui-message-feedback/`](ui-message-feedback/README.zh.md) | 向助手消息操作条贡献逐消息反馈控件 | — |
 | [`ui-directory-picker-browse/`](ui-directory-picker-browse/README.zh.md) | 面向工作区目录流程的应用内目录浏览界面 | — |
 | [`ui-directory-picker-native/`](ui-directory-picker-native/README.zh.md) | 驱动宿主 OS 选择器的原生目录选择界面 | — |
+| [`ui-desktop/`](ui-desktop/README.zh.md) | 添加 Desktop 标题栏、专注窗口、通知、偏好与插件管理 | — |
 
 -----
 
@@ -83,6 +84,7 @@ kind: "package-group"
 - [slot 系统标准](../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.zh.md)——权威 slot 模型：注册、props 份额与 store。
 - [web 客户端架构 Agent Note](../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.zh.md)——加载链、对象层与客户端服务。
 - [宿主组地图](../host/README.zh.md)——服务于本浏览器半侧的宿主半侧。
+- [Desktop 组地图](../desktop/README.zh.md)——Electron MessagePort Host 传输。
 
 <a id="dev-note"></a>
 ## 开发备注

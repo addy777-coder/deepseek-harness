@@ -1,0 +1,49 @@
+appId: io.dsh.desktop
+productName: DSH Desktop
+electronVersion: 44.1.1
+asar: true
+directories:
+  output: ../../apps/desktop/dist-electron
+files:
+  - lib/**
+  - dist/**
+  - assets/**
+  - package.json
+extraResources:
+  - from: ../desktop-runtime/package.json
+    to: runtime/package.json
+  - from: ../desktop-runtime/node_modules
+    to: runtime/node_modules
+    filter:
+      - '**/*'
+      - '!**/*.d.{ts,cts,mts}'
+      - '!**/*.{map,tsbuildinfo,pdb}'
+      - '!**/{test,tests,__tests__,coverage,bench,benchmark,benchmarks,example,examples,.github}/**/*'
+  - from: pnpm
+    to: pnpm
+    filter:
+      - '**/*'
+      - '!**/*.d.{ts,cts,mts}'
+      - '!**/*.{map,tsbuildinfo,pdb}'
+      - '!**/{test,tests,__tests__,coverage,bench,benchmark,benchmarks,example,examples,.github}/**/*'
+protocols:
+  - name: DSH Desktop
+    schemes:
+      - dsh
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+  artifactName: DSH-Desktop-${version}-win-x64.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  deleteAppDataOnUninstall: false
+npmRebuild: false

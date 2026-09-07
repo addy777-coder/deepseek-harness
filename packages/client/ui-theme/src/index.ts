@@ -1,7 +1,7 @@
 /** Host registration for the browser theme preference and pre-plugin palette. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-client-modules'
 import type {} from '@deepseek-ai/dsh-settings'
 import { bootThemeInjection } from './boot-theme.ts'
 import {
@@ -16,6 +16,9 @@ export {
 } from './theme-settings.ts'
 
 const THEME_NAMESPACE = THEME_SETTINGS_NAMESPACE
+
+/** Required client startup registry. */
+export const inject = ['clientBoot']
 
 /** Read the registered theme section or the schema defaults without a settings provider. */
 function readSection(ctx: Context): { preference: ThemePreference; fontSize: number } {
@@ -37,8 +40,8 @@ export function apply(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.settings.register(THEME_NAMESPACE, ThemeSettingsSchema)
   })
-  ctx.on('webserver/index-inject', (table) => {
+  ctx.clientBoot.register(() => {
     const section = readSection(ctx)
-    table.push(bootThemeInjection(section.preference, section.fontSize))
+    return [bootThemeInjection(section.preference, section.fontSize)]
   })
 }

@@ -1,5 +1,5 @@
 ---
-description: "面向用户与维护者的 web GUI 客户端模块系统说明：宿主侧组合启动图并提供插件 bundle，浏览器侧按需加载，用于组合或排查客户端插件。"
+description: "共享 GUI 的传输无关 Client 模块系统：Host 组合启动数据与不可变 bundle 产物，供 Web 或 Desktop 载体投递。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-modules` 把插件包的 `dsh.client` 声明变成可加载的浏览器 bundle：宿主半侧扫描已启用的 Loader 条目、组合启动图，并通过 `/plugins` 提供每个 bundle；浏览器半侧按需惰性加载这些 bundle。插件 bundle 惰性执行——运行 bundle 只注册 factory，模块副作用在物化时运行——因此插件首次被使用之前什么都不会运行。这里的一切都是浏览器内核机制；模型永远看不到它。
+`dsh-client-modules` 把插件包的 `dsh.client` 声明变成可加载的 GUI bundle。Host 半侧扫描启用的 Loader 配置项、组合启动图、快照不可变产物，并通过 `ClientBootRegistry` 与 `ClientModuleRegistry` 提供它们；Web 和 Desktop 载体选择如何投递这些值。浏览器兼容 Client 半侧按需惰性加载 bundle。运行 bundle 只注册 factory，模块副作用在物化时才发生，因此插件首次使用前不会执行任何内容。
 
 ## 目录
 
@@ -25,11 +25,11 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-组合或构建浏览器客户端插件时使用它：本包把包的 `dsh.client` 声明变成可加载的浏览器 bundle，无需任何逐插件接线。它随 web 组合激活；外壳在任何插件运行前启动它。
+在组合或构建 GUI Client 插件时使用本包：它无需逐插件载体接线，就能把 `dsh.client` 元数据变成可加载的浏览器兼容 bundle。它随共享 GUI 组合激活；任何插件运行前，所选 shell 会取得同一启动表。
 
 ### 声明客户端插件
 
-浏览器插件包在其 `package.json` 中以 `platform: 'web'` 声明 `dsh.client`，导出 `./client` bundle，并在 `dsh.client.external` 下列出任何基座之外的模块请求。宿主半侧把每份声明变成 `/plugins` 下提供的 bundle，并让动态提供方先于其消费方加载。
+GUI 插件包在 `package.json` 中以 `platform: 'web'` 声明 `dsh.client`，导出 `./client` bundle，并在 `dsh.client.external` 下列出所有非基座模块请求。Host 把每项声明变成由 `/plugins` URL 寻址的产物，并按动态 provider 先于 consumer 的顺序排列。Web 适配器把这些 URL 注册为 HTTP route；Desktop 通过 IPC 请求相同字节。
 
 ### 浏览器加载什么
 
@@ -41,7 +41,7 @@ application combo 脚本在启动时注册插件 factory；模块主体仍保持
 
 ### 构建要求
 
-宿主提供的是已构建的客户端 bundle，因此启动前 `pnpm run build` 必须已产出每个 `lib/client.js`；缺失 bundle 会以一条构建说明加包／路径列表的方式让激活大声失败。源码启动会把宿主侧导入映射到 TypeScript 源码，但仍消费这一构建后的客户端导出。本包自身不接受任何插件配置。
+Host 会快照已构建的客户端 bundle，因此启动前 `pnpm run build` 必须已生成每个 `lib/client.js`；缺失 bundle 会让激活明确失败，并给出一条构建指令和包／路径列表。源码启动会把 Host import 映射到 TypeScript 源码，但仍消费已构建的 Client 导出。本包自身不接受插件配置。
 
 -----
 
@@ -55,7 +55,7 @@ application combo 脚本在启动时注册插件 factory；模块主体仍保持
 
 ### 设计理念
 
-本包是双面孔：node 半侧是组合与服务端（`ctx.clientModules`，`ClientModuleRegistry`），浏览器半侧是加载端（`ctx.modules`，`ClientModuleSystem`）。两者之间的协议是启动图——以 `window.__DSH_BOOT__` 注入的 `WebBootEntry` 行，`<` 已转义，插件控制的字符串无法逃出 script 元素。vendored Loader 唯一的消费点是 `EntryTree.import`，因此模块系统就是「插件代码如何到达」的唯一可替换实现。
+本包有两个面：Node 半侧拥有组合与产物（`ctx.clientBoot`、`ctx.clientModules`），浏览器兼容半侧拥有加载（`ctx.modules`、`ClientModuleSystem`）。Web 载体把启动注入渲染进 HTML，并在图脚本中转义 `<`；Desktop 在 boot frame 中承载同一注入表。vendored Loader 唯一的消费点是 `EntryTree.import`，因此模块系统仍是 Client 插件代码如何到达的唯一替代实现。
 
 ### 惰性 CJS 模型
 
@@ -69,13 +69,14 @@ node 半侧会在发布前快照每个客户端 bundle 及其现有 source map�
 
 ### 启动清单注入
 
-宿主 tap 索引渲染，并向 `<head>` 注入：`window.__ModuleLoader__` queue facade、每个 application combo 的提示性 preload、阻塞 parser 的 bootstrap combo 脚本，然后才是外壳读取前的启动图。facade 的 `create()` 物化 modules bundle、把构造委托给其 `createClientModuleSystem` 导出，并让同一 facade 进入 live registration 模式。
+`ClientBootRegistry` 贡献有序 queue facade、提示性 application preload、阻塞 parser 的 bootstrap bundle 与启动图。Web 适配器在 shell 读取前把这些配置项渲染进 index HTML；Desktop 在 boot response 中返回同一表，并通过 IPC 加载每个 bundle。facade 的 `create()` 物化 modules bundle、把构造委托给其 `createClientModuleSystem` 导出，并让同一 facade 进入 live registration 模式。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | node 半侧：`ClientModuleRegistry`、扫描、产物快照、combo 路由、索引 tap |
+| [`src/index.ts`](src/index.ts) | Node 半侧：`ClientBootRegistry`、`ClientModuleRegistry`、扫描、产物快照与 combo 查找 |
+| [`src/web.ts`](src/web.ts) | Web 适配器：`/plugins` route 与 index injection 注册 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器半侧：bootstrap 导出、`ctx.modules` 登记 |
 | [`src/client/system.ts`](src/client/system.ts) | `ClientModuleSystem`：加载／物化／失效机制 |
 | [`src/client/manifest.ts`](src/client/manifest.ts) | 协议类型与启动清单解析 |

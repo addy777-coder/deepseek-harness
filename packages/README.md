@@ -73,7 +73,8 @@ Every package lives in exactly one group; new packages join existing groups, and
 | [`interaction/`](interaction/README.md) | Human-collaboration plane: approval/interaction seams, permission preset, commands, ask-user tool |
 | [`boot/`](boot/README.md) | Shared app-bin boot glue |
 | [`host/`](host/README.md) | Web-GUI host half: API gateway + HTTP route server |
-| [`client/`](client/README.md) | Web-GUI browser half: shell, wire, object services, slots, `ui-*` plugins |
+| [`desktop/`](desktop/README.md) | Windows Electron Host transport and lifecycle integration |
+| [`client/`](client/README.md) | Shared GUI Client half: shell, wire, object services, slots, `ui-*` plugins |
 | [`test-support/`](test-support/README.md) | Support infrastructure (testkits, invariants, replay, Loader smokes) |
 | [`runtime-diagnostics/`](runtime-diagnostics/README.md) | Runtime diagnostics: package-owned invariant checks and reports |
 | [`util/`](util/README.md) | Low-level zero-dependency utilities shared across groups (`Branded<B>`, home/path helpers, timeout, retention) |

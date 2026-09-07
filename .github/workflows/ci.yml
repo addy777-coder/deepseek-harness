@@ -472,6 +472,25 @@ jobs:
       - name: Run blocking Windows builds
         shell: pwsh
         run: pnpm run check:ci:windows-blocking
+      - name: Stage packaged Desktop runtime
+        shell: pwsh
+        run: |
+          pnpm --filter @deepseek-ai/dsh-desktop run stage:runtime
+          pnpm --filter @deepseek-ai/dsh-desktop run stage:app
+          node apps/desktop/node_modules/electron-builder/out/cli/cli.js --projectDir .dsh-build/desktop-app --win --x64 --dir
+      - name: Run packaged Desktop Electron E2E
+        shell: pwsh
+        run: |
+          $env:DSH_DESKTOP_EXECUTABLE = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\dist-electron\win-unpacked\DSH Desktop.exe'
+          node --import tsx/esm apps/desktop/tests/electron.e2e.ts
+      - name: Verify packaged Desktop native dependencies
+        shell: pwsh
+        run: |
+          $executable = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\dist-electron\win-unpacked\DSH Desktop.exe'
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $env:DSH_DESKTOP_RUNTIME_DIR = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\dist-electron\win-unpacked\resources\runtime'
+          & $executable (Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\tests\native-runtime.smoke.cjs')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   windows-coverage:
     if: github.event_name == 'pull_request'

@@ -555,6 +555,56 @@ describe('agent/pre-step', () => {
   })
 })
 
+describe('agent/request-context', () => {
+  it('appends returned context before deriving the request and logging its header', async () => {
+    const adapter = new MockAdapter([textResponse('ok')])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('request-context'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/request-context', async ({ config, messages, turn, step }, next) => {
+      expect(config).toMatchObject({ provider: 'mock', model: 'mock' })
+      expect({ turn, step }).toEqual({ turn: 1, step: 1 })
+      expect(messages.map(message => message.content)).toEqual([[{ type: 'text', text: 'question' }]])
+      return [...await next(), createUserMessage({
+        content: [{ type: 'text', text: 'durable visual context' }],
+        source: { kind: 'plugin', plugin: 'request-context-test' },
+      })]
+    })
+
+    send(agent, 'question')
+    await waitForIdle(ctx, agent)
+
+    const log = events(agent)
+    const inputAt = log.findIndex(event => event.type === 'user/message' && event.data.source.kind === 'user')
+    const contextAt = log.findIndex(event => event.type === 'user/message'
+      && event.data.source.kind === 'plugin' && event.data.source.plugin === 'request-context-test')
+    const headerAt = log.findIndex(event => event.type === 'request/header')
+    expect(inputAt).toBeGreaterThanOrEqual(0)
+    expect(contextAt).toBeGreaterThan(inputAt)
+    expect(headerAt).toBeGreaterThan(contextAt)
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.messages).toEqual(agent.session.deriveMessages().slice(0, -1))
+    expect(JSON.stringify(adapter.requests[0]?.messages)).toContain('durable visual context')
+  })
+
+  it('keeps claimed input durable and skips model dispatch when context preparation fails', async () => {
+    const adapter = new MockAdapter([textResponse('must not run')])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('request-context-failure'), {
+      provider: 'mock', model: 'mock',
+    })
+    ctx.on('agent/request-context', async () => { throw new Error('context unavailable') })
+
+    send(agent, 'retained input')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(0)
+    expect(events(agent).some(event => event.type === 'user/message'
+      && event.data.content.some(block => block.type === 'text' && block.text === 'retained input'))).toBe(true)
+    const end = events(agent).find(event => event.type === 'turn/end')
+    expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('error')
+  })
+})
+
 describe('agent/session-start', () => {
   it('fires once with source "startup" for a fresh create, before the first turn', async () => {
     const adapter = new MockAdapter([textResponse('ok')])

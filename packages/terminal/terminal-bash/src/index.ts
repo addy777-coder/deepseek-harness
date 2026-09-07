@@ -10,7 +10,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { TerminalBackendCleanupError } from '@deepseek-ai/dsh-terminal'
 import type { TerminalBackend, TerminalBackendSpawnSpec, TerminalSendOperation } from '@deepseek-ai/dsh-terminal'
 import type { SubprocessTerminalHandle, SubprocessTerminalSpawnSpec } from '@deepseek-ai/dsh-subprocess'
-import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { ENCODING_PREAMBLE } from '@deepseek-ai/dsh-pwsh-local'
@@ -97,15 +97,17 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
 export const PWSH_PROMPT_SETUP =
   "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
 
-function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
+function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): ConfinedArgv {
   const argv = [config.shellPath, ...config.shellArgs]
-  if (policy.mode === 'danger-full-access') return argv
+  if (policy.mode === 'danger-full-access') {
+    return { argv, enforcement: 'full', denialSignatures: [], runnerFailureRules: [] }
+  }
   const sandbox = ctx.get('sandbox')
   if (sandbox === undefined) {
     throw new Error(`terminal-bash: sandbox mode "${policy.mode}" requires a ctx.sandbox provider in the execution world`)
   }
   // Re-state the discriminant because object spread does not preserve its narrowed type.
-  return sandbox.confine(argv, { ...policy, mode: policy.mode }).argv
+  return sandbox.confine(argv, { ...policy, mode: policy.mode })
 }
 
 // TODO(pty-initialize-race-home): Fold this outer abort race into
@@ -192,12 +194,12 @@ export class BashTerminalBackend implements TerminalBackend {
     spec.signal?.throwIfAborted()
     ensureSandboxModeFence(this.ctx, spec.owner)
     const policy = this.ctx.sandboxPolicy.resolve({ session: spec.owner.session })
-    const argv = spawnArgv(this.ctx, this.config, policy)
-    if (argv[0] === undefined) throw new Error('terminal-bash: sandbox returned empty argv')
+    const confined = spawnArgv(this.ctx, this.config, policy)
+    if (confined.argv[0] === undefined) throw new Error('terminal-bash: sandbox returned empty argv')
     const terminal = await this.spawnTerminal({
-      argv,
+      argv: confined.argv,
       cwd: spec.cwd ?? policy.workspaceRoot,
-      env: childEnvironment(spec, this.config.shellDialect),
+      env: { ...childEnvironment(spec, this.config.shellDialect), ...confined.env },
       rows: this.config.rows,
       cols: this.config.cols,
       graceMs: this.config.disposeGraceMs,

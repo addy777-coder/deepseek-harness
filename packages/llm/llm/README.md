@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-llm` is the provider-neutral model-call service at the center of the harness's LLM capability. Every composition that streams a request to a model provider goes through it, and it owns the shared vocabulary — messages, content blocks, and raw stream chunks — that the agent loop, session log, and every plugin speak. With it you can register provider adapters, stream one model call, list and discover models, resolve exact-model metadata and call defaults, and capture each provider's retry policy; every request is logged so it stays reconstructable from the session log. It executes no retries and owns no provider wire logic: adapters translate their provider's format, and the optional `dsh-llm-retry` package re-runs failed requests at durable step boundaries. Requests are deep-frozen before dispatch, so middleware and adapters can read them but never rewrite them.
+`@deepseek-ai/dsh-llm` is the provider-neutral model-call service at the center of the harness's LLM capability. Every composition that streams a request to a model provider goes through it, and it owns the shared messages, content blocks, raw stream chunks, and optional image-recognition Service Definition. With it you can register provider adapters, stream one model call, list and discover models, resolve exact-model metadata and call defaults, and supply an image-recognition Service Provider; loop-built requests stay reconstructable from the session log. It executes no retries and owns no provider wire logic: adapters translate their provider's format, and optional plugins own retry execution and auxiliary image analysis. Requests are deep-frozen before dispatch, so middleware and adapters can read them but never rewrite them.
 
 ## Table of Contents
 
@@ -62,6 +62,7 @@ After a successful mount, `ctx.llm.listProviders()` reports the registered route
 - **Register provider adapters** — an adapter owns one or more provider routes, and its registration captures that route's retry policy; registering the same route twice fails with `DUPLICATE_ADAPTER`.
 - **Expose and activate providers through configuration** — adapters declare configurable-provider routes plus a settings namespace, so configuration surfaces can activate dormant providers and edit connection facts without a restart.
 - **Discover and resolve models** — list the models an adapter advertises, interrogate an endpoint for the models it serves, and resolve one exact model's context window, output default, reasoning efforts, and input modalities.
+- **Provide image recognition** — implement `ImageRecognition` to validate one explicit image-capable route and analyze an ordered source-message image batch for a text-only consumer.
 - **Validate call config** — an explicit or configured reasoning effort is checked against the exact model before any provider I/O, and an adapter-configured output cap is materialized when the request omits one.
 
 ### Failures and recovery
@@ -94,6 +95,7 @@ The service is built on one separation: **the logical contract is provider-neutr
 | [`src/retry-policy.ts`](src/retry-policy.ts) | Provider-owned retry policy resolution (normal and always modes) |
 | [`src/error.ts`](src/error.ts) | `HarnessError`/`LlmError` taxonomy and provider-neutral failure codes |
 | [`src/content.ts`](src/content.ts) | Shared image-content helpers, including request-image offloading |
+| [`src/image-recognition.ts`](src/image-recognition.ts) | Optional image-recognition Service Definition, request/result types, and target-availability helper |
 | [`src/api-key.ts`](src/api-key.ts) | Credential format check shared by every adapter |
 | [`src/adapter-failure.ts`](src/adapter-failure.ts) | Failure normalization into terminal finish chunks |
 
@@ -122,6 +124,7 @@ Read these pages when the package-level contract is not enough. They move from t
 - [LLM streaming subsystem](../../../docs/subsystems/llm-streaming.md) — the message and block types, the assembled model request, the `StreamChunk` protocol, and the adapter contract.
 - [llm-deepseek adapter](../llm-deepseek/README.md) — the direct DeepSeek chat-completions implementation.
 - [llm-pi-ai adapter](../llm-pi-ai/README.md) — the pi-ai-backed multi-provider implementation.
+- [Image recognition](../image-recognition-llm/README.md) — the shipped LLM Service Provider for text-only routes.
 - [llm-retry](../llm-retry/README.md) — the retry executor that re-runs failed model requests.
 - [Token meter](../token-meter/README.md) — replay-aware request and context pressure measurement.
 - [Twin LLM adapters](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.md) — why the DeepSeek route ships two structurally different adapters.

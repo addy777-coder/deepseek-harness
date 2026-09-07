@@ -21,26 +21,13 @@ interface Koffi {
   proto(declaration: string): unknown
   pointer(type: unknown): unknown
   call(pointer: unknown, proto: unknown, ...args: unknown[]): unknown
-  decode(value: unknown, offsetOrType: unknown, type?: unknown): unknown
+  decode: {
+    (value: unknown, offsetOrType: unknown, type?: unknown): unknown
+    string16(value: unknown): string
+  }
   register(fn: (...args: unknown[]) => unknown, type: unknown): unknown
   unregister(callback: unknown): void
   sizeof(type: string): number
-  view(ref: unknown, len: number): ArrayBuffer
-}
-
-/**
- * Read a NUL-terminated UTF-16 string at a native address. koffi's
- * `_Out_ void **` out-params surface a raw address, and
- * `koffi.decode(addr, 'str16')` would dereference it as a pointer — crash
- * on real Windows — so view the memory directly instead.
- */
-function readUtf16(koffi: Koffi, address: unknown): string {
-  const bytes = Buffer.from(koffi.view(address, 32768))
-  let end = 0
-  // UTF-16LE NUL is two zero bytes. A single zero low byte is a valid BMP
-  // code unit (U+XX00, e.g. 开 = U+5F00) and must not terminate the scan.
-  while (end + 1 < bytes.length && !(bytes[end] === 0 && bytes[end + 1] === 0)) end += 2
-  return bytes.toString('utf16le', 0, end)
 }
 
 const COINIT_APARTMENTTHREADED = 0x2
@@ -158,7 +145,8 @@ export async function loadWin32DialogBindings(): Promise<Win32DialogBindings> {
             const nameOut: unknown[] = [null]
             const gotName = method(item, SLOT_GET_DISPLAY_NAME, protoGetDisplayName)(SIGDN_FILESYSPATH, nameOut)
             if (gotName < 0) return { hr: gotName }
-            const path = readUtf16(koffi, nameOut[0])
+            // Electron forbids external ArrayBuffers; decode copies the UTF-16 string.
+            const path = koffi.decode.string16(nameOut[0])
             coTaskMemFree(nameOut[0])
             return { hr: gotName, path }
           } finally {

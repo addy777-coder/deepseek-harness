@@ -7,7 +7,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
-import type { LlmCallConfig, LlmFailure, ReasoningEffortId, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type {
+  LlmCallConfig,
+  LlmFailure,
+  Message,
+  ModelModality,
+  ReasoningEffortId,
+  ResolvedRetryPolicy,
+} from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Inbox } from './inbox.ts'
@@ -249,6 +256,35 @@ declare module '@deepseek-ai/cordis' {
      * @mode waterfall
     */
     'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+    /**
+     * Add model-visible context after the exact route is prepared and the
+     * step's claimed input is durable, but before the request header and final
+     * message list are derived. The loop appends every returned message as a
+     * `user/message`, so listeners must return identified, immutable context
+     * rather than rewriting `messages` in place.
+     * @param payload.agent - the agent preparing the request.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the open step number.
+     * @param payload.config - exact prepared call configuration.
+     * @param payload.inputModalities - exact model input modalities, when the adapter declares them.
+     * @param payload.messages - current durable model history before contributed context.
+     * @param payload.signal - the current turn's explicit abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/request-context'(
+      this: Scoped<Agent>,
+      payload: {
+        agent: Agent
+        turn: number
+        step: number
+        config: LlmCallConfig
+        inputModalities?: readonly ModelModality[]
+        messages: readonly Message[]
+        signal: AbortSignal
+      },
+      next: () => Promise<UserMessage[]>,
+    ): Promise<UserMessage[]>
     /**
      * Handle one failed model-request attempt before the loop retries or closes
      * its step. A listener returns `{ kind: 'retry' }` without calling `next()`

@@ -16,17 +16,17 @@
 
 运行中的 `dsh` 是一棵插件树，由启动时按序叠加的各层组合而成。
 
-**profile** 是存放在 Harness home 中的具名组装。它列出自己叠放的组合包，存放自己安装的树外插件，并保存用户自己的 `cordis.patch.yml`。`web`、`headless`、`sdk`、`sdk-minimal` 和 `acp` 作为模板随发行版交付。
+**profile** 是存放在 Harness home 中的具名组装。它列出自己叠放的组合包，存放自己安装的树外插件，并保存用户自己的 `cordis.patch.yml`。`web`、`desktop`、`headless`、`sdk`、`sdk-minimal` 和 `acp` 作为模板随发行版交付。
 
 **组合包**是 Cordis 配置项及其挂载代码的分发格式，因此它插入的内容始终可被其上各层 patch。
 
 两者都在各自的 `package.json` 中通过 `dsh` 字段声明自己：`dsh.profile` 列出一个 profile 的组合包，`dsh.bundle` 指向一个组合包的 patch 文件。
 
-[`dsh-base`](../packages/bundle/base/README.zh.md) 是 `web`、`headless`、`sdk` 与 `acp` profile 的共享第一层：模型适配器、工具、持久化、沙箱与审批策略、设置、凭据、遥测。[`dsh-web-app`](../packages/bundle/web-app/README.zh.md) 增加浏览器应用，[`dsh-headless`](../packages/bundle/headless/README.zh.md) 增加不带服务器的一次性运行器，[`dsh-sdk-app`](../packages/bundle/sdk-app/README.zh.md) 增加 SDK JSON-RPC 服务器，[`dsh-acp-app`](../packages/bundle/acp-app/README.zh.md) 增加仅用于自动化的 ACP 服务器。[`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.zh.md) 是刻意保留的例外：一个组合包拥有完整的显式 SDK 配置树，不应用 `dsh-base`。
+[`dsh-base`](../packages/bundle/base/README.zh.md) 是 `web`、`desktop`、`headless`、`sdk` 与 `acp` profile 的共享第一层：模型适配器、工具、持久化、沙箱与审批策略、设置、凭据、遥测。[`dsh-gui-app`](../packages/bundle/gui-app/README.zh.md) 添加共享交互式 Host 与 Client 组合；[`dsh-web-app`](../packages/bundle/web-app/README.zh.md) 和 [`dsh-desktop-app`](../packages/bundle/desktop-app/README.zh.md) 选择其浏览器或 Electron 载体。[`dsh-headless`](../packages/bundle/headless/README.zh.md) 增加不带服务器的一次性运行器，[`dsh-sdk-app`](../packages/bundle/sdk-app/README.zh.md) 增加 SDK JSON-RPC 服务器，[`dsh-acp-app`](../packages/bundle/acp-app/README.zh.md) 增加仅用于自动化的 ACP 服务器。[`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.zh.md) 是刻意保留的例外：一个组合包拥有完整的显式 SDK 配置树，不应用 `dsh-base`。
 
 各层按此顺序应用在空条目列表之上：先按 profile 列出的顺序应用每个组合包，然后是 profile 的 `cordis.patch.yml`，然后是 home 级的那份，最后是任意 `--patch` overlay。一条 patch 按 id 定位某个条目并替换其整个 config，或插入新条目。
 
-自定义 profile 默认实时重载 patch。随附的 `web` profile 使用实时重载；`headless`、`sdk`、`sdk-minimal` 和 `acp` 则只在启动时应用一次所有配置层，因为一次性应用或 stdio 应用拥有工作之后，替换其依赖会破坏该生命周期。
+自定义 profile 默认实时重载 patch。随附的 `web` profile 使用实时重载；`desktop`、`headless`、`sdk`、`sdk-minimal` 和 `acp` 则只在启动时应用一次所有配置层，因为它们的所属应用或进程会通过重启安全替换依赖。
 
 要查看你的机器启动的配置树：
 
@@ -38,9 +38,17 @@ dsh --profile web --dump-config
 
 组装机制见 [app-boot](../packages/boot/app-boot/README.zh.md#profiles)；配置字段见生成的[配置目录](config-catalog.zh.md)。
 
+## GUI 载体
+
+`web` 与 `desktop` profile 共用同一 GUI 配置图：`base + gui-app + carrier`。Connection 拥有与传输无关的 RPC、精确 Fetch route 和逻辑 channel。Client Modules 拥有启动注入表、模块图与不可变 bundle 产物。载体会暴露这两个 registry，而不改变 API wire 或 Client 插件名录。
+
+Web 载体启动 HTTP server，执行 Host/Origin 检查与浏览器会话 cookie，提供 `/plugins`，并把启动注入渲染进 index HTML。Desktop 载体不启动 listener：Electron Utility Process 运行 `dsh --profile desktop`，主进程为每个沙箱化 Renderer 转交一条 MessagePort。启动注入与 bundle 字节使用该端口，主进程只处理生命周期与操作系统集成。
+
+DSH Desktop 使用仅启动时应用的 profile patch。插件变化会停止 Host、替换完整 profile、要求新 Host 达到 ready，并在失败时恢复旧 profile。该重启 transaction 取代 Desktop 载体的实时 HMR。
+
 ## 应用启动
 
-所有受支持的 Node 应用都从 `dsh` CLI 与具名 profile 启动。随附应用是 `dsh web`（刻意为 `--profile web` 保留的别名）、`dsh --profile headless`、`dsh --profile sdk`、`dsh --profile sdk-minimal` 与 `dsh --profile acp`。TypeScript SDK 会解析其同版本 `dsh` 依赖并选择 `sdk`；自定义插件组合继续由 profile 与有序 patch 文件表达，而不是另一个可执行文件或内联应用树。`sdk-minimal` 是位于同一 launcher 后的仓库自有独立组合包，而不是由调用方提供的 Cordis 配置树。
+所有受支持的 Node 应用都从 `dsh` CLI 与具名 profile 启动。随附应用是 `dsh web`（刻意为 `--profile web` 保留的别名）、由 Electron 拥有的 `dsh --profile desktop` Host、`dsh --profile headless`、`dsh --profile sdk`、`dsh --profile sdk-minimal` 与 `dsh --profile acp`。TypeScript SDK 会解析其同版本 `dsh` 依赖并选择 `sdk`；DSH Desktop 在自己的 Utility Process 内调用同一 CLI。自定义插件组合继续由 profile 与有序 patch 文件表达，而不是另一个可执行文件或内联应用树。`sdk-minimal` 是位于同一 launcher 后的仓库自有独立组合包，而不是由调用方提供的 Cordis 配置树。
 
 Vendored CLI、仅用于构建和测试的可执行文件、进程内直接挂载插件以及私有浏览器 WebWorker 预览都不属于 Harness 应用启动器。[`verify-application-entrypoints`](../scripts/verify-application-entrypoints.ts)将每个包 bin、可执行源码与根 demo 归入显式类别，并拒绝任何绕过 `dsh` 的 Node 应用路径。
 
@@ -87,8 +95,10 @@ turn/start
      reject, or a first enter rewritten empty -> close the turn with no step
      step/start
      append entered messages as user/message
-     derive model history from the log
-     agent/request -> llm/stream -> assistant/chunk* -> assistant/message
+     agent/request -> prepare exact model route
+     agent/request-context -> append returned user/message*
+     derive model history and request/header from the log
+     llm/stream -> assistant/chunk* -> assistant/message
      tool/call* -> tools/pre-execute -> tools/execute -> tools/post-execute -> tool/result*
      step/end
      tools owe another request, or next-step input arrived -> claim -> next step
@@ -96,11 +106,13 @@ turn/start
 turn/end
 ```
 
-`turn/*`、`step/*`、`user/message`、`assistant/*` 和 `tool/*` 是持久会话事件；其余是分属三个事件域的实时扩展点。`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件是 waterfall（瀑布式事件），其监听器必须调用 `next()` 才能委托下去；`agent/turn-stopping` 是 serial 事件，没有 `next()`。
+`turn/*`、`step/*`、`user/message`、`assistant/*` 和 `tool/*` 是持久会话事件；其余是分属三个事件域的实时扩展点。`agent/pre-step`、`agent/request`、`agent/request-context`、`llm/stream` 和三个 `tools/*` 事件是 waterfall（瀑布式事件），其监听器必须调用 `next()` 才能委托下去；`agent/turn-stopping` 是 serial 事件，没有 `next()`。
 
 输入通过同一个 inbox 到达驱动器。有些消息会立即唤醒它；注入的上下文会留在 inbox 中，直到另一条消息将其唤醒。
 
 `agent/pre-step` 决定模型看到什么。监听器可以改写已领取的消息，也可以直接拒绝它们；首次领取被拒绝或被改写为空时，仍会关闭一个不含步骤的持久轮次，因此日志会记录这次尝试。enter 决策还可以设置 `startsRequestSeries` 来开启独立的模型消息序列：loop 会随之记录一个新的 `request/header`（原因为 `series`，或在封装同时变化时为携带 `startsSeries: true` 的 `change`）。重建下游 enter 决策的监听器必须展开它（`{ ...decision, messages }`），该声明才能存活。每个步骤读取插件注册的提示词片段和工具 schema。
+
+`agent/request-context` 在 `agent/request` 选择并准备好精确模型后运行。此时 loop 已追加该步骤领取的输入；它会先追加 waterfall 返回的每条上下文消息，再派生并冻结请求。插件通过此扩展点生成依赖模型的上下文，绝不能在 `llm/stream` 内改写 loop 构造的请求。
 
 详情见[时序图](agent-lifecycle.zh.md)、[工具流水线](tool-execution-pipeline.zh.md)和[取消与错误恢复](subsystems/core.zh.md#the-agent-handle)。
 

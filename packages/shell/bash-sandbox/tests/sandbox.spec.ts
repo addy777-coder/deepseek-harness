@@ -101,13 +101,20 @@ describe('the provider hand-off', () => {
   })
 
   it('hands the provider\'s returned argv directly to ctx.subprocess.spawn', async () => {
-    const returnedArgv = ['env', 'DSH_WRAP=1', 'bash', '-c', 'printf "%s" "$DSH_WRAP"']
-    const { ctx, bash } = await setup({}, () => ({ argv: returnedArgv, enforcement: 'full', denialSignatures: UNIX_SIGNATURES, runnerFailureRules: RUNNER_FAILURE }))
+    const returnedArgv = ['bash', '-c', 'printf "%s" "$DSH_WRAP"']
+    const { ctx, bash } = await setup({}, () => ({
+      argv: returnedArgv,
+      env: { DSH_WRAP: '1' },
+      enforcement: 'full',
+      denialSignatures: UNIX_SIGNATURES,
+      runnerFailureRules: RUNNER_FAILURE,
+    }))
     const spawn = vi.spyOn(ctx.subprocess, 'spawn')
     const result = await bash.run(bash.resolve({ command: 'printf "%s" "$DSH_WRAP"' }))
     expect(result.stdout.text).toBe('1')
     expect(spawn).toHaveBeenCalledTimes(1)
     expect(spawn.mock.calls[0]?.[0].argv).toEqual(returnedArgv)
+    expect(spawn.mock.calls[0]?.[0].env).toMatchObject({ DSH_WRAP: '1' })
     expect(result.sandbox).toEqual({ mode: 'read-only', denied: false, enforcement: 'full' })
   })
 

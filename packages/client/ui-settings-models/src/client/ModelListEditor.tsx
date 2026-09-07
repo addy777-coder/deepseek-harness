@@ -42,6 +42,12 @@ function numberOf(model: ModelDraft, key: string): number | undefined {
   return typeof value === 'number' ? value : undefined
 }
 
+/** Whether one pi-ai profile row explicitly accepts image input. */
+function supportsImages(model: ModelDraft): boolean {
+  const input = model['input']
+  return Array.isArray(input) && input.includes('image')
+}
+
 /** What an interrogation needs, taken from the live form. */
 export interface ProbeTarget {
   /** Settings namespace whose adapter family answers. */
@@ -148,6 +154,7 @@ function adopt(candidate: LlmDiscoveredModel): ModelDraft {
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
+    input: candidate.inputModalities === undefined ? ['text'] : [...candidate.inputModalities],
   }
 }
 
@@ -209,7 +216,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     })
   }
 
-  const patch = (index: number, next: Record<string, string | number | undefined>): void => {
+  const patch = (index: number, next: Record<string, unknown>): void => {
     onChange(models.map((model, at) => {
       if (at !== index) return model
       // Rebuilt rather than spread over: an emptied optional field has to leave
@@ -360,15 +367,18 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               disabled={disabled}
               onChange={(event) => { patch(index, { id: event.target.value }) }}
             />
-            <input
-              className={styles['input']}
-              type="text"
-              value={textOf(model, 'name')}
-              placeholder={t('modelName')}
-              aria-label={`${t('modelName')} ${index + 1}`}
-              disabled={disabled}
-              onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
-            />
+            <span className={styles['modelNameField']}>
+              <input
+                className={styles['input']}
+                type="text"
+                value={textOf(model, 'name')}
+                placeholder={t('modelName')}
+                aria-label={`${t('modelName')} ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
+              />
+              {supportsImages(model) ? <span className={styles['rowTag']}>{t('visionTag')}</span> : null}
+            </span>
             <button
               type="button"
               className={styles['iconButton']}
@@ -408,6 +418,17 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
           {expanded.has(index)
             ? (
               <div className={styles['modelAdvanced']}>
+                <label className={styles['modelToggle']}>
+                  <input
+                    type="checkbox"
+                    checked={supportsImages(model)}
+                    disabled={disabled}
+                    onChange={(event) => {
+                      patch(index, { input: event.target.checked ? ['text', 'image'] : ['text'] })
+                    }}
+                  />
+                  <span>{t('modelImageInput')}</span>
+                </label>
                 <label className={styles['modelField']}>
                   <span className={styles['modelFieldLabel']}>{t('modelContextWindow')}</span>
                   <input
@@ -443,7 +464,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         type="button"
         className={styles['addModelButton']}
         disabled={disabled}
-        onClick={() => { onChange([...models, { id: '' }]) }}
+        onClick={() => { onChange([...models, { id: '', input: ['text'] }]) }}
       >
         {t('addModel')}
       </button>

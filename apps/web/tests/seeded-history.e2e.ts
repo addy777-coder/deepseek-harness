@@ -260,7 +260,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // the baseline through the standard projection registry without mounting
     // an Agent composition as a read side effect.
     expect(projections.values).not.toHaveProperty('todos')
-    // The session-stats unit is a shipped web-app bundle row: whole-log
+    // The session-stats unit is a shipped gui-app bundle row: whole-log
     // turn/step counts ride the same tail block (the stats strip's source).
     const sessionStats = projections.values.sessionStats as { turns: number; steps: number } | undefined
     expect(sessionStats).toBeDefined()

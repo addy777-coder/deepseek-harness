@@ -580,6 +580,18 @@ describe('tool execution', () => {
 
     expect(rich.attachments.saved).toEqual([])
     expect(textAt(result.content)).toContain('does not declare image input')
+
+    rich.ctx.provide('imageRecognition', {
+      resolveTarget: () => Promise.resolve({ provider: 'mock', model: 'vision' }),
+    } as never)
+    const admitted = await rich.ctx.tools.execute({
+      signal: testToolSignal,
+      callId: ToolCallId('text-route-with-recognition'),
+      name: 'mcp__srv__img',
+      arguments: {},
+      agent: agentOn('text') as never,
+    })
+    expect(admitted.content.some(block => block.type === 'image')).toBe(true)
   })
 
   it('refuses images when the exact route is missing, unverifiable, or canceled', async () => {
@@ -633,6 +645,9 @@ describe('tool execution', () => {
     vi.spyOn(rich.ctx.llm, 'resolveModelInfo').mockResolvedValueOnce({
       provider: 'visual', id: 'vision', name: 'vision',
     })
+    rich.ctx.provide('imageRecognition', {
+      resolveTarget: () => Promise.resolve({ provider: 'mock', model: 'vision' }),
+    } as never)
     const unknown = await rich.ctx.tools.execute({
       signal: testToolSignal,
       callId: ToolCallId('unknown-modalities'),

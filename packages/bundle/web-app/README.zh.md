@@ -69,11 +69,11 @@ dsh --profile web --no-open --port 8080
 <details>
 <summary>实现细节——点击展开</summary>
 
-本组合包是一份 patch 加一个运行时粘合插件。patch 重述 base 刻意省略的表层专属值，插入仅 Web 使用的宿主行与浏览器名录，然后把 agent 层移到 preset 之后；粘合插件负责 dist 服务、信任采样、提示词段落、bash 变量与就绪宣告。
+本 bundle 由一份载体 patch 和一个运行时粘合插件组成。下层 `dsh-gui-app` 拥有工作区、controller、Connection 核心、客户端模块 registry 与共享 UI 名录。Web patch 添加 HTTP server、自适应目录选择器、浏览器认证、静态前端、`/plugins` 适配器与客户端 HMR。粘合插件拥有 dist 服务、信任采样、Web 提示词段落、bash 变量与就绪宣告。
 
 ### patch 语义
 
-patch 会替换目标行的整个 `config`，因此每个 Web 行都重述自己拥有的每个键：基础行上的 persona、`DSH_TOOLS_MODE` PTC mode 开关与 `session-query-sqlite` 值，随后 `insert` 添加 Web 宿主行、传输层与浏览器名录。base 以进程级挂载的按 agent 工具行在这里被禁用，由 preset 名录接管；每项宿主层与 preset 层归属决策的理由以行内注释写在 patch 里。
+patch 会替换目标行的整个 `config`，因此 Web 载体会在自身配置项上保留完整 HTTP 设置。其 insert list 添加 server、picker chooser、认证 Connection 适配器、frontend fallback、客户端模块 Web 适配器、startup provider、运行时粘合、浏览器品牌与客户端 HMR。共享 GUI 与 agent 平面决策留在 `dsh-gui-app`；每个配置项的载体专属理由以行内注释写在本 patch 中。
 
 ### 就绪宣告
 
@@ -89,7 +89,7 @@ URL 行与浏览器交接都是就绪信号：监督方一观察到该行就发�
 |---|---|
 | [`src/index.ts`](src/index.ts) | `web-app` 粘合插件：dist 解析、LAN 信任采样、提示词段落、bash 变量、URL 行、浏览器交接 |
 | [`src/startup.ts`](src/startup.ts) | `web-startup` 提供方：`--host`、`--port`、`--trusted-host`、`--no-open`、`--help` |
-| [`cordis.patch.yml`](cordis.patch.yml) | Web patch：重述的基础值、Web 宿主行、浏览器名录、preset 之后的 agent 层 |
+| [`cordis.patch.yml`](cordis.patch.yml) | Web 载体 patch：HTTP、浏览器认证、静态资源、模块 route、startup、品牌与 HMR |
 | — | 不发布运行时不变式伴生入口；本包只持有静态 contribution 列表，每项 contribution 都由其 registry 释放。 |
 | [`tests/web-app.spec.ts`](tests/web-app.spec.ts) | dist 解析、fallback 席位、提示词段落、就绪宣告 |
 | [`tests/startup.spec.ts`](tests/startup.spec.ts) | 在真实 Loader 树上的命令行解析 |

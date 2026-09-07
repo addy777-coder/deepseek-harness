@@ -17,14 +17,14 @@ import { readFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-client-connection/web'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 
 /** Stable Cordis plugin name. */
 export const name = 'frontend-static'
 
 /** Services required before the authenticated fallback seat can be claimed. */
-export const inject = ['webServer', 'connection']
+export const inject = ['webServer', 'webConnection']
 
 /** Plugin config: the dist anchor. */
 export interface Config {
@@ -136,7 +136,7 @@ export function apply(ctx: Context, config: Config): void {
       res,
       distRoot,
       distIndex,
-      () => ctx.connection.authorizeIndex(req, res),
+      () => ctx.webConnection.authorizeIndex(req, res),
       renderIndex,
     )
   }), 'frontend-static: fallback seat')

@@ -52,6 +52,8 @@ flowchart LR
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
+  plugin_dsh_base_image_recognition_llm["image-recognition-llm<br/>@deepseek-ai/dsh-image-recognition-llm"]
+  cfg --> plugin_dsh_base_image_recognition_llm
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@deepseek-ai/dsh-session-query-sqlite"]
   cfg --> plugin_dsh_base_session_query_sqlite
   plugin_dsh_base_session_projection["session-projection<br/>@deepseek-ai/dsh-session-projection"]
@@ -204,6 +206,7 @@ flowchart LR
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
+| `image-recognition-llm` | `@deepseek-ai/dsh-image-recognition-llm` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
 | `session-projection` | `@deepseek-ai/dsh-session-projection` |
 | `storage` | `@deepseek-ai/dsh-storage` |

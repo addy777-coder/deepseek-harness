@@ -447,6 +447,28 @@ describe('built-in conversation node Definitions', () => {
     ])
   })
 
+  it('keeps durable image-recognition context out of the ordinary Chat view', () => {
+    const hidden = {
+      ...textMessage('recognition-1', 'image report'),
+      source: {
+        kind: 'image-recognition',
+        sourceMessageId: 'user-1',
+        provider: 'vision',
+        model: 'vision-model',
+        images: [],
+      },
+    } as never
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'user/message', textMessage('user-1', 'question'), { surfaceOp: 'append' }),
+      at(3, 'user/message', hidden, { surfaceOp: 'append' }),
+    ])
+
+    const view = snapshot(value)
+    expect(view.order.map(key => view.nodes.get(key)?.kind)).toEqual(['user'])
+    expect(JSON.stringify(view.nodes)).not.toContain('image report')
+  })
+
   it('replays pending splice chains and scopes steering to the current claim', () => {
     const first = textMessage('claim-first', 'first')
     const second = textMessage('claim-second', 'second')

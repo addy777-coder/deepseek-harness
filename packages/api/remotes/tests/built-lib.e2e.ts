@@ -24,6 +24,7 @@ const requiredArtifacts = [
   'packages/goal/goal/lib/typert.host.js',
   'packages/api/gateway/lib/client.js',
   'packages/api/gateway/lib/index.js',
+  'packages/client/connection/lib/web.js',
   'packages/typert/registry/lib/client.js',
   'packages/typert/registry/lib/index.js',
   'packages/session/session-projection/lib/index.js',
@@ -37,6 +38,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       apiGatewayHost: 'packages/api/gateway/lib/index.js',
       connectionClient: 'packages/client/connection/lib/client.js',
       connectionHost: 'packages/client/connection/lib/index.js',
+      connectionWeb: 'packages/client/connection/lib/web.js',
       goal: 'packages/goal/goal/lib/index.js',
       goalTypert: 'packages/goal/goal/lib/typert.host.js',
       registryClient: 'packages/typert/registry/lib/client.js',
@@ -53,6 +55,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       const { Context } = cordis
       const { default: AgentRegistry } = await import(urls.agent)
       const connectionHost = await import(urls.connectionHost)
+      const connectionWeb = await import(urls.connectionWeb)
       const { default: TypertRemoteService } = await import(urls.apiGatewayHost)
       const { default: GoalService } = await import(urls.goal)
       const { default: SessionProjectionRegistry } = await import(urls.sessionProjections)
@@ -81,6 +84,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         },
       })
       await host.plugin({ inject: connectionHost.inject, apply: connectionHost.apply })
+      await host.plugin({ inject: connectionWeb.inject, apply: connectionWeb.apply })
       await host.plugin(TypertRegistry)
       await host.plugin(AgentRegistry)
       await host.plugin(TypertRemoteService)
@@ -117,7 +121,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       }
       const server = createServer((request, response) => {
         if ((request.url ?? '/').startsWith('/?')) {
-          if (host.connection.authorizeIndex(request, response)) {
+          if (host.webConnection.authorizeIndex(request, response)) {
             response.writeHead(200, { 'content-type': 'text/html' })
             response.end('<body>shell</body>')
           }
@@ -129,7 +133,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       const address = server.address()
       if (address === null || typeof address === 'string') throw new Error('HTTP server has no TCP address')
       const origin = 'http://127.0.0.1:' + String(address.port)
-      const login = await fetch(host.connection.authenticatedUrl(origin), { redirect: 'manual' })
+      const login = await fetch(host.webConnection.authenticatedUrl(origin), { redirect: 'manual' })
       const setCookie = login.headers.get('set-cookie')
       if (login.status !== 303 || setCookie === null) throw new Error('browser token exchange failed')
       const cookie = setCookie.split(';', 1)[0]

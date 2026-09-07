@@ -105,6 +105,7 @@ function defaultProbeWindowsAcl(runnerInvocation: string[], timeoutMs: number): 
     '--workspace', tmpdir(), '--temp', tmpdir(), '--mode', 'read-only',
     '--', 'cmd', '/c', 'exit', '0',
   ], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     timeout: timeoutMs,
     stdio: 'ignore',
   })
@@ -326,6 +327,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     const runnerArgv = this.runnerArgv(selected.runner, policy)
     return {
       argv: [...runnerArgv, '--', ...argv],
+      ...(selected.runner === 'windows-acl' ? { env: { ELECTRON_RUN_AS_NODE: '1' } } : {}),
       enforcement: selected.enforcement,
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
       runnerFailureRules: RUNNER_FAILURE_RULES[selected.runner],

@@ -9,7 +9,7 @@ kind: "package-library"
 
 ## 概述
 
-`dsh-session-snapshot` 提供无密钥已记录会话测试（`pnpm run test:snapshot`）背后的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP 与 Web owner 使用的协议适配器。ACP 适配器以真实子进程启动被测 profile，驱动确定性输入脚本，并注册完整的录制、回放与刷新套件。每个场景都提交足够证据来证明模型可见输出与文件系统效果，不依赖 agent 自述。包入口会导入 vitest，因此只能在 vitest 运行中使用。
+`dsh-session-snapshot` 提供无密钥已记录会话测试（`pnpm run test:snapshot`）背后的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP、Web 与 Desktop owner 使用的协议适配器。ACP 适配器以真实子进程启动被测 profile，驱动确定性输入脚本，并注册完整的录制、回放与刷新套件。每个场景都提交足够证据来证明模型可见输出与文件系统效果，不依赖 agent 自述。包入口会导入 vitest，因此只能在 vitest 运行中使用。
 
 ## 目录
 
@@ -102,7 +102,7 @@ defineAcpSnapshotSuite({
 
 ### 设计
 
-共享核心拥有 manifest、workspace 设置／比较、类型化身份映射、规范化器与 fixture 不变式。ACP 适配器增加四个可组合层：启动器、场景 harness、规范化器与套件工厂。`launchAcpTestAgent` 在 tsx 下启动源码 profile，或在普通 Node 下启动已构建 `lib` profile，通过原始字节 stdout tee 连接 SDK 客户端，收集会话更新与 stderr，默认拒绝未处理的权限请求，并负责关闭。`runScenario` 驱动 ACP JSON-RPC stdio，并收集每个持久化原始 JSONL 会话日志。纯规范化器把 cwd 路径与类型化身份变为稳定 token，将时间归零、展开物理来源区间，并擦除请求 header bulk。`defineAcpSnapshotSuite` 注册比较、fixture 回写与实时一致性保护。
+共享核心拥有 manifest、workspace 设置／比较、类型化身份映射、规范化器与 fixture 不变式。ACP 适配器增加四个可组合层：启动器、场景 harness、规范化器与套件工厂。`launchAcpTestAgent` 在 tsx 下启动源码 profile，或在普通 Node 下启动已构建 `lib` profile，通过原始字节 stdout tee 连接 SDK 客户端，收集会话更新与 stderr，默认拒绝未处理的权限请求，并负责关闭。`runScenario` 驱动 ACP JSON-RPC stdio，并收集每个持久化原始 JSONL 会话日志。纯规范化器把 cwd 路径与类型化身份变为稳定 token，将时间归零、展开物理来源区间，并擦除请求 header bulk。Desktop 适配器启动已构建 Windows Electron 外壳，并通过真实 MessagePort IPC 回放已提交模型／工具回合；`defineAcpSnapshotSuite` 注册 ACP 比较、fixture 回写与实时一致性保护。
 
 ### 源码地图
 
@@ -157,6 +157,7 @@ defineAcpSnapshotSuite({
 - **会话收集需要原始 JSONL mode**——`runScenario` 收集持久化 `.jsonl` 日志，因此快照配置使用 JSONL 后端的 `compression: 'none'`；压缩 JSONL 没有快照收集路径。
 - **构建 mode 需要当前产物**——选择 `DSH_EXAMPLE_MODE=lib` 前先运行 `pnpm run build`；源 mode 仍是零构建路径。
 - **ACP 继续覆盖协议行为**——刺激来自 ACP 客户端的取消与权限往返留在该适配器；组装式一次性行为与持久控制行为使用 headless 与 SDK 适配器。
+- **Desktop 回放要求已构建 Windows checkout**——非 Windows 与干净的纯源码 snapshot lane 会跳过 Electron 适配器；所需运行由 Windows 产物 lane 负责。
 
 <a id="dev-note"></a>
 ### 开发备注

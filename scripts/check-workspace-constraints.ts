@@ -57,6 +57,14 @@ const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|app
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js'],
+  '@deepseek-ai/dsh-desktop': [
+    'lib/*.js',
+    'lib/*.cjs',
+    'dist',
+    '!dist/**/*.map',
+    'assets',
+    'electron-builder.yml',
+  ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
   // (dist/preview.html and dist/preview/) backs private experimental
   // packages and is not published.
@@ -141,6 +149,8 @@ function workspaceManifests(): WorkspaceManifest[] {
 }
 
 const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
+  // The transport-neutral and Web Host entries share the API path constant.
+  '@deepseek-ai/dsh-client-connection': ['lib/api-path-*.js'],
   // Statically linked client libraries keep their stylesheets next to the emitted
   // JavaScript, which imports them by relative path: the compile shell runs
   // them through its own CSS pipeline, so the sheets are published artifacts.
@@ -202,6 +212,14 @@ export function expectedDshPackageFiles(manifest: PackageManifest): readonly str
     // A surface bundle's startup row is its own bundle: the Loader imports it
     // as a row module, so it cannot ride inside the package entry.
     ...exportDefault(manifest, './startup') === './lib/startup.js' ? ['lib/startup.js'] : [],
+    // Browser carriers keep their Host adapter separate from the transport-
+    // neutral package entry while publishing one independently loadable bundle.
+    ...exportDefault(manifest, './web') === './lib/web.js' ? ['lib/web.js'] : [],
+    // Profile package management is a pure utility entry that stays separate
+    // from the Loader-bearing application boot bundle.
+    ...exportDefault(manifest, './profile-plugins') === './lib/profile-plugins.js'
+      ? ['lib/profile-plugins.js']
+      : [],
     ...extras,
     // Subpaths whose runtime default is the tsc-emitted tree (lib/types/*.js —
     // browser-safe source channels rehomed off src so plain Node can import

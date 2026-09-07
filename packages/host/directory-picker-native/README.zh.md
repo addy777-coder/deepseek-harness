@@ -55,6 +55,8 @@ kind: "package-reference"
 
 平台工具不经 shell 调用：macOS 使用 `osascript`，Linux 使用 Zenity 并以 KDialog 回退；调用方的中止信号会终止原生进程。Windows 在 spawn 的子进程中打开现代 `IFileOpenDialog`——由 koffi 在子进程主线程上驱动的 COM 会话，采用宿主接受的最佳线程 DPI 感知（优先 per-monitor-v2），中止时向对话框线程投递 `WM_CLOSE`。
 
+Windows 结果路径从 COM 所有的 UTF-16 内存复制后再释放该内存。解码器支持 Electron 对外部 ArrayBuffer 的限制，并保留 Unicode 目录名。
+
 ### 源码地图
 
 | 文件 | 职责 |

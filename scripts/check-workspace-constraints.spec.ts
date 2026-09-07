@@ -87,4 +87,42 @@ describe('package payload constraints', () => {
       'lib/types/**/*.d.ts',
     ])
   })
+
+  it('includes a separately bundled Web carrier when the export names it', () => {
+    expect(expectedDshPackageFiles({
+      name: '@deepseek-ai/dsh-carrier',
+      exports: { './web': { default: './lib/web.js' } },
+    })).toEqual([
+      'lib/index.js',
+      'lib/web.js',
+      'lib/types/**/*.d.ts',
+    ])
+  })
+
+  it('includes the Connection Host entries shared runtime chunk', () => {
+    expect(expectedDshPackageFiles({
+      name: '@deepseek-ai/dsh-client-connection',
+      exports: {
+        './client': { default: './lib/client.js' },
+        './web': { default: './lib/web.js' },
+      },
+    })).toEqual([
+      'lib/index.js',
+      'lib/client.js',
+      'lib/web.js',
+      'lib/api-path-*.js',
+      'lib/types/**/*.d.ts',
+    ])
+  })
+
+  it('includes the pure profile-plugin reconciler without widening the root boot bundle', () => {
+    expect(expectedDshPackageFiles({
+      name: '@deepseek-ai/dsh-app-boot',
+      exports: { './profile-plugins': { default: './lib/profile-plugins.js' } },
+    })).toEqual([
+      'lib/index.js',
+      'lib/profile-plugins.js',
+      'lib/types/**/*.d.ts',
+    ])
+  })
 })

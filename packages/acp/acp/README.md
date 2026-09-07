@@ -61,7 +61,7 @@ One connection can run several sessions at once, each independent. The calls a c
 
 | Call | What you get |
 |---|---|
-| `initialize` | Stable ACP v1 plus `session/list`, `session/resume`, `session/close`, and Streamable HTTP MCP support; image prompts only when the durable attachment store and configured exact route support them. |
+| `initialize` | Stable ACP v1 plus `session/list`, `session/resume`, `session/close`, and Streamable HTTP MCP support; image prompts require the durable attachment store plus direct image input or a verified recognition target. |
 | `authenticate` | Immediate success; the server requires no authentication. |
 | `session/new` | A fresh persistent agent whose absolute workspace and stdio or HTTP MCP servers are validated before publication, plus its complete configuration-option state. |
 | `session/list` | Deterministic newest-first pages of persisted, resumable root sessions; an optional absolute `cwd` filter uses physical-directory identity where possible. |
@@ -167,7 +167,7 @@ Append-only through the owning tool result.
 These limits define when this package is a poor fit or needs special operational care. They are current package constraints, not a protocol comparison or a task backlog.
 
 - **One primary workspace** — additional directories remain unsupported.
-- **Raster prompt images only** — PNG, JPEG, WebP, and GIF require a durable attachment store and an exact image-capable route.
+- **Raster prompt images only** — PNG, JPEG, WebP, and GIF require a durable attachment store plus an exact image-capable route or verified image-recognition target.
 - **MCP tools only** — MCP resources and prompts have no DSH consumer.
 - **No transcript replay or interactive extensions** — session deletion, fork, `session/load`, modes, commands, plans, terminals, client filesystem operations, and elicitation remain outside this automation surface.
 

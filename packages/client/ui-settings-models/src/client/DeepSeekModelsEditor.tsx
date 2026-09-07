@@ -17,10 +17,16 @@ import styles from './ModelsSection.module.css'
 export type DeepSeekModelDraft = Record<string, unknown>
 
 /** The catalog fields this editor writes. */
-type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens'
+type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens' | 'inputModalities'
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
+
+/** Whether one direct DeepSeek catalog row accepts image input. */
+function supportsImages(model: DeepSeekModelDraft): boolean {
+  const input = model['inputModalities']
+  return Array.isArray(input) && input.includes('image')
+}
 
 /** Row index encoded in an editing-buffer key. */
 function rowOf(key: string): number {
@@ -306,17 +312,22 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
                       if (trimmed !== event.target.value) update(index, 'id', trimmed)
                     }}
                   />
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    value={typeof model['name'] === 'string' ? model['name'] : ''}
-                    placeholder={props.t('modelName')}
-                    aria-label={`${props.t('modelName')} ${String(index + 1)}`}
-                    disabled={props.disabled}
-                    onChange={(event) => {
-                      update(index, 'name', event.target.value === '' ? undefined : event.target.value)
-                    }}
-                  />
+                  <span className={styles['modelNameField']}>
+                    <input
+                      className={styles['input']}
+                      type="text"
+                      value={typeof model['name'] === 'string' ? model['name'] : ''}
+                      placeholder={props.t('modelName')}
+                      aria-label={`${props.t('modelName')} ${String(index + 1)}`}
+                      disabled={props.disabled}
+                      onChange={(event) => {
+                        update(index, 'name', event.target.value === '' ? undefined : event.target.value)
+                      }}
+                    />
+                    {supportsImages(model)
+                      ? <span className={styles['rowTag']}>{props.t('visionTag')}</span>
+                      : null}
+                  </span>
                   <button
                     type="button"
                     className={styles['iconButton']}
@@ -341,6 +352,19 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
                 {expanded.has(index)
                   ? (
                     <div className={styles['modelAdvanced']}>
+                      <label className={styles['modelToggle']}>
+                        <input
+                          type="checkbox"
+                          checked={supportsImages(model)}
+                          disabled={props.disabled}
+                          onChange={(event) => {
+                            update(index, 'inputModalities', event.target.checked
+                              ? ['text', 'image']
+                              : ['text'])
+                          }}
+                        />
+                        <span>{props.t('modelImageInput')}</span>
+                      </label>
                       {capacityField(model, index, 'contextWindow', props.defaultContextWindow)}
                       {capacityField(model, index, 'maxTokens', props.defaultMaxTokens)}
                     </div>
@@ -354,7 +378,9 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
         type="button"
         className={styles['addModelButton']}
         disabled={props.disabled}
-        onClick={() => { props.onChange([...props.models.map(model => ({ ...model })), { id: '' }]) }}
+        onClick={() => {
+          props.onChange([...props.models.map(model => ({ ...model })), { id: '', inputModalities: ['text'] }])
+        }}
       >
         <IconPlusOutline16 size={14} />
         {props.t('addModel')}

@@ -20,6 +20,7 @@ import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
+import { hasImageRecognitionTarget } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
@@ -395,7 +396,7 @@ function decodeImage(block: McpContentBlock): SaveImageAttachment {
  * Resolve the active model route and durable store for an image-bearing result.
  * @param ctx - plugin context with optional services.
  * @param exec - exact tool execution whose agent supplies the latest route.
- * @returns the attachment store after exact positive image-capability proof.
+ * @returns the attachment store after direct image-capability or recognition proof.
  */
 async function resolveImageAdmission(ctx: Context, exec: ToolExecution): Promise<AttachmentStore> {
   const attachments = ctx.get('attachments')
@@ -413,8 +414,15 @@ async function resolveImageAdmission(ctx: Context, exec: ToolExecution): Promise
   } catch {
     throw new Error('the current model route could not be verified')
   }
-  if (info.inputModalities === undefined || !info.inputModalities.includes('image')) {
+  if (info.inputModalities === undefined) {
     throw new Error(`model "${model}" does not declare image input`)
+  }
+  if (!info.inputModalities.includes('image')) {
+    if (!await hasImageRecognitionTarget(ctx, exec.signal)) {
+      throw new Error(
+        `model "${model}" does not declare image input; configure an image recognition model in Settings > Models`,
+      )
+    }
   }
   if (exec.signal.aborted) throw new Error('the tool call was canceled before image storage')
   return attachments

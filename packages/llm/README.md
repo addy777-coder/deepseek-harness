@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The llm group provides the harness's model-call capability: one provider-neutral service through which any composition streams requests to a model provider, plus adapters, provider-specific request metadata, retry execution, and measurement. The core `llm` package defines the message, content-block, and stream-chunk vocabulary every plugin and the session log use; provider adapters translate a provider's wire format into that vocabulary; DeepSeek request-extension plugins contribute lifecycle-owned metadata outside model input; `llm-retry` re-runs failed requests at durable agent-step boundaries; and `token-meter` measures request and context pressure from the durable log. This page maps the group; each package README owns its per-package contract.
+The llm group provides the harness's model-call capability: one provider-neutral service through which any composition streams requests to a model provider, plus adapters, auxiliary image recognition, provider-specific request metadata, retry execution, and measurement. The core `llm` package defines the message, content-block, stream-chunk, and image-recognition service vocabulary every plugin and the session log use; provider adapters translate a provider's wire format into that vocabulary; `image-recognition-llm` supplies durable visual reports to text-only routes; `llm-retry` re-runs failed requests at durable agent-step boundaries; and `token-meter` measures request and context pressure from the durable log. This page maps the group; each package README owns its per-package contract.
 
 ## Table of Contents
 
@@ -27,6 +27,7 @@ The llm group provides the harness's model-call capability: one provider-neutral
 | [`llm/`](llm/README.md) | Streams one model call through a registered provider adapter and shares the harness message, block, and chunk vocabulary | `ctx.llm` |
 | [`llm-deepseek/`](llm-deepseek/README.md) | Serves the `deepseek-official` route with direct DeepSeek chat-completions, thinking, and image input | registers on `ctx.llm` |
 | [`llm-pi-ai/`](llm-pi-ai/README.md) | Serves configured provider routes through pi-ai catalogs and wire protocols, including hand-declared gateways | registers on `ctx.llm` |
+| [`image-recognition-llm/`](image-recognition-llm/README.md) | Uses one selected image-capable route to add durable visual reports before text-only model requests | `ctx.imageRecognition` |
 | [`deepseek-llm-api-extensions/`](deepseek-llm-api-extensions/README.md) | Registers lifecycle-owned top-level fields on official DeepSeek requests | `ctx.deepseekLlmApiExtensions` |
 | [`plugin-package-inventory-deepseek/`](plugin-package-inventory-deepseek/README.md) | Contributes the active Loader package inventory to official DeepSeek requests | contributes `dsh_plugin_packages` |
 | [`llm-retry/`](llm-retry/README.md) | Retries failed model requests under each provider's policy at durable agent-step boundaries | listens to `agent/request-error` |

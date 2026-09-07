@@ -464,6 +464,25 @@ describe('current selection (migrated from ui-layout, arbitrated into the list s
     await feedList(second, [{ id: 's1' }])
     expect(second.svc.list.getSnapshot().current).toBe('s1')
   })
+
+  it('keeps a focused Desktop task selection in memory without changing the main-window record', async () => {
+    const storage = new Map<string, string>([
+      ['dsh.sessions.current', JSON.stringify({ sessionId: 'main-session' })],
+    ])
+    const setItem = vi.fn((key: string, value: string) => { storage.set(key, value) })
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem,
+    })
+    vi.stubGlobal('__DSH_DESKTOP__', { kind: 'task', sessionId: 'task-session' })
+    const b = bench()
+    await feedList(b, [{ id: 'main-session' }, { id: 'task-session' }, { id: 'other-session' }])
+    expect(b.svc.list.getSnapshot().current).toBe('task-session')
+    b.svc.open(sid('other-session'))
+    expect(b.svc.list.getSnapshot().current).toBe('other-session')
+    expect(storage.get('dsh.sessions.current')).toBe(JSON.stringify({ sessionId: 'main-session' }))
+    expect(setItem).not.toHaveBeenCalled()
+  })
 })
 
 describe('binding and stage lifecycle', () => {

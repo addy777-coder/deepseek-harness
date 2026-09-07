@@ -1,0 +1,16 @@
+{
+  "name": "dsh-desktop-runtime-closure",
+  "description": "Dependency-only deploy root for the packaged DSH Desktop Host",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/cosmokit": "workspace:^",
+    "@deepseek-ai/dsh-desktop-app": "workspace:^",
+    "@deepseek-ai/dsh-gui-app": "workspace:^",
+    "@deepseek-ai/dsh-session-title-llm": "workspace:^",
+    "@deepseek-ai/dsh-util-workspace-path": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^",
+    "dsh-python-runtime-closure": "workspace:*"
+  }
+}

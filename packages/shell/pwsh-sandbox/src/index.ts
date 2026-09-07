@@ -103,7 +103,7 @@ export class SandboxPwshExecutor extends PwshLocalExecutor {
     const confined = this.confine(spec, { ...policy, mode })
     let result: ShellRunResult
     try {
-      result = await this.runArgv(spec, confined.argv)
+      result = await this.runArgv(this.withRunnerEnv(spec, confined), confined.argv)
     } catch (error) {
       // An upstream abort remains cancellation even when it prevents spawn.
       if (spec.signal?.aborted === true) spec.signal.throwIfAborted()
@@ -130,7 +130,7 @@ export class SandboxPwshExecutor extends PwshLocalExecutor {
     const confined = this.confine(spec, { ...policy, mode })
     let proc: ShellProcess
     try {
-      proc = this.startArgv(spec, confined.argv)
+      proc = this.startArgv(this.withRunnerEnv(spec, confined), confined.argv)
     } catch (error) {
       if (isRunnerSpawnFailure(error, confined.argv[0], spec.workdir)) {
         throw new SandboxUnavailableError(mode, String(error))
@@ -182,6 +182,11 @@ export class SandboxPwshExecutor extends PwshLocalExecutor {
    */
   private confine(spec: ShellExecSpec, policy: SandboxPolicy): ConfinedArgv {
     return this.ctx.sandbox.confine(this.argv(spec), policy)
+  }
+
+  /** Apply runner-only environment additions after caller entries. */
+  private withRunnerEnv(spec: ShellExecSpec, confined: ConfinedArgv): ShellExecSpec {
+    return confined.env === undefined ? spec : { ...spec, env: { ...spec.env, ...confined.env } }
   }
 }
 /* jscpd:ignore-end */

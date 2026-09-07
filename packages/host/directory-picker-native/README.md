@@ -55,6 +55,8 @@ The backend is a thin service over a platform chooser: `NativeDirectoryPicker` r
 
 Platform tools run without a shell: `osascript` on macOS, and Zenity with a KDialog fallback on Linux; the caller's abort terminates the native process. Windows opens the modern `IFileOpenDialog` in a spawned child process — a koffi-driven COM conversation on the child's main thread with the best thread DPI awareness the host accepts (per-monitor-v2 first), aborted by posting `WM_CLOSE` to the dialog thread.
 
+Windows result paths are copied from COM-owned UTF-16 memory before it is freed. The decoder supports Electron's restriction on external ArrayBuffers and preserves Unicode directory names.
+
 ### Source map
 
 | File | Role |

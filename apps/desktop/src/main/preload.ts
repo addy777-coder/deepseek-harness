@@ -1,0 +1,48 @@
+/** Context-isolated bridge for fixed desktop shell operations and Host port delivery. */
+import { contextBridge, ipcRenderer } from 'electron'
+import type { DesktopShellApi, DesktopWindowBootstrap } from '../shared/contracts.ts'
+import { channels } from './channels.ts'
+
+ipcRenderer.on(channels.hostPort, (event, payload: { readonly windowId: string }) => {
+  const port = event.ports[0]
+  if (port === undefined || event.ports.length !== 1) return
+  window.postMessage({ source: channels.hostPort, windowId: payload.windowId }, '*', [port])
+})
+
+function subscribeIntent(listener: Parameters<DesktopShellApi['onIntent']>[0]): () => void {
+  const wrapped = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+    if (typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'new-task') {
+      listener({ type: 'new-task' })
+    }
+  }
+  ipcRenderer.on(channels.intent, wrapped)
+  return () => { ipcRenderer.off(channels.intent, wrapped) }
+}
+
+function subscribeHostFailure(listener: Parameters<DesktopShellApi['onHostFailure']>[0]): () => void {
+  const wrapped = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+    if (typeof value === 'string') listener(value)
+  }
+  ipcRenderer.on(channels.hostFailure, wrapped)
+  return () => { ipcRenderer.off(channels.hostFailure, wrapped) }
+}
+
+const api: DesktopShellApi = {
+  bootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<DesktopWindowBootstrap>,
+  openSession: sessionId => ipcRenderer.invoke(channels.openSession, sessionId) as Promise<void>,
+  openMain: () => ipcRenderer.invoke(channels.openMain) as Promise<void>,
+  newTask: () => ipcRenderer.invoke(channels.newTask) as Promise<void>,
+  reportSelection: (sessionId) => { ipcRenderer.send(channels.reportSelection, sessionId) },
+  notifyTaskSettled: (sessionId, title) => { ipcRenderer.send(channels.notify, { sessionId, title }) },
+  restartHost: () => ipcRenderer.invoke(channels.restartHost) as Promise<void>,
+  listPlugins: () => ipcRenderer.invoke(channels.pluginList) as ReturnType<DesktopShellApi['listPlugins']>,
+  stagePlugin: request => ipcRenderer.invoke(channels.pluginStage, request) as ReturnType<DesktopShellApi['stagePlugin']>,
+  applyPlugin: token => ipcRenderer.invoke(channels.pluginApply, token) as Promise<void>,
+  cancelPlugin: token => ipcRenderer.invoke(channels.pluginCancel, token) as Promise<void>,
+  getPreferences: () => ipcRenderer.invoke(channels.preferencesGet) as ReturnType<DesktopShellApi['getPreferences']>,
+  setPreference: request => ipcRenderer.invoke(channels.preferencesSet, request) as ReturnType<DesktopShellApi['setPreference']>,
+  onIntent: listener => subscribeIntent(listener),
+  onHostFailure: listener => subscribeHostFailure(listener),
+}
+
+contextBridge.exposeInMainWorld('dshDesktop', api)

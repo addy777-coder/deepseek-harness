@@ -2,7 +2,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as themeApply, inject as themeInject, ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -11,6 +11,10 @@ import { apply as nodeApply } from '@deepseek-ai/dsh-client-ui-layout'
 
 beforeEach(() => {
   document.head.querySelectorAll('meta[name="theme-color"]').forEach((node) => { node.remove() })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 async function bench() {
@@ -58,6 +62,18 @@ describe('ui-layout client apply', () => {
     const layout = ctx.get('layout') as LayoutController
     layout.toggleSidebar()
     expect(actions.toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('injects focused layout state only for a Desktop task window', async () => {
+    vi.stubGlobal('__DSH_DESKTOP__', { kind: 'task' })
+    const { ctx, slots } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const actions = {
+      setSidebar: vi.fn(), setDetails: vi.fn(), toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(),
+    }
+    const injected = (slots.entries('root')[0]!.inject as (actions: never) => object)(actions as never)
+    expect(injected).toEqual({ focused: true })
   })
 
   it('theme presenter applies the initial snapshot, follows theme/change, and unwinds on dispose', async () => {

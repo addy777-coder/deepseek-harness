@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service, symbols } from '@deepseek-ai/cordis'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-client-connection/web'
 import { Deque } from '@deepseek-ai/dsh-deque'
 import type { WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -202,7 +203,7 @@ export class TypertGatewayService extends Service implements TypertGateway {
         (endpoint, payload, signal) => this.dispatchRpc(endpoint, payload, signal),
       )
     })
-    ctx.inject(['connection', 'webServer'], (webCtx) => {
+    ctx.inject(['webConnection', 'webServer'], (webCtx) => {
       const mux = new RemoteStreamMuxServer(
         (endpoint, payload, signal) => this.openWireStream(endpoint, payload, signal),
         this.wireStream.failure,
@@ -212,7 +213,7 @@ export class TypertGatewayService extends Service implements TypertGateway {
         const route: WebUpgradeRoute = {
           path: REMOTE_STREAM_MUX_PATH,
           handler: (req, socket, head) => {
-            const rejection = webCtx.connection.requestRejection(req)
+            const rejection = webCtx.webConnection.requestRejection(req)
             if (rejection !== undefined) {
               rejectRemoteStreamUpgrade(socket, rejection)
               return

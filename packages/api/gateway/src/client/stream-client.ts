@@ -303,7 +303,11 @@ class StreamInbox {
 
 function remoteStreamUrl(): string {
   const location = (globalThis as { location?: { origin?: string } }).location
-  const base = location?.origin !== undefined && location.origin !== 'null' ? location.origin : INTERNAL_BASE
+  const base = location?.origin !== undefined
+    && location.origin !== 'null'
+    && !location.origin.startsWith('file:')
+    ? location.origin
+    : INTERNAL_BASE
   const url = new URL(REMOTE_STREAM_MUX_PATH, base)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   return url.href

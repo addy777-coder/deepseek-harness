@@ -1,5 +1,5 @@
 ---
-description: "Web GUI 的外壳布局：三栏 AppFrame、拖动手柄与让步行为、面板几何服务与主题呈现；供窗口外观的用户与维护者阅读。"
+description: "共享 GUI 外壳布局：三栏 AppFrame、可选 Desktop 标题栏、专注任务模式、面板几何与主题呈现。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包提供 Web GUI 的外壳布局：一个三栏 AppFrame，带可缩放的侧栏与详情面板；一条让步链，在空间不足时先收缩详情栏、随后自动关闭它；以及 `ctx.layout` 面板几何服务，供其他插件调用以打开或关闭详情栏。它还承载主题呈现器，把解析后的配色方案、别名 token、正文字号与 `theme-color` 元数据投影到 document。需要标准窗口外观时选择它；面板几何是瞬时的，重新加载即重置。
+本包提供共享 GUI 外壳：一个带可缩放侧栏与详情面板的三栏 AppFrame、可选的载体标题栏、移除导航栏的专注任务模式，以及供其他插件调用以打开或关闭详情栏的 `ctx.layout` 面板几何服务。空间不足时，它的让步链先收缩再关闭详情栏。它还承载主题呈现器，把解析后的配色方案、别名 token、正文字号与 `theme-color` 元数据投影到 document。需要标准 Web 或 Desktop 窗口外观时选择它；面板几何是瞬时的，重新加载即重置。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在 root 槽位挂载本插件；它随即围绕占据侧栏、会话与详情栏的内容渲染应用框架。用户拖动不可见命中条带缩放侧栏、拖动浮动胶囊缩放详情面板；窗口变窄时只有详情栏收缩，随后自动关闭。关闭的侧栏保留 56px 控制栏；详情栏关闭到零宽度。
+在 root 槽位挂载本插件；它随即围绕占据侧栏、会话与详情栏的内容渲染应用框架。载体可以占据 `shell.titlebar`，在各栏上方添加窗口外观。用户拖动不可见命中条带缩放侧栏、拖动浮动胶囊缩放详情面板；窗口变窄时只有详情栏收缩，随后自动关闭。关闭的侧栏保留 56px 控制栏；专注 Desktop 任务窗口会完全省略该控制栏与侧栏内容；详情栏关闭到零宽度。
 
 ### 主题呈现
 
@@ -39,7 +39,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-一次 `register()` 调用把 `AppFrame` 贡献进运行时的内建 `'root'` 槽位，并在同一刻声明四个子槽位（`sidebar`、`conversation`、`details`、`shell.overlay`）、安放布局 store（面板几何）并接好 `ctx.layout` 面板动作服务。瞬时布局 store 以默认宽度启动侧栏、保持详情栏关闭，从不读写 `localStorage`。AppFrame 始终挂载会话与详情两栏；已连接 Session 经 `SessionProvider` 渲染。它把所选 Session 标题投影到构建配置的产品标题或本地化 `common.brand.localBuild` 回退值之上，因此 locale revision 会随根 entry 一起更新文档元数据。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号与 token 变量，再把渲染出的背景测量为唯一的颜色依据。
+一次 `register()` 调用把 `AppFrame` 贡献进运行时的内建 `'root'` 槽位，并在同一刻声明五个子槽位（`sidebar`、`conversation`、`details`、`shell.overlay`、`shell.titlebar`）、安放布局 store（面板几何）并接好 `ctx.layout` 面板动作服务。瞬时布局 store 以默认宽度启动侧栏、保持详情栏关闭，从不读写 `localStorage`。AppFrame 始终挂载会话与详情两栏；已连接 Session 经 `SessionProvider` 渲染。它把所选 Session 标题投影到构建配置的产品标题或本地化 `common.brand.localBuild` 回退值之上，因此 locale revision 会随根 entry 一起更新文档元数据。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号与 token 变量，再把渲染出的背景测量为唯一的颜色依据。
 
 </details>
 
@@ -53,6 +53,7 @@ kind: "package-reference"
 - [ui-sidebar](../ui-sidebar/README.zh.md)——占据 `sidebar` 栏及其座位。
 - [ui-conversation](../ui-conversation/README.zh.md)——占据 `conversation` 与 `details` 栏。
 - [ui-theme](../ui-theme/README.zh.md)——呈现器消费其解析快照的主题 seam。
+- [ui-desktop](../ui-desktop/README.zh.md)——占据可选标题栏并选择专注任务模式。
 - [Web 客户端架构](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.zh.md)——浏览器插件行如何加载并注册槽位。
 
 -----

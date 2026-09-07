@@ -95,6 +95,8 @@ export interface RunnerFailureRule {
 export interface ConfinedArgv {
   /** The wrapped argv (runner, profile, separator, then the caller's argv). */
   argv: string[]
+  /** Environment additions required by the runner itself, not by the wrapped command. */
+  env?: Readonly<Record<string, string>>
   /** How completely the selected backend enforces the policy's file effects. */
   enforcement: SandboxEnforcement
   /**

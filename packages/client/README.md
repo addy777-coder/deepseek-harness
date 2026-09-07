@@ -1,15 +1,15 @@
 ---
-description: "Package map for the web GUI browser half: shell boot, browser-host communication, shared client services, localization, development reload, and the UI feature plugins."
+description: "Package map for the shared GUI Client half: shell boot, carrier-neutral Host communication, shared services, localization, development reload, and UI feature plugins."
 kind: "package-group"
 ---
 
-# client/ — web-GUI browser half
+# client/ — shared GUI Client half
 
 English | [中文](README.zh.md)
 
 ## Summary
 
-The `client/` group runs the browser half of the dsh web GUI: it boots the web shell, loads browser-side plugin modules, keeps browser-to-host RPC and event delivery alive, and provides the shared client services and UI feature plugins that render the application. UI features compose through the slot system — each plugin fills declared extension slots with typed props and stores, and the shell renders the assembled tree. All packages here are product packages named `@deepseek-ai/dsh-client-<name>`; the host half that serves the page lives in [`host/`](../host/README.md). Authoring rules live in [AGENTS.md](AGENTS.md), and the module graph, slot model, and object layer are documented in the related notes below.
+The `client/` group runs the Client half of the shared dsh GUI in a browser page or sandboxed Electron Renderer: it boots the shell, loads browser-compatible plugin modules, keeps carrier-to-Host RPC and event delivery alive, and provides the shared services and UI feature plugins that render the application. UI features compose through the slot system — each plugin fills declared extension slots with typed props and stores, and the shell renders the assembled tree. All packages here are product packages named `@deepseek-ai/dsh-client-<name>`; HTTP Host support lives in [`host/`](../host/README.md), while Electron Host transport lives in [`desktop/`](../desktop/README.md). Authoring rules live in [AGENTS.md](AGENTS.md), and the module graph, slot model, and object layer are documented in the related notes below.
 
 ## Table of Contents
 
@@ -28,7 +28,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 |---|---|---|
 | [`web/`](web/README.md) | Boots the browser shell | — |
 | [`modules/`](modules/README.md) | Loads browser-side client modules | `ctx.clientModules` / `ctx.modules` |
-| [`connection/`](connection/README.md) | Maintains browser-host RPC communication and event delivery | `ctx.connection` |
+| [`connection/`](connection/README.md) | Maintains carrier-neutral RPC communication and the Web authentication adapter | `ctx.connection` |
 | [`store/`](store/README.md) | Provides React-free observable and snapshot-store primitives | — |
 | [`hmr/`](hmr/README.md) | Refreshes client plugins during development | — |
 | [`locale/`](locale/README.md) | Provides localization preferences and message dictionaries | `ctx.locale` |
@@ -71,6 +71,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 | [`ui-message-feedback/`](ui-message-feedback/README.md) | Contributes per-message feedback controls to the assistant-message action strip | — |
 | [`ui-directory-picker-browse/`](ui-directory-picker-browse/README.md) | In-app directory browsing surface for the workspace directory flow | — |
 | [`ui-directory-picker-native/`](ui-directory-picker-native/README.md) | Native directory-picker surface driving the host's OS chooser | — |
+| [`ui-desktop/`](ui-desktop/README.md) | Adds the Desktop title bar, focused windows, notifications, preferences, and plugin management | — |
 
 -----
 
@@ -83,6 +84,7 @@ Start with the subsystem reference and the two notes that own the cross-package 
 - [Slot system standard](../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.md) — the definitive slot model: registration, props shares, and stores.
 - [Web client architecture note](../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) — the loading chain, object layer, and client services.
 - [Host group map](../host/README.md) — the host half that serves this browser half.
+- [Desktop group map](../desktop/README.md) — the Electron MessagePort Host transport.
 
 <a id="dev-note"></a>
 ## Dev Note

@@ -83,6 +83,7 @@ This section explains the design decisions behind the contract and points at the
 
 - **Same-world by contract.** `ctx.sandbox` wraps argv under a host-path file policy; containers, microVMs, and remote execution replace the surrounding capability seam instead.
 - **Policy rides the call.** `SandboxPolicy` is carried per call, never fixed on the provider: two consumers may confine under different policies at the same instant, and an escalated retry is a new call with a wider policy. Defaulting and resolution are explicit consumer steps.
+- **Runner setup stays runner-only.** `ConfinedArgv.env` carries environment additions needed to start the selected runner. The consumer merges them after caller entries, and the runner removes them before it starts the wrapped command.
 - **Fail closed.** `confine()` returns enforcing argv or throws `SandboxUnavailableError`; silent unconfined passthrough is forbidden, and functional probes arbitrate multi-runner chains.
 - **One vocabulary for denial and escalation.** The marker and hint texts and the strictly-wider ladder live here so the bash and fs families cannot drift apart.
 

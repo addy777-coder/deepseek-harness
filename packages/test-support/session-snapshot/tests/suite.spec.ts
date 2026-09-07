@@ -890,6 +890,26 @@ describe('refreshFixtureReplacements', () => {
 })
 
 describe('stabilizeRefreshLog', () => {
+  it('applies cwd replacements inside JSON-escaped Windows paths', () => {
+    const freshCwd = String.raw`C:\Users\runner\AppData\Local\Temp\dsh-log-snap-new`
+    const fresh = [
+      JSON.stringify({ type: 'session', id: 'same', createdAt: 2, cwd: freshCwd }),
+      JSON.stringify({
+        type: 'tool/result',
+        data: { content: [{ type: 'text', text: `<path>${freshCwd}\\red.png</path>` }] },
+      }),
+      '',
+    ].join('\n')
+    const existing = [
+      JSON.stringify({ type: 'session', id: 'same', createdAt: 1, cwd: '{{cwd}}' }),
+      '',
+    ].join('\n')
+
+    expect(stabilize(fresh, existing, [{ from: freshCwd, to: '{{cwd}}' }])).toContain(
+      String.raw`<path>{{cwd}}\\red.png</path>`,
+    )
+  })
+
   it('preserves unpacked member times when refresh first packs a chunk run', () => {
     const fresh = [
       '{"type":"session","id":"same","createdAt":200}',

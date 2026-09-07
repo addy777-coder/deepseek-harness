@@ -124,6 +124,8 @@ flowchart TD
   subgraph group_bundle["packages/bundle"]
     pkg_acp_app["acp-app"]
     pkg_base["base"]
+    pkg_desktop_app["desktop-app"]
+    pkg_gui_app["gui-app"]
     pkg_headless["headless"]
     pkg_sdk_app["sdk-app"]
     pkg_sdk_minimal["sdk-minimal"]
@@ -143,6 +145,7 @@ flowchart TD
     pkg_client_ui_commands["client-ui-commands"]
     pkg_client_ui_conversation["client-ui-conversation"]
     pkg_client_ui_deliverables["client-ui-deliverables"]
+    pkg_client_ui_desktop["client-ui-desktop"]
     pkg_client_ui_directory_picker_browse["client-ui-directory-picker-browse"]
     pkg_client_ui_directory_picker_native["client-ui-directory-picker-native"]
     pkg_client_ui_goal["client-ui-goal"]
@@ -197,6 +200,9 @@ flowchart TD
     pkg_authorization["authorization"]
     pkg_credentials["credentials"]
     pkg_credentials_local["credentials-local"]
+  end
+  subgraph group_desktop["packages/desktop"]
+    pkg_desktop_transport["desktop-transport"]
   end
   subgraph group_e2b["packages/e2b"]
     pkg_e2b["e2b"]
@@ -1156,6 +1162,8 @@ flowchart TD
 | [`cmdline`](../packages/boot/cmdline) | `boot` | — |
 | [`acp-app`](../packages/bundle/acp-app) | `bundle` | — |
 | [`base`](../packages/bundle/base) | `bundle` | — |
+| [`desktop-app`](../packages/bundle/desktop-app) | `bundle` | — |
+| [`gui-app`](../packages/bundle/gui-app) | `bundle` | — |
 | [`sdk-app`](../packages/bundle/sdk-app) | `bundle` | — |
 | [`sdk-minimal`](../packages/bundle/sdk-minimal) | `bundle` | — |
 | [`client-connection`](../packages/client/connection) | `client` | — |
@@ -1171,6 +1179,7 @@ flowchart TD
 | [`client-ui-commands`](../packages/client/ui-commands) | `client` | — |
 | [`client-ui-conversation`](../packages/client/ui-conversation) | `client` | — |
 | [`client-ui-deliverables`](../packages/client/ui-deliverables) | `client` | — |
+| [`client-ui-desktop`](../packages/client/ui-desktop) | `client` | — |
 | [`client-ui-directory-picker-browse`](../packages/client/ui-directory-picker-browse) | `client` | — |
 | [`client-ui-directory-picker-native`](../packages/client/ui-directory-picker-native) | `client` | — |
 | [`client-ui-goal`](../packages/client/ui-goal) | `client` | — |
@@ -1203,6 +1212,7 @@ flowchart TD
 | [`client-ui-workspace`](../packages/client/ui-workspace) | `client` | — |
 | [`client-web`](../packages/client/web) | `client` | — |
 | [`code-runtime`](../packages/code-runtime/code-runtime) | `code-runtime` | — |
+| [`desktop-transport`](../packages/desktop/transport) | `desktop` | — |
 | [`e2b`](../packages/e2b/e2b) | `e2b` | — |
 | [`experimental-agent-team-profile`](../packages/experimental/agent-team-profile) | `experimental` | — |
 | [`experimental-agent-team-web-profile`](../packages/experimental/agent-team-web-profile) | `experimental` | — |

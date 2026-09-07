@@ -352,7 +352,6 @@ export class ReactLoopAgent implements Agent {
         step,
         assembly.tools,
         system,
-        this.session.deriveMessages(),
         startsRequestSeries,
         surfaceGeneration,
         signal,
@@ -446,7 +445,6 @@ export class ReactLoopAgent implements Agent {
     step: number,
     tools: GenerateOptions['tools'] & object,
     system: string,
-    boundaryMessages: Message[],
     startsRequestSeries: boolean,
     surfaceGeneration: number,
     signal: AbortSignal,
@@ -494,6 +492,26 @@ export class ReactLoopAgent implements Agent {
       config = proposedConfig
     }
     signal.throwIfAborted()
+
+    const requestContexts = await this.dispatch.waterfall(
+      'agent/request-context',
+      {
+        turn,
+        step,
+        config,
+        ...preparedCall?.inputModalities === undefined
+          ? {}
+          : { inputModalities: preparedCall.inputModalities },
+        messages: session.deriveMessages(),
+        signal,
+      },
+      () => Promise.resolve<UserMessage[]>([]),
+    )
+    signal.throwIfAborted()
+    for (const message of requestContexts) {
+      session.append('user/message', message, { surfaceOp: 'append' })
+    }
+    const boundaryMessages: Message[] = session.deriveMessages()
 
     const header = canonicalHeader({
       config,

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types/renderer"
+  },
+  "include": ["src/renderer", "src/shared"],
+  "references": [
+    { "path": "../../packages/client/connection/tsconfig.client.json" },
+    { "path": "../../packages/client/modules" },
+    { "path": "../../packages/client/web" },
+    { "path": "../../packages/desktop/transport" },
+    { "path": "../../packages/host/webserver" },
+    { "path": "../../packages/util/crypto" }
+  ]
+}

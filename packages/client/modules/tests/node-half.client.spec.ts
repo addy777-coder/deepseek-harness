@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderIndexInjections, type WebServer, type WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import * as modulesClient from '../src/client/index.ts'
 import { ClientModuleRegistry, bootInjections, orderByModuleGraph } from '../src/index.ts'
+import { apply as applyWebAdapter } from '../src/web.ts'
 import type { ClientModuleLoaderTarget, WebBootEntry, WebBootGraph } from '../src/client/index.ts'
 
 const MODULES_ID = '@deepseek-ai/dsh-client-modules'
@@ -92,6 +93,7 @@ function constructWithRoute(
   }
   ctx.provide('webServer', webServer as WebServer)
   const service = new ClientModuleRegistry(ctx)
+  applyWebAdapter(ctx)
   if (route === undefined) throw new Error('client bundle route was not registered')
   return { context: ctx, service, route }
 }
@@ -138,6 +140,28 @@ function injectedFacade(graph: WebBootGraph): { html: string; target: ClientModu
   if (window.__ModuleLoader__ === undefined) throw new Error('facade script did not install __ModuleLoader__')
   return { html, target: window.__ModuleLoader__ }
 }
+
+describe('ClientBootRegistry', () => {
+  it('collects current producers in order and removes a disposed contribution', async () => {
+    const packageName = '@fixture/boot-registry'
+    writeBuiltPackage(packageName, {})
+    const { context } = constructWithRoute([packageName])
+    const baseline = context.clientBoot.collect()
+    expect(baseline.length).toBeGreaterThan(0)
+    const contribution = { kind: 'global' as const, name: '__FIXTURE_BOOT__', value: { ready: true } }
+    const fiber = context.plugin({
+      inject: ['clientBoot'],
+      apply(ctx: Context) {
+        ctx.clientBoot.register(() => [contribution])
+      },
+    })
+    await fiber
+    expect(context.clientBoot.collect().at(-1)).toEqual(contribution)
+    await fiber.dispose()
+    expect(context.clientBoot.collect()).toEqual(baseline)
+    await context.fiber.dispose()
+  })
+})
 
 const bootGraph = (): WebBootGraph => ({
   rev: 'graph',

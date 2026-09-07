@@ -279,6 +279,8 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities when the adapter can prove them; endpoint listings commonly omit this. */
+  inputModalities?: readonly ModelModality[]
 }
 
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */
@@ -425,5 +427,5 @@ export interface GenerateOptions {
    * map the purpose to model-hidden transport metadata or purpose-specific
    * generation policy. Ordinary conversation requests leave it unset.
    */
-  purpose?: 'compaction' | 'session-title'
+  purpose?: 'compaction' | 'session-title' | 'image-recognition'
 }

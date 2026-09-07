@@ -2,7 +2,7 @@
 
 [English](llm-streaming.md) | 中文
 
-[`packages/llm`](../../packages/llm/README.zh.md) 提供对话与流式输出类型：每个请求和持久历史共用的 `Message`/`ContentBlock` 变体、完整组装的模型请求、原始 `StreamChunk` 协议、每个适配器必须实现的适配器约定（adapter contract），以及共享的 assembler。[核心包](core.zh.md)在每个轮次持有并记录这些值；本页声明它们。
+[`packages/llm`](../../packages/llm/README.zh.md) 提供对话与流式输出类型：每个请求和持久历史共用的 `Message`/`ContentBlock` 变体、完整组装的模型请求、原始 `StreamChunk` 协议、每个适配器必须实现的适配器约定（adapter contract）、图片识别 Service Definition，以及共享的 assembler。[核心包](core.zh.md)在每个轮次持有并记录这些值；本页声明它们。
 
 源码：[`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 
@@ -31,6 +31,8 @@ interface ContentBlockMap {
 各块接口（完整字段见源码）：`TextBlock`（`text`）、`ReasoningBlock`（thinking，区别于可见文本）、`ImageBlock`（一个持久的[图片附件](attachment.zh.md)）、`ToolCallBlock`（`id: ToolCallId`、`name`、原始 JSON `arguments`），以及 `ToolResultBlock`（`toolCallId`、嵌套 `content: ContentBlock[]`、`isError?`）。`ContentBlock = ContentBlockMap[ContentBlockType]`。仅当适配器、UI、压缩（compaction）和持久回放路径均支持某种新模态时，才将其纳入可合并扩展的 map。
 
 图片访问方式属于请求序列化，不属于持久附件或确定性请求图片版本。`resolveImageAttachmentAccess()` 把附件提供方可选的宿主对象路径，与消费方为当前工具执行文件系统提供的映射组合起来。结果只适用于本次请求，不参与 `variantId`。
+
+`ImageRecognition` 是供纯文本路由使用的可选提供方无关服务。Service Provider 解析一个显式图片目标，并分析一条来源消息的关联文本和有序持久附件。出货的 [`dsh-image-recognition-llm`](../../packages/llm/image-recognition-llm/README.zh.md) 提供方通过 `agent/request-context` 贡献每条成功报告，因此 loop 会在主请求前记录它。
 
 源码：[`packages/llm/llm/src/content.ts`](../../packages/llm/llm/src/content.ts)
 
@@ -597,7 +599,7 @@ interface GenerateOptions {
    * map the purpose to model-hidden transport metadata or purpose-specific
    * generation policy. Ordinary conversation requests leave it unset.
    */
-  purpose?: 'compaction' | 'session-title'
+  purpose?: 'compaction' | 'session-title' | 'image-recognition'
 }
 ```
 
@@ -683,6 +685,8 @@ interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities when the adapter can prove them; endpoint listings commonly omit this. */
+  inputModalities?: readonly ModelModality[]
 }
 ```
 
@@ -865,6 +869,31 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 ```
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
+
+<a id="ctximagerecognition--imagerecognition-abstract-seam"></a>
+
+### `ctx.imageRecognition` — `ImageRecognition` (abstract seam)
+
+Service Definition for auxiliary image recognition.
+
+```ts cordis-catalog
+/**
+ * Resolve and validate the configured image-recognition route.
+ * @param signal - operation cancellation.
+ * @returns a detached exact route, or `undefined` when recognition is not configured.
+ */
+abstract resolveTarget(signal?: AbortSignal): Promise<ImageRecognitionTarget | undefined>
+
+/**
+ * Analyze one source-message image batch.
+ * @param batch - associated source text and ordered durable image occurrences.
+ * @param signal - operation cancellation.
+ * @returns the plain report and exact visual route.
+ */
+abstract recognize(batch: ImageRecognitionBatch, signal?: AbortSignal): Promise<ImageRecognitionResult>
+```
+
+Source: [`packages/llm/llm/src/image-recognition.ts`](../../packages/llm/llm/src/image-recognition.ts)
 
 <a id="ctxllm--llmruntime"></a>
 

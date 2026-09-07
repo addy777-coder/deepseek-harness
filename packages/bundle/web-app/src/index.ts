@@ -20,6 +20,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { addHarnessSourceSection } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-client-connection/web'
 import * as FrontendStatic from '@deepseek-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
@@ -259,7 +260,7 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
   if (config.printUrl || handoffBrowser) {
-    ctx.inject(['connection'], (connectionCtx) => {
+    ctx.inject(['connection', 'webConnection'], (connectionCtx) => {
       // The URL line and browser handoff are readiness signals: supervisors RPC
       // as soon as they observe the line, while a browser requests the page as
       // soon as it opens. Neither may run while sibling rows such as the /api
@@ -268,13 +269,13 @@ export function apply(ctx: Context, config: Config): void {
       const announceReady = (): void => {
         if (ANNOUNCED_ROOTS.has(connectionCtx.root)) return
         const webUrl = localWebUrl(connectionCtx)
-        const authenticatedUrl = connectionCtx.connection.authenticatedUrl(webUrl)
+        const authenticatedUrl = connectionCtx.webConnection.authenticatedUrl(webUrl)
         // Reuse the exact LAN snapshot provided to the /api trust fence.
         const lanCandidate = runtime.lanAddresses[0]
         const port = connectionCtx.webServer.port
         const lanUrl = lanCandidate === undefined
           ? undefined
-          : connectionCtx.connection.authenticatedUrl(`http://${lanCandidate}:${String(port)}`)
+          : connectionCtx.webConnection.authenticatedUrl(`http://${lanCandidate}:${String(port)}`)
         ANNOUNCED_ROOTS.add(connectionCtx.root)
         if (config.printUrl) {
           console.log(`dsh web: ${authenticatedUrl}${lanUrl === undefined ? '' : ` (LAN: ${lanUrl})`}`)
@@ -299,7 +300,8 @@ export function apply(ctx: Context, config: Config): void {
           // mislead, and reading torn-down services would turn a clean shutdown
           // into a crash.
           if (connectionCtx.get('webServer') !== undefined
-            && connectionCtx.get('connection') !== undefined) announceReady()
+            && connectionCtx.get('connection') !== undefined
+            && connectionCtx.get('webConnection') !== undefined) announceReady()
         // Loader reports a failed boot; this row only stays quiet.
         }, () => {})
       }

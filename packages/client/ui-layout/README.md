@@ -1,5 +1,5 @@
 ---
-description: "Shell layout for the Web GUI: the three-column AppFrame with drag handles, concession behavior, the panel-geometry service, and theme presentation; for users and maintainers of the window chrome."
+description: "Shared GUI shell layout: the three-column AppFrame, optional Desktop title bar, focused-task mode, panel geometry, and theme presentation."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides the shell layout of the Web GUI: a three-column AppFrame with resizable sidebar and details panels, a concession chain that shrinks the details column and then auto-closes it when space runs out, and the `ctx.layout` panel-geometry service other plugins call to open or close the details column. It also seats the theme presenter, which projects the resolved color scheme, alias tokens, content font size, and `theme-color` metadata onto the document. Choose it for the standard window chrome; panel geometry is transient and resets on reload.
+This package provides the shared GUI shell: a three-column AppFrame with resizable sidebar and details panels, an optional carrier-provided title bar, focused-task mode that removes the navigation column, and the `ctx.layout` panel-geometry service other plugins call to open or close details. Its concession chain shrinks and then closes details when space runs out. It also seats the theme presenter, which projects the resolved color scheme, alias tokens, content font size, and `theme-color` metadata onto the document. Choose it for the standard Web or Desktop window chrome; panel geometry is transient and resets on reload.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This package provides the shell layout of the Web GUI: a three-column AppFrame w
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, and details columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, only details shrinks, then auto-closes. A closed sidebar retains a 56px control rail; details closes to zero width.
+Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, and details columns. A carrier may occupy `shell.titlebar` to add chrome above the columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, only details shrinks, then auto-closes. A closed sidebar retains a 56px control rail; a focused Desktop task window omits that rail and the sidebar content entirely; details closes to zero width.
 
 ### Theme presentation
 
@@ -39,7 +39,7 @@ The presenter consumes resolved theme snapshots and projects them onto the docum
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-One `register()` call contributes `AppFrame` into the runtime's built-in `'root'` slot and, in the same breath, declares the four child slots (`sidebar`, `conversation`, `details`, `shell.overlay`), seats the layout store (panel geometry), and wires the `ctx.layout` panel-action service. The transient layout store starts the sidebar at its default width and details closed, and never reads or writes `localStorage`. AppFrame always mounts the conversation and details columns; a connected Session renders through `SessionProvider`. It projects the selected Session title over the build-configured product title or the localized `common.brand.localBuild` fallback, so locale revisions update document metadata with the root entry. The theme presenter is a second effect: pure DOM writes from resolved snapshots — initial state through the getter once, then event-driven only, with no React path. It applies palette, font-size, and token variables before measuring the rendered background as the single color authority.
+One `register()` call contributes `AppFrame` into the runtime's built-in `'root'` slot and, in the same breath, declares five child slots (`sidebar`, `conversation`, `details`, `shell.overlay`, `shell.titlebar`), seats the layout store (panel geometry), and wires the `ctx.layout` panel-action service. The transient layout store starts the sidebar at its default width and details closed, and never reads or writes `localStorage`. AppFrame always mounts the conversation and details columns; a connected Session renders through `SessionProvider`. It projects the selected Session title over the build-configured product title or the localized `common.brand.localBuild` fallback, so locale revisions update document metadata with the root entry. The theme presenter is a second effect: pure DOM writes from resolved snapshots — initial state through the getter once, then event-driven only, with no React path. It applies palette, font-size, and token variables before measuring the rendered background as the single color authority.
 
 </details>
 
@@ -53,6 +53,7 @@ Read these pages when the layout surface is not enough. They move from the frame
 - [ui-sidebar](../ui-sidebar/README.md) — occupies the `sidebar` column and its seats.
 - [ui-conversation](../ui-conversation/README.md) — occupies the `conversation` and `details` columns.
 - [ui-theme](../ui-theme/README.md) — the theme seam whose resolved snapshots the presenter consumes.
+- [ui-desktop](../ui-desktop/README.md) — occupies the optional title bar and selects focused-task mode.
 - [Web client architecture](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) — how browser plugin rows load and register slots.
 
 -----

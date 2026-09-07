@@ -22,7 +22,7 @@ The assumption was justified in the source as the adapter's real capability rath
 
 **An entry's empty list means the same as an absent one; the route's is refused.** `[]` describes a model that accepts nothing and could serve no request, so it states no answer and resolution continues past it. That reading is not cosmetic: the config schema materializes `[]` for an absent array, so treating it as "accepts nothing" would silently strip images from every catalog vision model a `models` list happens to name. The route value has nothing below it to answer instead, so its empty list is refused where it is written. The route's `models` list already resolves absent-and-empty the same way for the same reason.
 
-**No configuration surface edits `input`.** It joins `compat`, `reasoningEfforts`, `thinkingBudgets`, and `headers` as a settings-document field, and the model-list editor stays a hand-written form over id, name, and the two capacities. This costs nothing durable because that card was already built to carry fields it does not edit: its row patch spreads the stored row before applying changes, and adoption keeps an existing row over a rediscovered candidate, so a hand-written `input` survives both.
+**The Models configuration surface edits `input` explicitly.** The [text-model image-recognition decision](../feature/2026-09-04-text-model-image-recognition.md) supersedes this note's earlier presentation choice while preserving the modality precedence above. The model-list editor writes `[text]` or `[text, image]`, keeps fields it does not edit, and defaults endpoint-discovered models to text because their listings disclose no modality.
 
 The direct DeepSeek adapter owns a separate exact-model catalog. Its supported vision entry declares image input, while its text models and unlisted pass-through ids remain text-only.
 
@@ -38,7 +38,7 @@ The direct DeepSeek adapter owns a separate exact-model catalog. Its supported v
 
 ## Consequences
 
-A vision model on a custom provider costs one line, `input: [text, image]`, written in the settings document — or one line at the route when every model it lists takes images. That is the whole of the fix: the three admission points then admit images on it and `read_image` works. A deployment that writes nothing keeps exactly the behavior it had, so no existing route changes what it reports.
+A vision model on a custom provider declares `input: [text, image]` through the Models page or settings document — or once at the route when every undescribed model it lists takes images. Direct image admission and `read_image` then use that capability, while a configured image-recognition route may handle images for an explicitly text-only conversation model. A deployment that writes nothing keeps the text fallback and makes no image-capability claim on its behalf.
 
 The image-admission gate keeps its meaning everywhere, because every modality it reads is now either recorded by the installed catalog or written by a person. Nothing claims a capability on a deployment's behalf.
 
@@ -50,4 +50,4 @@ A model that declares image input its endpoint does not serve is not caught loca
 
 `config.spec.ts` holds the schema boundary: an unknown modality refused at both levels, the empty route list accepted by the schema and refused by the namespace validator that the settings seam actually runs, and the `[]` materialization for an absent array that the inheritance rule depends on.
 
-No keyless snapshot lane exercises a pi-ai route: the recorded-session corpus drives `dsh-llm-replay`, which declares modalities directly in its configuration, and a pi-ai route needs a live endpoint whose port a static `cordis.yml` cannot name. The admission points this change feeds are covered by [`read-image`](../../../../snapshots/session/read-image/) and [`read-image-text-route`](../../../../snapshots/session/read-image-text-route/) and are unaffected — what changed is what one adapter reports, not how a gate reads it.
+The Models UI tests pin explicit text/image writes, preservation of unrelated model fields, and the visual tag. Pi-ai discovery tests pin that installed catalog entries retain their known modalities while generic endpoint listings remain unknown. The admission points remain covered by [`read-image`](../../../../snapshots/session/read-image/) and [`read-image-text-route`](../../../../snapshots/session/read-image-text-route/); the image-recognition feature owns its separate text-route integration coverage.

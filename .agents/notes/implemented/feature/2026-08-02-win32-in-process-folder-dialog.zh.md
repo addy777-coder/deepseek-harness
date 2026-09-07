@@ -12,6 +12,8 @@ Windows 目录选择器的主层此前是围绕 WinForms `FolderBrowserDialog` s
 
 `packages/host/directory-picker-native` 现在经 koffi——它已是仓库其他 `win32.ts` 代码的工作区依赖——在进程内打开 `IFileOpenDialog`（`FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR`），作为 win32 主层。COM 会话运行在 spawn 出的子进程中，模态 `Show` 永不阻塞宿主事件循环；子进程在阻塞前上报其原生线程 id，驱动层通过向该线程的窗口反复投递 `WM_CLOSE`（`EnumThreadWindows`）来处理中止请求，关闭等待预算耗尽后强制终止子进程。对话框是子进程的第一个窗口，Windows 会自动激活它，无需手动前台调用。子进程线程启用宿主接受的最佳线程 DPI 感知（`SetThreadDpiAwarenessContext`，按 per-monitor-v2 → per-monitor → system-aware 级联并检查返回值），严格优于脚本的系统 DPI 上限；DPI 保持为纯外观的 best-effort——不接受其中任何一种的宿主仍得到现代对话框，而不会降级。模块切分让覆盖率在任何主机上都诚实：`win32-dialog-logic.ts`（纯时序）与 `win32-dialog.ts`（driver）可在任何平台使用 fake 进行测试；`win32-dialog-bindings.ts` 对 mock 的 `koffi` COM 世界测试（`dsh-session-persistence-jsonl` 的技法）；POSIX 主机运行真实的 spawn 管道，并验证其因 koffi 加载失败而拒绝；win32 主机运行真实的打开对话框并通过中止将其关闭的冒烟测试。先于本层存在的 PowerShell 链已被删除（见[链删除](../simplification/2026-08-04-drop-windows-powershell-picker-fallback.zh.md)）：该层无回退。
 
+结果解码器使用 `koffi.decode.string16()`，在 `CoTaskMemFree` 前复制 `IShellItem::GetDisplayName` 分配的 NUL 终止字符串。Electron 不支持外部 ArrayBuffer 视图，调用它可能使其 Node helper 以退出码 134 终止。复制式解码器也避免按固定大小扫描时越过分配范围，并保留 UTF-16 码元，包括代理对。
+
 ## 考虑过的替代方案
 
 - **预编译原生辅助程序（`native/` 家族，如 `@deepseek-ai/node-addon-landlock-run`）。** 否决：再增加一个 npm 包家族、MSVC 环境配置和 Windows 构建／发布通道——只为交付约 150 行仓库目前无法通过 CI 检验的 C 代码（现有 CI 没有真 Windows 通道）；koffi 以零新增供应链提供同一 COM 接口。
@@ -22,6 +24,6 @@ Windows 目录选择器的主层此前是围绕 WinForms `FolderBrowserDialog` s
 ## 后果
 
 - 每台 Windows 机器都得到带其所支持的最佳 DPI 感知（1703+ 为 per-monitor-v2）的现代对话框，无论是否安装 PowerShell。
-- 真实对话框的渲染与完成选择的流程仍需在 Windows 上手动检查（自动关闭冒烟测试证明打开／中止／收尾）。
+- 对话框外观仍需在 Windows 上手动检查。源码冒烟测试证明打开／中止／收尾，[Desktop 原生选择器 helper](../../../../apps/desktop/tests/native-directory-picker.ts) 则通过真实构建 worker 选择临时 Unicode 目录，并取消第二个对话框。
 - 所用 COM vtable 槽位与 GUID 是冻结的 Windows ABI（Vista 起）；koffi 签名错误可能引发原生访问冲突，但被限制在对话框子进程内——宿主 Node 进程存活，失败原样上报（无回退层；见[链删除](../simplification/2026-08-04-drop-windows-powershell-picker-fallback.zh.md)）。mocked-koffi 的 ABI 固定测试与真实 win32 冒烟测试正是为了在交付前捕获这类错误。
-- 打包二进制路径——打包后的可执行文件以对话框入口形式自我 spawn——不受任何自动化测试覆盖。源码侧与普通 Node 下构建出的 `lib/worker.cjs` 已被覆盖；打包后的自我 spawn 仍是一项明确的覆盖缺口。
+- Desktop Electron 场景使用所选 Electron 或打包后的可执行文件及其已安装 worker 运行原生选择器 helper，断言返回路径与正常进程退出。

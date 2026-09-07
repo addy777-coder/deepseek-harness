@@ -12,7 +12,7 @@ import {
   ModelsSection, needsSetup, providerCopy, providerTargetLabel, removeProviderProfile,
 } from '../src/client/ModelsSection.tsx'
 import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/ModelsSection.tsx'
-import { pathOps } from '../src/client/ProviderEditor.tsx'
+import { pathOps, ProviderEditor } from '../src/client/ProviderEditor.tsx'
 import {
   DeepSeekModelsEditor, formatCapacity, modelDrafts, parseCapacity, validateDeepSeekModels,
 } from '../src/client/DeepSeekModelsEditor.tsx'
@@ -603,11 +603,73 @@ describe('ModelsSection', () => {
         path: ['models'],
         value: [
           ...DEFAULT_DEEPSEEK_MODELS,
-          { id: 'private-preview', name: 'Private Preview', contextWindow: 131_072 },
+          {
+            id: 'private-preview',
+            name: 'Private Preview',
+            contextWindow: 131_072,
+            inputModalities: ['text'],
+          },
         ],
       }],
       0,
     ])
+  })
+
+  it('marks a direct DeepSeek model as visual and writes inputModalities', async () => {
+    const { mutate } = await mountDeepSeekCard({
+      mutate: vi.fn(() => Promise.resolve(remoteOk(wireNamespaces()[0]))),
+    })
+    fireEvent.click(screen.getByText(en.customized))
+    fireEvent.click(screen.getByText(en.addModel))
+    const ids = screen.getAllByLabelText(new RegExp(en.modelId))
+    fireEvent.change(ids[2] as HTMLInputElement, { target: { value: 'private-vision' } })
+    expandRow(3)
+
+    fireEvent.click(screen.getByLabelText(en.modelImageInput))
+    expect(screen.getByText(en.visionTag)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    const call: unknown = mutate.mock.calls.at(0)
+    const callItems = Array.isArray(call) ? call as unknown[] : []
+    const ops: unknown = callItems[1]
+    const models = Array.isArray(ops) ? (ops[0] as { value?: unknown } | undefined)?.value : undefined
+    expect(models).toEqual([
+      ...DEFAULT_DEEPSEEK_MODELS,
+      { id: 'private-vision', inputModalities: ['text', 'image'] },
+    ])
+  })
+
+  it('refuses to remove image capability from the saved recognition model', () => {
+    const scripted = scriptedFace()
+    const original = wireNamespaces()[0]!
+    const models = DEFAULT_DEEPSEEK_MODELS.map((model, index) => index === 0
+      ? { ...model, inputModalities: ['text', 'image'] }
+      : model)
+    const namespace: SettingsNamespaceView = {
+      ...original,
+      value: { ...(original.value as object), models },
+      base: { ...(original.base as object), models },
+    }
+    render(<ProviderEditor
+      provider="deepseek-official"
+      displayName="DeepSeek"
+      namespace={namespace}
+      schema={settingsSchema}
+      settingsPath={[]}
+      operations={operationsWith(scripted.face)}
+      t={t}
+      readOnly={false}
+      protectedImageRecognition={{ provider: 'deepseek-official', model: 'deepseek-v4-flash' }}
+      onClose={() => {}}
+    />)
+    fireEvent.click(screen.getByText(en.customized))
+    expandRow(1)
+    fireEvent.click(screen.getByLabelText(en.modelImageInput))
+
+    expect(screen.getByText(en.recognitionProtected)).toBeTruthy()
+    expect(screen.getByText<HTMLButtonElement>(en.apply).disabled).toBe(true)
+    expect(scripted.mutate).not.toHaveBeenCalled()
   })
 
   it('rejects duplicate DeepSeek model ids before writing', async () => {

@@ -171,27 +171,19 @@ export interface HostConnectionHandle {
   createSharedFetchHandler(channel: '/api'): ConnectionFetchHandler
 
   /**
-   * Apply Connection's Host/Origin checks and browser authentication to
-   * another Web route.
-   * @param request - request headers from the HTTP or upgrade request.
-   * @returns rejection status, or undefined when the route may accept the request.
+   * Compose one registered logical channel as a Fetch handler.
+   * @param channel - absolute channel registered through {@link HostConnectionRpc.handle}.
+   * @returns Fetch handler that dispatches the channel or returns 404.
    */
-  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection
+  createFetchHandler(channel: string): ConnectionFetchHandler
 
   /**
-   * Authenticate one frontend index request, owning a token redirect or 401.
-   * @param request - root or configured-index HTTP request.
-   * @param response - response owned when the result is false.
-   * @returns true only when the frontend may serve index.html.
+   * Observe logical channel registration for a physical carrier adapter.
+   * @param listener - receives the channel and whether it became active.
+   * @returns unsubscriber.
    */
-  authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean
+  observeRpcChannels(listener: (channel: string, active: boolean) => void): () => void
 
-  /**
-   * Add the fresh process token to an ordinary Web application URL.
-   * @param baseUrl - clean canonical browser origin.
-   * @returns root URL accepted by {@link authorizeIndex} for initial login.
-   */
-  authenticatedUrl(baseUrl: string): string
 }
 
 /** Transport-independent Fetch handler used by HTTP and worker carriers. */

@@ -83,6 +83,7 @@ kind: "package-reference"
 
 - **按约定限同世界。** `ctx.sandbox` 在宿主路径文件策略下包装 argv；容器、microVM 与远程执行会替换周边能力 seam。
 - **策略随调用传递。** `SandboxPolicy` 逐调用携带，绝不在提供方上固定：两个消费方可以同时按不同策略隔离，获批的升权重试只是用更宽策略发起的新调用。默认与解析是消费方显式步骤。
+- **Runner 设置仅供 runner 使用。** `ConfinedArgv.env` 携带启动所选 runner 所需的环境变量增量。消费方在调用方条目之后合并它们，runner 则在启动被包装命令前将其删除。
 - **故障关闭。** `confine()` 返回受强制的 argv，或抛出 `SandboxUnavailableError`；绝不允许静默无限制放行，功能探测用于仲裁多 runner 链。
 - **统一的拒绝与升权词汇。** 标记与提示文本以及严格更宽阶梯都放在这里，使 bash 与 fs 家族不会漂移。
 

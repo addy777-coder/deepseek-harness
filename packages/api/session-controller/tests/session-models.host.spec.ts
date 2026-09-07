@@ -692,6 +692,11 @@ describe('Web session model selection', () => {
       error: { code: 'session/attachment-invalid', details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } },
     })
 
+    ctx.provide('imageRecognition', {
+      resolveTarget: () => Promise.resolve({ provider: 'image-capable', model: 'vision' }),
+    } as never)
+    expectValue(await remote.prompt(promptRequest({ sessionId, mode: 'queue', content: [image] })))
+
     expectValue(await remote.selectModel(request({
       sessionId, provider: 'image-capable', model: 'vision',
     })))
@@ -712,7 +717,7 @@ describe('Web session model selection', () => {
     }))).toMatchObject({ ok: false, error: { code: 'gateway/internal', message: 'fixture rejected' } })
     saveMode = 'success'
     expectValue(await remote.prompt(promptRequest({ sessionId, mode: 'queue', content: [image] })))
-    expect(followup).toHaveBeenCalledOnce()
+    expect(followup).toHaveBeenCalledTimes(2)
 
     ;(agent.inbox.nextTurn as UserMessage[]).push({
       id: 'pending-image', role: 'user', source: { kind: 'user' },

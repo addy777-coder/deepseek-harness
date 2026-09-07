@@ -168,7 +168,7 @@ interface AgentOptions {
 }
 ```
 
-Dispatch requires `provider` and `model` after `agent/request`. An explicit `reasoningEffort` seeds the first request on that route; exact-model resolution validates it, while omission allows the adapter default to materialize. When present, `maxTokens` must be a positive safe integer and caps every conversation-model request; omission allows the exact-model adapter default to materialize before the request header, or otherwise leaves provider behavior unchanged. An agent-scoped `deployment:persona` prompt section may shadow the global default persona.
+Dispatch requires `provider` and `model` after `agent/request`. An explicit `reasoningEffort` seeds the first request on that route; exact-model resolution validates it, while omission allows the adapter default to materialize. When present, `maxTokens` must be a positive safe integer and caps every conversation-model request; omission allows the exact-model adapter default to materialize before the request header, or otherwise leaves provider behavior unchanged. After preparation, `agent/request-context` can return model-dependent user-role context; the loop appends it durably before deriving the request. An agent-scoped `deployment:persona` prompt section may shadow the global default persona.
 
 The inbox is the delivery vocabulary — two ordered pending-message lists the agent owns as a durable projection:
 
@@ -988,6 +988,36 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 ```
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agentrequest-context--waterfall"></a>
+
+#### `agent/request-context` — waterfall
+
+Add model-visible context after the exact route is prepared and the step's claimed input is durable, but before the request header and final message list are derived. The loop appends every returned message as a `user/message`, so listeners must return identified, immutable context rather than rewriting `messages` in place.
+
+```ts cordis-catalog
+/**
+ * Add model-visible context after the exact route is prepared and the
+ * step's claimed input is durable, but before the request header and final
+ * message list are derived. The loop appends every returned message as a
+ * `user/message`, so listeners must return identified, immutable context
+ * rather than rewriting `messages` in place.
+ * @param payload.agent - the agent preparing the request.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the open step number.
+ * @param payload.config - exact prepared call configuration.
+ * @param payload.inputModalities - exact model input modalities, when the adapter declares them.
+ * @param payload.messages - current durable model history before contributed context.
+ * @param payload.signal - the current turn's explicit abort signal.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/request-context'( this: Scoped<Agent>, payload: { agent: Agent turn: number step: number config: LlmCallConfig inputModalities?: readonly ModelModality[] messages: readonly Message[] signal: AbortSignal }, next: () => Promise<UserMessage[]>, ): Promise<UserMessage[]>
+```
+
+Types: [LlmCallConfig](llm-streaming.md) · [Message](llm-streaming.md) · [ModelModality](llm-streaming.md) · [Scoped](scope.md) · [UserMessage](session.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

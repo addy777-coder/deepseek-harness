@@ -1,5 +1,5 @@
 ---
-description: "Web GUI 的浏览器-Host 线层：Remote RPC、带重连的事件流投递、精确 Fetch 路由、/api HTTP 桥与浏览器信任栅栏。"
+description: "面向 Remote RPC、事件流恢复与精确 Fetch 路由的载体无关 GUI Connection，以及 Web profile 使用的认证 HTTP 适配器。"
 kind: "package-reference"
 ---
 
@@ -9,12 +9,12 @@ kind: "package-reference"
 
 ## 概述
 
-本包承载浏览器到 Host 的 Remote 调用、精确 Fetch 响应与 connection generation。Client 插件挂载 `ctx.connection`，其中包含当前页面的 loopback 状态、通用 RPC carrier、当前 generation 及其 Host 信息、可观察的恢复状态、立即重连命令，以及单一 generation source 的注册点。source 报告 ready 后 generation 才可见；source 结束、失败、被撤回或显式 stop 都会清空它，再由 `ConnectionController` 执行重试策略。
+本包承载 GUI 到 Host 的 Remote 调用、精确 Fetch 响应与 connection generation，但不选择 HTTP 或 Electron IPC。Host 插件拥有 RPC、Fetch route 与逻辑 channel registry，物理载体会适配这些 handler。Client 插件挂载 `ctx.connection`，其中包含通用 RPC carrier、当前 generation 信息、可观察恢复状态、立即重连命令，以及单一 generation source 注册点。`./web` 适配器添加浏览器 cookie、Host/Origin 检查与 HTTP route，而不把这些关注点放入共享核心。
 
 ## 目录
 
 - [使用本包](#use-this-package)
-- [浏览器认证与请求信任](#browser-authentication-and-request-trust)
+- [Web 认证与请求信任](#browser-authentication-and-request-trust)
 - [Connection generation](#connection-generation)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
@@ -25,14 +25,14 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-浏览器通过 HTTP POST 执行 Remote 一元调用；API Gateway 自己拥有 `/api/remote.mux` WebSocket 及其逻辑流。进程内组合通过 `connection.rpc.open` 提供等价的 Remote 流，不打开 WebSocket。Host half 拥有唯一 `/api` route、Fetch bridge、浏览器认证、Host/Origin 校验与精确 `GET`/`HEAD` 路由注册表。Typert Gateway 认领生成的 Remote endpoint，功能包注册 Session 日志下载等非 JSON 响应，未认领的请求返回 404。Loopback hostname 判定只供浏览器侧当前页面状态使用，留在包内。
+Client 通过 `ctx.connection.rpc` 调用逻辑 channel。Web 页面使用 HTTP POST 与 API Gateway 的 `/api/remote.mux` WebSocket；DSH Desktop 通过 MessagePort 提供 Fetch 与 stream hook，并在页面保持 `file://` 时使用虚拟 `http://dsh.internal` origin。Host 核心组合共享 `/api` RPC 分发、Session 日志下载等精确 `GET`/`HEAD` route 与普通逻辑 channel。载体选择如何暴露这些 handler；未认领请求返回 404。
 
 -----
 
 <a id="browser-authentication-and-request-trust"></a>
-## 浏览器认证与请求信任
+## Web 认证与请求信任
 
-每个 Host RPC 方法和 WebSocket stream 都要求同一个浏览器会话，不存在按方法区分的 loopback 层。每个进程生成一个随机启动令牌。`dsh-web-app` 打印并打开带 `?token=...` 的普通根 URL；`frontend-static` 把根路径和 index 请求交给 `ctx.connection.authorizeIndex`，后者只在 `GET /` 接受该令牌，写入绑定 authority 的签名 cookie，再重定向到干净的 `/`。缺失、过期、畸形或 authority 不匹配的 cookie 会在 RPC 分发前得到 401。静态资源保持公开。HTTP 载体不在根路径交换之外接受 query token，也不接受 Authorization header token。
+每个 Web RPC 方法和 WebSocket stream 都要求同一个浏览器会话，不存在按方法区分的 loopback 层。每次 Web 适配器激活都会生成随机启动令牌。`dsh-web-app` 打印并打开带 `?token=...` 的普通根 URL；`frontend-static` 把根路径和 index 请求交给 `ctx.webConnection.authorizeIndex`，后者只在 `GET /` 接受该令牌，写入绑定 authority 的签名 cookie，再重定向到干净的 `/`。缺失、过期、畸形或 authority 不匹配的 cookie 会在 RPC 分发前得到 401。静态资源保持公开。HTTP 载体不在根路径交换之外接受 query token，也不接受 Authorization header token。Desktop 不挂载本适配器，也不使用 cookie。
 
 cookie 签名密钥是 `ctx.credentials` 中由 `client-connection/browser-session` 拥有的 grant 记录。本地提供方把它持久化到 `$DSH_HOME/.credentials.yaml`；`BrowserAuth` 在 Connection 激活期间加载或创建该记录，并把密钥留在内存中，因此请求认证同步执行。删除或替换该记录会在下一次 Connection 激活时生效。cookie 携带绝对签发与过期区间，`cookieMaxAgeDays` 默认设为 30 天，并在确定性名称与签名 payload 中同时绑定规范化 hostname 和 port。它是 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；随附服务器使用 loopback HTTP，因此刻意不设置 `Secure`。
 
@@ -58,7 +58,7 @@ API Gateway Client 把内部 `$events` logical stream 注册为唯一 generation
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **`/api` 桥把每个请求体整体缓冲在内存里**：`maxRequestBodyBytes`（默认 300 MiB，按默认 200 MiB 图片总量上限经 base64 膨胀加信封余量得出）因此同时是单请求的驻留内存上界；要降低它而不缩小图片限额，需要流式请求体路径。
+- **Web `/api` 桥把每个请求体整体缓冲在内存里**：`maxRequestBodyBytes`（默认 300 MiB，按默认 200 MiB 图片总量上限经 base64 膨胀加信封余量得出）因此同时是单请求的驻留内存上界；其他载体拥有自己的 body 上限。
 - **浏览器 cookie 不带 `Secure`**：随附载体是 loopback HTTP；若部署经明文网络暴露同一 authority，bearer cookie 可能在传输中泄露。
 - **没有 logout 操作**：清除浏览器 cookie 会结束单个浏览器会话；删除 owner 凭据记录并重启 `dsh` 会撤销全部会话。
 
@@ -73,4 +73,4 @@ API Gateway Client 把内部 `$events` logical stream 注册为唯一 generation
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。授权请求会异步读取 credential 权威记录，commit-event 生命周期由 credentials 伴生入口负责；流、重连、rpcId 与路由释放关系由行为测试及 webserver 不变式覆盖。
+**运行时不变式：** 不发布伴生入口。registry 只有一个 owner，贡献按 effect 限定；浏览器会话验证会在 Web 适配器激活时读取 credential，record commit-event 生命周期由 credentials 伴生入口负责。stream、重连与 rpcId 往返纪律由行为测试覆盖，Web route 注册／释放对称性由 webserver 伴生入口审计。

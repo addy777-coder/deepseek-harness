@@ -551,7 +551,7 @@ describe('continuable image Queue prompts', () => {
   }
 
   it('refuses an image follow-up when the child model declines image input, leaving no partial message', async () => {
-    const { ctx, parent } = await setup([textResponse('child work')])
+    const { ctx, parent } = await setup([textResponse('child work'), textResponse('fallback work')])
     const started = await ctx.subagents.startContinuable(startSpec(parent))
     await waitNoActivation(ctx, started.childId)
     const resolve = vi.spyOn(ctx.llm, 'resolveModelInfo')
@@ -566,6 +566,17 @@ describe('continuable image Queue prompts', () => {
     expect(resolve).toHaveBeenCalledWith('mock', 'mock', testSignal)
     const loaded = await loadStoredSession(ctx.sessionPersistence, started.childId)
     expect(hasUserText(loaded.events, 'see this')).toBe(false)
+
+    ctx.provide('imageRecognition', {
+      resolveTarget: () => Promise.resolve({ provider: 'mock', model: 'vision' }),
+    } as never)
+    await expect(queuePrompt(ctx, parent, started.childId, [
+      { type: 'text' as const, text: 'recognized follow-up' },
+      imageBlock,
+    ])).resolves.toBeDefined()
+    await waitNoActivation(ctx, started.childId)
+    const accepted = await loadStoredSession(ctx.sessionPersistence, started.childId)
+    expect(hasUserText(accepted.events, 'recognized follow-up')).toBe(true)
     await drainManager(ctx)
   })
 

@@ -23,71 +23,28 @@ import {
   writeProfileManifest,
   type ProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
+import { reconcileProfileBundles } from '@deepseek-ai/dsh-app-boot/profile-plugins'
 import { INSTALL_ANCHOR } from './profile-boot.ts'
 
 const NAME = 'dsh'
 
-/**
- * Whether a resolved dependency exports a profile patch, i.e. is a bundle.
- * @param packageName - the dependency's package name.
- * @param profileDir - the profile directory (resolution anchor).
- * @returns true when the package manifest declares `dsh.bundle`.
- */
 function exportsPatch(packageName: string, profileDir: string): boolean {
-  let dir: string
+  let directory: string
   try {
-    dir = resolveBundleDir(NAME, packageName, INSTALL_ANCHOR, profileDir)
+    directory = resolveBundleDir(NAME, packageName, INSTALL_ANCHOR, profileDir)
   } catch {
-    return false // pnpm reported success yet the package is unresolvable — treat as plain
+    return false
   }
-  const manifest = readProfileManifest(NAME, dir)
-  return manifest.dsh?.bundle?.patch !== undefined
+  return readProfileManifest(NAME, directory).dsh?.bundle?.patch !== undefined
 }
 
-/**
- * Reconcile `dsh.profile.bundles` against the installed state: pnpm has
- * already written the real installed names (so a git/path/tarball/alias spec
- * on the command line reconciles by its true package name) and materialized
- * the packages. A dependency that resolves to a `dsh.bundle`-declaring
- * package joins the layer stack (appended in dependency order); a
- * dependency-listed name that no longer does — removed, or the installed
- * version dropped the declaration — leaves it. In-box bundles from the
- * profile template are not dependencies and are never touched. Warns once
- * per newly-added bundle-less dependency (a plain library is fine; the
- * warning is orientation).
- */
-function reconcilePlugins(before: ProfileManifest, profileDir: string): void {
+function reconcilePlugins(before: ProfileManifest, profileDir: string) {
   const after = readProfileManifest(NAME, profileDir)
-  const beforeDeps = new Set(Object.keys(before.dependencies ?? {}))
-  const dependencies = Object.keys(after.dependencies ?? {})
-  const plugins = after.dsh?.profile?.bundles ?? []
-  let changed = false
-  for (const packageName of dependencies) {
-    const isBundle = exportsPatch(packageName, profileDir)
-    if (isBundle && !plugins.includes(packageName)) {
-      plugins.push(packageName)
-      changed = true
-    } else if (!isBundle && !beforeDeps.has(packageName)) {
-      process.stderr.write(
-        `${NAME}: warning: ${packageName} declares no dsh.bundle — installed as a plain dependency, not a profile layer `
-        + '(a later update that gains one activates it automatically)\n',
-      )
-    }
-  }
-  const dependencySet = new Set(dependencies)
-  for (const packageName of [...plugins]) {
-    // Only dependency-managed entries are subject to removal; template
-    // bundles (dsh-base and friends) are not dependencies.
-    const wasDependency = beforeDeps.has(packageName) || dependencySet.has(packageName)
-    const stillBundle = dependencySet.has(packageName) && exportsPatch(packageName, profileDir)
-    if (wasDependency && !stillBundle) {
-      plugins.splice(plugins.indexOf(packageName), 1)
-      changed = true
-    }
-  }
-  if (!changed) return
-  after.dsh = { ...after.dsh, profile: { ...after.dsh?.profile, bundles: plugins } }
-  writeProfileManifest(profileDir, after)
+  const bundleDependencies = new Set(Object.keys(after.dependencies ?? {})
+    .filter(packageName => exportsPatch(packageName, profileDir)))
+  const reconciliation = reconcileProfileBundles(before, after, bundleDependencies)
+  if (reconciliation.changed) writeProfileManifest(profileDir, reconciliation.manifest)
+  return reconciliation
 }
 
 /**
@@ -146,7 +103,13 @@ export function runPlugin(profile: string, args: readonly string[]): number {
   }
   const exitCode = result.status ?? 1
   if (exitCode === 0) {
-    reconcilePlugins(before, dir)
+    const reconciliation = reconcilePlugins(before, dir)
+    for (const packageName of reconciliation.addedPlainDependencies) {
+      process.stderr.write(
+        `${NAME}: warning: ${packageName} declares no dsh.bundle — installed as a plain dependency, not a profile layer `
+        + '(a later update that gains one activates it automatically)\n',
+      )
+    }
   } else {
     // pnpm's own diagnostics name pnpm-workspace.yaml without saying WHICH
     // one; the profile owns it, and the commonest failure here is pnpm ≥10

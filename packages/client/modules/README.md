@@ -1,5 +1,5 @@
 ---
-description: "Client module system for the web GUI: the host composes the boot graph and serves plugin bundles, and the browser loads them lazily, for users and maintainers composing or debugging client plugins."
+description: "Transport-neutral Client module system for the shared GUI: the Host composes boot data and immutable bundle artifacts for Web or Desktop carriers to deliver."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-modules` turns a plugin package's `dsh.client` declaration into a loadable browser bundle: the host half scans enabled Loader entries, composes the boot graph, and serves each bundle over `/plugins`, and the browser half loads those bundles lazily on demand. Plugin bundles execute lazily — running a bundle only registers a factory, and module side effects run at materialization — so nothing runs until a plugin is first used. Everything here is browser-kernel machinery; the model never sees it.
+`dsh-client-modules` turns a plugin package's `dsh.client` declaration into a loadable GUI bundle. The Host half scans enabled Loader entries, composes the boot graph, snapshots immutable artifacts, and contributes them through `ClientBootRegistry` and `ClientModuleRegistry`; Web and Desktop carriers choose how to deliver those values. The browser-compatible Client half loads bundles lazily on demand. Running a bundle only registers a factory, and module side effects run at materialization, so nothing runs until a plugin is first used.
 
 ## Table of Contents
 
@@ -25,11 +25,11 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use it when you compose or build a browser client plugin: the package turns a package's `dsh.client` declaration into a loadable browser bundle with no per-plugin wiring. It activates with the web composition; the shell boots it before any plugin runs.
+Use it when you compose or build a GUI Client plugin: the package turns `dsh.client` metadata into a loadable browser-compatible bundle with no per-plugin carrier wiring. It activates in the shared GUI composition; the selected shell obtains the same boot table before any plugin runs.
 
 ### Declaring a client plugin
 
-A browser plugin package declares `dsh.client` in its `package.json` with `platform: 'web'`, exports a `./client` bundle, and lists any non-baseline module requests under `dsh.client.external`. The host half turns each declaration into a served bundle under `/plugins`, ordered so dynamic providers load before their consumers.
+A GUI plugin package declares `dsh.client` in its `package.json` with `platform: 'web'`, exports a `./client` bundle, and lists any non-baseline module requests under `dsh.client.external`. The Host turns each declaration into an artifact addressed by a `/plugins` URL, ordered so dynamic providers load before their consumers. The Web adapter registers those URLs as HTTP routes; Desktop requests the same bytes through IPC.
 
 ### What the browser loads
 
@@ -41,7 +41,7 @@ The shell seeds a frozen module table (`PLATFORM_MODULES`: React, Cordis, and st
 
 ### Build requirements
 
-The host serves built client bundles, so `pnpm run build` must have produced each `lib/client.js` before launch; a missing bundle fails activation loudly with one build instruction and a package/path list. Source launch maps host imports to TypeScript source but still consumes the built client export. The package accepts no plugin config of its own.
+The Host snapshots built client bundles, so `pnpm run build` must have produced each `lib/client.js` before launch; a missing bundle fails activation loudly with one build instruction and a package/path list. Source launch maps Host imports to TypeScript source but still consumes the built Client export. The package accepts no plugin config of its own.
 
 -----
 
@@ -55,7 +55,7 @@ This section explains how the module system is built; observable behavior is cov
 
 ### Design concept
 
-The package is dual-face: the node half is the composition and serving side (`ctx.clientModules`, `ClientModuleRegistry`), the browser half is the loading side (`ctx.modules`, `ClientModuleSystem`). The wire between them is the boot graph — `WebBootEntry` rows injected as `window.__DSH_BOOT__`, with `<` escaped so plugin-controlled strings cannot break out of the script element. The vendored Loader's only consumption point is `EntryTree.import`, so the module system is the single replacement for "how plugin code arrives".
+The package is dual-face: the Node half owns composition and artifacts (`ctx.clientBoot`, `ctx.clientModules`), while the browser-compatible half owns loading (`ctx.modules`, `ClientModuleSystem`). The Web carrier renders boot injections into HTML and escapes `<` in its graph script; Desktop carries the same injection table in a boot frame. The vendored Loader's only consumption point is `EntryTree.import`, so the module system remains the single replacement for how Client plugin code arrives.
 
 ### Lazy-CJS model
 
@@ -69,13 +69,14 @@ The node half snapshots each client bundle and available source map before publi
 
 ### Boot manifest injection
 
-The host taps the index render and injects, into `<head>`: the `window.__ModuleLoader__` queue facade, advisory preloads for every application combo, the parser-blocking bootstrap combo scripts, then the boot graph before the shell reads it. The facade's `create()` materializes the modules bundle, delegates construction to its `createClientModuleSystem` export, and leaves the same facade in live-registration mode.
+`ClientBootRegistry` contributes the ordered queue facade, advisory application preloads, parser-blocking bootstrap bundles, and boot graph. The Web adapter renders those rows into the index HTML before the shell reads them; Desktop returns the same table in its boot response and loads each bundle through IPC. The facade's `create()` materializes the modules bundle, delegates construction to its `createClientModuleSystem` export, and leaves the same facade in live-registration mode.
 
 ### Source map
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Node half: `ClientModuleRegistry`, scan, artifact snapshots, combo routes, index tap |
+| [`src/index.ts`](src/index.ts) | Node half: `ClientBootRegistry`, `ClientModuleRegistry`, scan, artifact snapshots, combo lookup |
+| [`src/web.ts`](src/web.ts) | Web adapter: `/plugins` route and index-injection registration |
 | [`src/client/index.ts`](src/client/index.ts) | Browser half: bootstrap export, `ctx.modules` enrollment |
 | [`src/client/system.ts`](src/client/system.ts) | `ClientModuleSystem`: load/materialize/invalidate machinery |
 | [`src/client/manifest.ts`](src/client/manifest.ts) | Wire types and boot-manifest parsing |

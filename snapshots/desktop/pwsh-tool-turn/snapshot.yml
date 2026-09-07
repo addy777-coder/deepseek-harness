@@ -1,0 +1,11 @@
+version: 1
+scenario: pwsh-tool-turn
+profile: desktop
+composition: desktop-default
+recording: authored
+header:
+  class: desktop-default
+  pin: true
+platform: pwsh
+session:
+  source: ../../session/pwsh-tool-turn/session.jsonl

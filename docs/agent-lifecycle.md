@@ -33,7 +33,9 @@ sequenceDiagram
   Driver->>Session: <code>step/start</code>
   Driver->>Session: <code>user/message</code> per entered message
   Driver->>Prompt: <code>system-prompt/assemble</code> waterfall
-  Driver->>LLM: <code>agent/request</code> waterfall, then <code>llm/stream</code> waterfall
+  Driver->>LLM: <code>agent/request</code> waterfall and exact-model preparation
+  Driver->>Hooks: <code>agent/request-context</code> waterfall, then append returned context
+  Driver->>LLM: derive request, then <code>llm/stream</code> waterfall
   LLM-->>Driver: StreamChunk*
   Driver->>Session: <code>assistant/chunk</code>*
   Session-->>SDK: <code>session/event</code> <code>assistant/chunk</code>*

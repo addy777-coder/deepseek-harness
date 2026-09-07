@@ -2,7 +2,7 @@
 
 English | [中文](llm-streaming.zh.md)
 
-The conversation and streaming types from [`packages/llm`](../../packages/llm/README.md): the `Message`/`ContentBlock` variants every request and durable history share, the fully assembled model request, the raw `StreamChunk` protocol, the adapter contract every adapter must implement, and the shared assembler. The [core packages](core.md) hold and log these values on every turn; this page declares them.
+The conversation and streaming types from [`packages/llm`](../../packages/llm/README.md): the `Message`/`ContentBlock` variants every request and durable history share, the fully assembled model request, the raw `StreamChunk` protocol, the adapter contract every adapter must implement, the image-recognition Service Definition, and the shared assembler. The [core packages](core.md) hold and log these values on every turn; this page declares them.
 
 Source: [`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 
@@ -31,6 +31,8 @@ interface ContentBlockMap {
 The block interfaces (full fields in source): `TextBlock` (`text`), `ReasoningBlock` (thinking, distinct from visible text), `ImageBlock` (a durable [image attachment](attachment.md)), `ToolCallBlock` (`id: ToolCallId`, `name`, raw-JSON `arguments`), and `ToolResultBlock` (`toolCallId`, nested `content: ContentBlock[]`, `isError?`). `ContentBlock = ContentBlockMap[ContentBlockType]`. A new modality belongs in the merge-extensible map only when its adapter, UI, compaction, and durable replay paths honor it.
 
 Image access belongs to request serialization rather than the durable attachment or deterministic request-image version. `resolveImageAttachmentAccess()` combines the attachment provider's optional host object path with a mapping supplied by the consumer for the current tool execution filesystem. The result is available only for that request and does not participate in `variantId`.
+
+`ImageRecognition` is the optional provider-neutral service for text-only routes. A Service Provider resolves one explicit image-capable target and analyzes one source message's associated text and ordered durable attachments. The shipped [`dsh-image-recognition-llm`](../../packages/llm/image-recognition-llm/README.md) provider contributes each successful report through `agent/request-context`, so the loop logs it before the main request.
 
 Source: [`packages/llm/llm/src/content.ts`](../../packages/llm/llm/src/content.ts)
 
@@ -591,7 +593,7 @@ interface GenerateOptions {
    * map the purpose to model-hidden transport metadata or purpose-specific
    * generation policy. Ordinary conversation requests leave it unset.
    */
-  purpose?: 'compaction' | 'session-title'
+  purpose?: 'compaction' | 'session-title' | 'image-recognition'
 }
 ```
 
@@ -677,6 +679,8 @@ interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /** Accepted request modalities when the adapter can prove them; endpoint listings commonly omit this. */
+  inputModalities?: readonly ModelModality[]
 }
 ```
 
@@ -859,6 +863,31 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 ```
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
+
+<a id="ctximagerecognition--imagerecognition-abstract-seam"></a>
+
+### `ctx.imageRecognition` — `ImageRecognition` (abstract seam)
+
+Service Definition for auxiliary image recognition.
+
+```ts cordis-catalog
+/**
+ * Resolve and validate the configured image-recognition route.
+ * @param signal - operation cancellation.
+ * @returns a detached exact route, or `undefined` when recognition is not configured.
+ */
+abstract resolveTarget(signal?: AbortSignal): Promise<ImageRecognitionTarget | undefined>
+
+/**
+ * Analyze one source-message image batch.
+ * @param batch - associated source text and ordered durable image occurrences.
+ * @param signal - operation cancellation.
+ * @returns the plain report and exact visual route.
+ */
+abstract recognize(batch: ImageRecognitionBatch, signal?: AbortSignal): Promise<ImageRecognitionResult>
+```
+
+Source: [`packages/llm/llm/src/image-recognition.ts`](../../packages/llm/llm/src/image-recognition.ts)
 
 <a id="ctxllm--llmruntime"></a>
 

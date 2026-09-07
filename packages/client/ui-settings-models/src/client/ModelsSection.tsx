@@ -12,7 +12,7 @@
  * re-renders from pushed invalidations or the post-apply reload.
  */
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconPlusOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -24,6 +24,8 @@ import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
+import { ImageRecognitionCard } from './ImageRecognitionCard.tsx'
+import type { ImageRecognitionCardController } from './image-recognition-controller.ts'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -39,6 +41,8 @@ export interface ModelsSectionInjected {
   operations: ModelsOperations
   /** Settings schema and immutable path callbacks. */
   schema: SettingsSchemaOperations
+  /** Global image-recognition model editor. */
+  imageRecognition?: ImageRecognitionCardController
   /** Section copy. */
   t: (key: keyof typeof en) => string
 }
@@ -81,7 +85,7 @@ interface EditorTarget extends ProviderIdentity {
 /** Values that vary around the shared provider-editor rendering. */
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
-  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose'
+  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'protectedImageRecognition' | 'onClose'
 > {
   target: EditorTarget
 }
@@ -193,17 +197,31 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, operations, schema, t, renderSlot } = props
+  const { controller, useSnapshot, operations, schema, imageRecognition, t, renderSlot } = props
   if (
     controller === undefined || useSnapshot === undefined || operations === undefined
     || schema === undefined || t === undefined
   ) return null
-  return <Loaded injected={{ controller, useSnapshot, operations, schema, t }} renderSlot={renderSlot} />
+  return <Loaded
+    injected={{
+      controller,
+      useSnapshot,
+      operations,
+      schema,
+      ...imageRecognition === undefined ? {} : { imageRecognition },
+      t,
+    }}
+    renderSlot={renderSlot}
+  />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
-  const { controller, operations, schema, t } = injected
+  const { controller, operations, schema, imageRecognition, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
+  useSyncExternalStore(
+    listener => imageRecognition?.store.subscribe(listener) ?? (() => {}),
+    () => imageRecognition?.store.getSnapshot(),
+  )
   const [editing, setEditing] = useState<EditorTarget | undefined>(undefined)
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EditorTarget | undefined>(undefined)
@@ -316,6 +334,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             {providerCopy(t('savedProvider'), savedIdentity)}
           </p>
         )}
+      {imageRecognition === undefined ? null : <ImageRecognitionCard controller={imageRecognition} t={t} />}
       <ul className={styles['rows']}>
         {configured.map((row) => {
           const target = targetOf(row)
@@ -334,6 +353,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  ...imageRecognition === undefined
+                    ? {}
+                    : { protectedImageRecognition: imageRecognition.currentTarget() },
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
                 {renderSlot(
@@ -429,6 +451,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
+                  ...imageRecognition === undefined
+                    ? {}
+                    : { protectedImageRecognition: imageRecognition.currentTarget() },
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -469,6 +494,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 operations={operations}
                 t={t}
                 readOnly={!state.writable}
+                {...imageRecognition === undefined
+                  ? {}
+                  : { protectedImageRecognition: imageRecognition.currentTarget() }}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
               {addRow === undefined

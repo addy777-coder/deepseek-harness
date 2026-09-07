@@ -82,7 +82,7 @@ The model sees each tool under a stable server-qualified name: `mcp__<serverName
 
 When the model calls an MCP tool, the call runs against the remote server with a per-call timeout (default 60 seconds) and can be cancelled like any other tool call. The result comes back as ordinary text in block order; resource links appear as text with their name and URI. If the server reports an error, the call fails visibly — the model does not see a fake success.
 
-Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
+Images are supported when the harness attachment feature is enabled and the current model accepts image input directly or a verified image-recognition target can analyze them; they then appear in durable conversation history like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
 ### Startup, updates, and reconnection
 
@@ -171,7 +171,7 @@ The tool-definition prefix stays stable while the discovered set and schemas are
 
 #### What the model sees
 
-The public tool name and JSON arguments remain in assistant history. The canonical value retains the complete MCP JSON blocks and optional structured content for programmatic and PTC mode callers; supported image blocks project beside text in their original order after exact route-capability proof. Refused images, audio, embedded resources, resource links, and unknown blocks remain visible as bounded text diagnostics, and MCP `isError` rejects the call before image persistence.
+The public tool name and JSON arguments remain in assistant history. The canonical value retains the complete MCP JSON blocks and optional structured content for programmatic and PTC mode callers; supported image blocks project beside text in their original order after direct image-capability or image-recognition proof. Refused images, audio, embedded resources, resource links, and unknown blocks remain visible as bounded text diagnostics, and MCP `isError` rejects the call before image persistence.
 
 #### Token effect
 

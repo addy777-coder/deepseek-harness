@@ -61,7 +61,7 @@ kind: "package-reference"
 
 | 调用 | 你会得到什么 |
 |---|---|
-| `initialize` | 稳定 ACP v1，以及 `session/list`、`session/resume`、`session/close` 与 Streamable HTTP MCP 支持；图片提示词只在持久附件存储和配置的确切路由支持时公布。 |
+| `initialize` | 稳定 ACP v1，以及 `session/list`、`session/resume`、`session/close` 与 Streamable HTTP MCP 支持；图片提示词要求持久附件存储，以及直接图片输入或经验证的识别目标。 |
 | `authenticate` | 立即成功；服务器不需要身份验证。 |
 | `session/new` | 全新持久 agent；其绝对工作区与 stdio 或 HTTP MCP 服务器会在发布前通过校验，并返回完整配置选项状态。 |
 | `session/list` | 按确定的新到旧顺序分页返回已持久、可恢复的根会话；可选绝对 `cwd` 筛选会尽可能使用物理目录标识。 |
@@ -167,7 +167,7 @@ kind: "package-reference"
 这些限制说明本包何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是协议对比或任务积压。
 
 - **仅一个主 workspace**——附加目录仍不支持。
-- **仅光栅提示词图片**——PNG、JPEG、WebP 与 GIF 要求持久附件存储及确切的图片能力路由。
+- **仅光栅提示词图片**——PNG、JPEG、WebP 与 GIF 要求持久附件存储，以及确切的图片能力路由或经验证的图片识别目标。
 - **仅 MCP 工具**——MCP resource 与 prompt 没有 DSH 消费方。
 - **没有转录回放或交互式扩展**——会话删除、fork、`session/load`、mode、命令、计划、终端、客户端文件系统操作与 elicitation 仍不属于此自动化界面。
 

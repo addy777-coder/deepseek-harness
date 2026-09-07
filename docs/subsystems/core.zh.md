@@ -172,7 +172,7 @@ interface AgentOptions {
 }
 ```
 
-在 `agent/request` 之后，分发要求 `provider` 与 `model` 都存在。显式 `reasoningEffort` 会为该路由的首次请求提供初始值；确切模型解析会校验该值，省略时则允许填入适配器默认值。提供 `maxTokens` 时，它必须是正安全整数，并限制每次对话模型请求的输出；省略时，系统会在写入请求 header 前填入确切模型的适配器默认值，否则提供方行为保持不变。agent 作用域的 `deployment:persona` 提示词段落可以遮蔽全局默认 persona。
+在 `agent/request` 之后，分发要求 `provider` 与 `model` 都存在。显式 `reasoningEffort` 会为该路由的首次请求提供初始值；确切模型解析会校验该值，省略时则允许填入适配器默认值。提供 `maxTokens` 时，它必须是正安全整数，并限制每次对话模型请求的输出；省略时，系统会在写入请求 header 前填入确切模型的适配器默认值，否则提供方行为保持不变。准备完成后，`agent/request-context` 可以返回依赖模型的用户角色上下文；loop 会在派生请求前持久追加这些上下文。agent 作用域的 `deployment:persona` 提示词段落可以遮蔽全局默认 persona。
 
 inbox 即投递词汇——agent 以持久投影形式拥有的两条有序待处理消息列表：
 
@@ -998,6 +998,36 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 ```
 
 Types: [LlmCallConfig](llm-streaming.zh.md) · [Scoped](scope.zh.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agentrequest-context--waterfall"></a>
+
+#### `agent/request-context` — waterfall
+
+Add model-visible context after the exact route is prepared and the step's claimed input is durable, but before the request header and final message list are derived. The loop appends every returned message as a `user/message`, so listeners must return identified, immutable context rather than rewriting `messages` in place.
+
+```ts cordis-catalog
+/**
+ * Add model-visible context after the exact route is prepared and the
+ * step's claimed input is durable, but before the request header and final
+ * message list are derived. The loop appends every returned message as a
+ * `user/message`, so listeners must return identified, immutable context
+ * rather than rewriting `messages` in place.
+ * @param payload.agent - the agent preparing the request.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the open step number.
+ * @param payload.config - exact prepared call configuration.
+ * @param payload.inputModalities - exact model input modalities, when the adapter declares them.
+ * @param payload.messages - current durable model history before contributed context.
+ * @param payload.signal - the current turn's explicit abort signal.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/request-context'( this: Scoped<Agent>, payload: { agent: Agent turn: number step: number config: LlmCallConfig inputModalities?: readonly ModelModality[] messages: readonly Message[] signal: AbortSignal }, next: () => Promise<UserMessage[]>, ): Promise<UserMessage[]>
+```
+
+Types: [LlmCallConfig](llm-streaming.zh.md) · [Message](llm-streaming.zh.md) · [ModelModality](llm-streaming.zh.md) · [Scoped](scope.zh.md) · [UserMessage](session.zh.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

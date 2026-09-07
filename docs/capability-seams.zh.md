@@ -21,6 +21,11 @@ flowchart LR
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
   pkg_compaction_basic["compaction-basic"]
+  svc_imageRecognition["ctx.imageRecognition<br/>Auxiliary image recognition"]
+  pkg_image_recognition_llm["image-recognition-llm"]
+  pkg_acp["acp"]
+  pkg_mcp_client["mcp-client"]
+  pkg_subagent["subagent"]
   pkg_deepseek_llm_api_extensions["deepseek-llm-api-extensions"]
   svc_deepseekLlmApiExtensions["ctx.deepseekLlmApiExtensions<br/>Official DeepSeek request extensions"]
   pkg_session_log_deepseek["session-log-deepseek"]
@@ -114,13 +119,11 @@ flowchart LR
   svc_sessionProjections["ctx.sessionProjections<br/>Session projection units"]
   pkg_session_projection_cache["session-projection-cache"]
   svc_sessionProjectionCache["ctx.sessionProjectionCache<br/>Persisted projection cache"]
-  pkg_subagent["subagent"]
   pkg_skill["skill"]
   svc_skills["ctx.skills<br/>Skill provider registry"]
   pkg_skill_badge["skill-badge"]
   pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
-  pkg_acp["acp"]
   pkg_agent_default_model["agent-default-model"]
   svc_agentDefaultModel["ctx.agentDefaultModel<br/>Default Agent model selection"]
   pkg_headless["headless"]
@@ -206,6 +209,9 @@ flowchart LR
   pkg_client_connection["client-connection"]
   pkg_client_modules["client-modules"]
   pkg_client_hmr["client-hmr"]
+  svc_clientBoot["ctx.clientBoot<br/>Client startup injection registry"]
+  pkg_client_ui_theme["client-ui-theme"]
+  pkg_desktop_transport["desktop-transport"]
   svc_clientModules["ctx.clientModules<br/>Client plugin graph host"]
   pkg_workflow["workflow"]
   svc_workflowEngine["ctx.workflowEngine<br/>Workflow script engine"]
@@ -237,6 +243,7 @@ flowchart LR
   pkg_authorization --> svc_authorization
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
+  pkg_client_modules --> svc_clientBoot
   pkg_client_modules --> svc_clientModules
   pkg_code_runtime --> svc_codeRuntime
   pkg_code_runtime_worker_thread --> svc_codeRuntime
@@ -263,10 +270,12 @@ flowchart LR
   pkg_host_directory_picker_browse --> svc_directoryPicker
   pkg_host_directory_picker_native --> svc_directoryPicker
   pkg_host_webserver --> svc_webServer
+  pkg_image_recognition_llm --> svc_imageRecognition
   pkg_inspector --> svc_inspector
   pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
+  pkg_llm --> svc_imageRecognition
   pkg_llm --> svc_llm
   pkg_llm_deepseek --> svc_llm
   pkg_llm_pi_ai --> svc_llm
@@ -353,7 +362,10 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_clientBoot --> pkg_client_ui_theme
+  svc_clientBoot --> pkg_desktop_transport
   svc_clientModules --> pkg_client_hmr
+  svc_clientModules --> pkg_desktop_transport
   svc_codeRuntime --> pkg_tools
   svc_compaction --> pkg_compaction_basic
   svc_cordisInspect --> pkg_tool_cordis
@@ -367,6 +379,11 @@ flowchart LR
   svc_e2b --> pkg_subprocess_e2b
   svc_fileReferences --> pkg_api_session_controller
   svc_fs --> pkg_tool_fs
+  svc_imageRecognition --> pkg_acp
+  svc_imageRecognition --> pkg_api_session_controller
+  svc_imageRecognition --> pkg_mcp_client
+  svc_imageRecognition --> pkg_subagent
+  svc_imageRecognition --> pkg_tool_fs
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
   svc_invariants --> pkg_scope
@@ -469,6 +486,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |
+| `ctx.imageRecognition` | `seam` | [`llm`](../packages/llm/llm) | [`image-recognition-llm`](../packages/llm/image-recognition-llm) | [`acp`](../packages/acp/acp), [`api-session-controller`](../packages/api/session-controller), [`mcp-client`](../packages/mcp/mcp-client), [`subagent`](../packages/subagent/subagent), [`tool-fs`](../packages/fs/tool-fs) | - | 校验一个显式支持图片的路由，并在纯文本模型请求之前贡献持久视觉报告。 |
 | `ctx.deepseekLlmApiExtensions` | `seam` | [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions) | [`session-log-deepseek`](../packages/session/session-log-deepseek), [`plugin-package-inventory-deepseek`](../packages/llm/plugin-package-inventory-deepseek) | [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 插件准备彼此独立的顶层字段；官方适配器会合并这些字段，并在 HTTP 接受后提交其交付状态。 |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 拥有按会话隔离的回放折叠区；压力消费方共享不可变且带修订版本的测量结果。 |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 在摘要压缩前，通过可回放的单节点表层替换来改写过大的当前工具结果。 |
@@ -530,7 +548,8 @@ flowchart LR
 | `ctx.spillStore` | `seam` | [`spill`](../packages/spill/spill) | [`spill-local`](../packages/spill/spill-local) | [`spill-policy`](../packages/spill/spill-policy) | - | 后端保存过大的工具文本，并返回面向模型的定位信息和取回提示；spill-policy 是 tools/post-execute 消费方，负责决定何时 spill。 |
 | `ctx.directoryPicker` | `seam` | [`host-directory-picker`](../packages/host/directory-picker) | [`host-directory-picker-native`](../packages/host/directory-picker-native), [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | [`api-workspace-controller`](../packages/api/workspace-controller) | - | 带判别标记的交互能力：原生后端在 Host 显示设备上打开一个操作系统选择器，浏览后端为应用内浏览器提供列表与创建原语；双端后端通过其浏览器侧填充 ui-workspace 目录流程的 slot（不通过协议发布）。 |
 | `ctx.webServer` | `core` | [`host-webserver`](../packages/host/webserver) | - | [`client-connection`](../packages/client/connection), [`client-modules`](../packages/client/modules), [`client-hmr`](../packages/client/hmr) | - | 普通的 node:http 载体：具名路由注册表、索引转换 tap，以及静态 dist 回退；Web 传输插件注册自己的路由。 |
-| `ctx.clientModules` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-hmr`](../packages/client/hmr) | - | 通过增量 `dsh.client` 扫描组合 __DSH_BOOT__ 入口图，提供插件组合包，并通知重建／图变更订阅方。 |
+| `ctx.clientBoot` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-ui-theme`](../packages/client/ui-theme), [`desktop-transport`](../packages/desktop/transport) | - | 收集 Host 当前生成的启动条目，供 HTML index 响应或 Desktop IPC boot payload 使用。 |
+| `ctx.clientModules` | `core` | [`client-modules`](../packages/client/modules) | - | [`client-hmr`](../packages/client/hmr), [`desktop-transport`](../packages/desktop/transport) | - | 通过增量 `dsh.client` 扫描组合客户端入口图和不可变 bundle 产物，再通知重建与图变更订阅方。 |
 | `ctx.workflowEngine` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-worker-thread`](../packages/workflow/workflow-worker-thread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | 每个上下文使用一个引擎，与 bash 相同，且没有具名提供方注册表；通用工作流与固定 Ralph 消费方启动运行，其中的 agent() 调用通过 ctx.subagents 扇出。 |
 | `ctx.webhookRuntime` | `core` | [`webhook`](../packages/webhook/webhook) | - | [`webhook-github`](../packages/webhook/webhook-github) | - | 提供方适配器分派已认证交付；可信插件注册独立的进程本地规则，runtime 把非 null 结果转换为普通的 Workspace-backed Session，不保留交付或完成状态。 |
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | [`lsp-stdio`](../packages/lsp/lsp-stdio) | [`tool-lsp`](../packages/lsp/tool-lsp) | - | 提供方注册与选择，加上恰好四种操作的标准化查询执行；该 seam 不提供协议逃生口，后端必须转换为标准化请求和结果。 |

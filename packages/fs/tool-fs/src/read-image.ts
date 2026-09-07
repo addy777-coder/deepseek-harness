@@ -4,10 +4,9 @@
  * attachment service's full decode stays authoritative. The mounted `ctx.fs`
  * backend owns path resolution and read access; names only declare media type.
  *
- * The route gate is deliberately stricter than the host upload preflight. An
- * image-reading tool is useful only when the exact calling route can inspect
- * its result, so unknown capability refuses instead of relying on an adapter
- * failure after filesystem and attachment work.
+ * Route validation runs before filesystem I/O. A result is admitted only when
+ * the exact calling route can inspect it directly or a configured recognition
+ * model can turn it into durable text for that route.
  * @module @deepseek-ai/dsh-tool-fs/src/read-image
  */
 
@@ -15,6 +14,7 @@ import { basename, extname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import { hasImageRecognitionTarget } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -109,9 +109,9 @@ export function imageMediaTypeForPath(filePath: string): ImageMediaType | undefi
 }
 
 /**
- * Enforce the strict image-capability gate for the calling route. Resolves the
- * session's latest routed provider/model (request header config, then agent
- * options) and requires the exact resolved route to declare `image` input explicitly.
+ * Enforce image availability for the calling route. Resolves the session's
+ * latest provider/model and accepts either direct image input or a verified
+ * image-recognition target.
  * @param ctx - the plugin context used to resolve the optional `llm` service.
  * @param exec - the tool-execution context supplying the calling agent.
  * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
@@ -125,8 +125,13 @@ export async function assertImageCapableRoute(ctx: Context, exec: ToolExecution,
     throw new Error(`cannot read "${requestedPath}" as an image: the current model route could not be resolved`)
   }
   const active = await llm.resolveModelInfo(provider, model, exec.signal)
-  if (active.inputModalities === undefined || !active.inputModalities.includes('image')) {
-    throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`)
+  if (active.inputModalities === undefined) {
+    throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input`)
+  }
+  if (!active.inputModalities.includes('image')) {
+    if (!await hasImageRecognitionTarget(ctx, exec.signal)) {
+      throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; configure an image recognition model in Settings > Models or switch to an image-capable model`)
+    }
   }
 }
 
@@ -211,7 +216,7 @@ export function applyReadImageTool(ctx: Context): void {
     description: 'Read a PNG/JPEG/WebP/GIF file and return the image itself. '
       + 'A path without a file extension is accepted; the format is detected from the file content, so normalized attachment paths can be passed directly without copying or renaming. '
       + 'Harness validates and downscales large supported images before the next model request, so use this tool directly instead of installing image libraries or creating thumbnails merely to inspect an image. '
-      + 'Independent files may be read concurrently in small batches. Requires the current model to accept image input.',
+      + 'Independent files may be read concurrently in small batches. Requires direct image input or a configured image recognition model.',
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to the image file, resolved by the filesystem backend.' },
     },

@@ -549,6 +549,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'clientBoot',
+    summary: 'Registry for transport-neutral client startup injections.',
+    description: 'Registry for transport-neutral client startup injections.',
+    methods: [
+      {
+        signature: 'register(producer: ClientBootInjectionProducer): () => Promise<void>',
+        description: 'Register one startup-injection producer for the caller fiber\'s lifetime.',
+        parameters: [{ name: 'producer', description: 'function reading current Host state at collection time.' }],
+        returns: 'disposer removing this producer.',
+      },
+      {
+        signature: 'collect(): IndexInjection[]',
+        description: 'Collect a fresh ordered startup table.',
+        parameters: [],
+        returns: 'a new table containing producer-owned immutable rows in registration order.',
+      },
+    ],
+  },
+  {
     key: 'clientModules',
     summary: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows.',
     description: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).',
@@ -558,6 +577,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Current composed entry graph (stable object between changes).',
         parameters: [],
         returns: 'the graph served as `window.__DSH_BOOT__`.',
+      },
+      {
+        signature: 'artifact(resourceUrl: string): ClientModuleArtifact | undefined',
+        description: 'Read one graph-advertised immutable artifact.',
+        parameters: [{ name: 'resourceUrl', description: 'absolute bundle URL including its revision query.' }],
+        returns: 'detached bytes and media type, or undefined for an unknown URL.',
       },
       {
         signature: 'clientPath(id: string): string | undefined',
@@ -1000,6 +1025,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create one Goal through the remote boundary.',
         parameters: [{ name: 'agent', description: 'exact live Agent resolved from the wire identity.' }, { name: 'request', description: 'objective and optional round cap.' }],
         returns: 'the created Goal identity.',
+      },
+    ],
+  },
+  {
+    key: 'imageRecognition',
+    summary: 'Service Definition for auxiliary image recognition.',
+    description: 'Service Definition for auxiliary image recognition.',
+    methods: [
+      {
+        signature: 'abstract resolveTarget(signal?: AbortSignal): Promise<ImageRecognitionTarget | undefined>',
+        description: 'Resolve and validate the configured image-recognition route.',
+        parameters: [{ name: 'signal', description: 'operation cancellation.' }],
+        returns: 'a detached exact route, or `undefined` when recognition is not configured.',
+      },
+      {
+        signature: 'abstract recognize(batch: ImageRecognitionBatch, signal?: AbortSignal): Promise<ImageRecognitionResult>',
+        description: 'Analyze one source-message image batch.',
+        parameters: [{ name: 'batch', description: 'associated source text and ordered durable image occurrences.' }, { name: 'signal', description: 'operation cancellation.' }],
+        returns: 'the plain report and exact visual route.',
       },
     ],
   },
@@ -2913,6 +2957,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.signal - the current turn\'s explicit abort signal. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
+    name: 'agent/request-context',
+    mode: 'waterfall',
+    signature: '\'agent/request-context\'( this: Scoped<Agent>, payload: { agent: Agent turn: number step: number config: LlmCallConfig inputModalities?: readonly ModelModality[] messages: readonly Message[] signal: AbortSignal }, next: () => Promise<UserMessage[]>, ): Promise<UserMessage[]>',
+    summary: 'Add model-visible context after the exact route is prepared and the step\'s claimed input is durable, but before the request header and final message list are derived.',
+    description: 'Add model-visible context after the exact route is prepared and the step\'s claimed input is durable, but before the request header and final message list are derived. The loop appends every returned message as a `user/message`, so listeners must return identified, immutable context rather than rewriting `messages` in place.',
+    parameters: [{ name: 'payload', description: '.signal - the current turn\'s explicit abort signal. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+  },
+  {
     name: 'agent/request-error',
     mode: 'waterfall',
     signature: '\'agent/request-error\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; provider: string; failure: LlmFailure; retryPolicy: ResolvedRetryPolicy | undefined; signal: AbortSignal }, next: () => Promise<RequestErrorAction>): Promise<RequestErrorAction>',
@@ -3585,6 +3637,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ClientArtifactBaseline {\n    readonly path: string;\n    readonly mtimeMs: number;\n    readonly size: number;\n}',
   },
   {
+    name: 'ClientBootInjectionProducer',
+    declaration: 'export type ClientBootInjectionProducer = () => readonly IndexInjection[];',
+  },
+  {
+    name: 'ClientModuleArtifact',
+    declaration: 'export interface ClientModuleArtifact {\n    readonly body: Uint8Array;\n    readonly contentType: string;\n}',
+  },
+  {
     name: 'CodeBindingErrorClass',
     declaration: 'export interface CodeBindingErrorClass {\n    name: string;\n    memberNameProperty: string;\n}',
   },
@@ -3666,7 +3726,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConfinedArgv',
-    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
+    declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    env?: Readonly<Record<string, string>>;\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
   },
   {
     name: 'ConfinedSandboxMode',
@@ -3830,7 +3890,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'DeepSeekLlmApiExtensionRequest',
-    declaration: 'export interface DeepSeekLlmApiExtensionRequest {\n    readonly body: Readonly<Record<string, DeepSeekLlmApiJson>>;\n    readonly sessionId?: string;\n    readonly purpose?: \'compaction\' | \'session-title\';\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface DeepSeekLlmApiExtensionRequest {\n    readonly body: Readonly<Record<string, DeepSeekLlmApiJson>>;\n    readonly sessionId?: string;\n    readonly purpose?: \'compaction\' | \'session-title\' | \'image-recognition\';\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'DeepSeekLlmApiJson',
@@ -4022,7 +4082,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\' | \'image-recognition\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -4087,6 +4147,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageMediaType',
     declaration: 'export type ImageMediaType = \'image/png\' | \'image/jpeg\' | \'image/webp\' | \'image/gif\';',
+  },
+  {
+    name: 'ImageRecognitionBatch',
+    declaration: 'export interface ImageRecognitionBatch {\n    sourceMessageId: MessageId;\n    sessionId?: Branded<\'SessionId\'>;\n    associatedText: string;\n    images: readonly ImageRecognitionImage[];\n}',
+  },
+  {
+    name: 'ImageRecognitionImage',
+    declaration: 'export interface ImageRecognitionImage {\n    attachment: ImageAttachmentRef;\n    path: string;\n}',
+  },
+  {
+    name: 'ImageRecognitionResult',
+    declaration: 'export interface ImageRecognitionResult {\n    target: ImageRecognitionTarget;\n    text: string;\n}',
+  },
+  {
+    name: 'ImageRecognitionTarget',
+    declaration: 'export interface ImageRecognitionTarget {\n    provider: string;\n    model: string;\n}',
   },
   {
     name: 'ImageRequestPolicy',
@@ -4242,7 +4318,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    inputModalities?: readonly ModelModality[];\n}',
   },
   {
     name: 'LlmFailure',
@@ -4434,7 +4510,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelCatalogModel',
-    declaration: 'export interface ModelCatalogModel {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n    readonly reasoning?: ModelReasoning;\n}',
+    declaration: 'export interface ModelCatalogModel {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n    readonly inputModalities?: readonly ModelModality[];\n    readonly reasoning?: ModelReasoning;\n}',
   },
   {
     name: 'ModelMessageSource',

@@ -503,6 +503,14 @@ describe('connection client apply', () => {
       expect(fetch.mock.calls[0]?.[0]).toEqual(new URL('http://dsh.internal/api/goals/create'))
       expect(fetch.mock.calls[0]?.[1]).not.toHaveProperty('signal')
 
+      ;(globalThis as Win).location = { hostname: '', search: '', origin: 'file://' }
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response('unavailable', { status: 503 }))
+      await expect(handle.rpc.call('/api', 'goals/create', {})).rejects.toThrow('HTTP 503')
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        new URL('http://dsh.internal/api/goals/create'),
+        expect.any(Object),
+      )
+
       const respond = (result: unknown): void => {
         globalThis.fetch = async (_input: URL | RequestInfo, init?: RequestInit) => {
           if (typeof init?.body !== 'string') throw new TypeError('expected a JSON request body')

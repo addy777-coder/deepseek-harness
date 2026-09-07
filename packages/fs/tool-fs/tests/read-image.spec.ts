@@ -475,6 +475,20 @@ describe('strict image-modality gate', () => {
     expect(text(result)).toContain('does not declare image input')
   })
 
+  it('admits a text-only route when a verified image recognition model is configured', async () => {
+    await writeFile(join(dir, 'red.png'), PNG_1X1)
+    const ctx = await setup()
+    ctx.provide('imageRecognition', {
+      resolveTarget: () => Promise.resolve({ provider: 'visual', model: 'vision-model' }),
+    } as never)
+
+    const result = await readImage(ctx, { file_path: 'red.png' }, agentOn('text-model'))
+    expect(result.isError).toBe(false)
+    const unknown = await readImage(ctx, { file_path: 'red.png' }, agentOn('legacy-model'))
+    expect(unknown.isError).toBe(true)
+    expect(text(unknown)).toContain('does not declare image input')
+  })
+
   it('refuses when the route cannot be resolved (no agent, or no header and no options)', async () => {
     await writeFile(join(dir, 'red.png'), PNG_1X1)
     const ctx = await setup()

@@ -14,7 +14,7 @@ Status: implemented
 
 - **`read_image` 读取文件系统路径。** 扩展名选择声明的 PNG/JPEG/WebP/GIF 媒体类型，附件存储的魔数与像素校验保持权威。字节沿 `ctx.fs.stat` → 有界 `ctx.fs.readBytes` → `ctx.attachments.saveImage` → `fs/observed` 流动。工具结果包含元数据和一个 `ImageBlock`。
 - **`FileSystem.readBytes(target, signal, maxBytes)`** 是新的必备提供方原语：字节上限放在 seam 上，任何后端都无法无界缓冲文件；stat 大小先短路，随后的流最多多读一个字节以防 stat 之后的增长（`FS_TOO_LARGE`）。
-- **注册随组合条件挂载，执行按路由门禁。** 工具只在 `ctx.inject(['attachments'], …)` 作用域内注册。执行时在 I/O 之前通过 `ctx.llm.resolveModelInfo` 解析调用路由，并要求 `inputModalities` 包含 `image`；能力未知即拒绝。纯文本路由仍可使用此前的持久图片，因为共享 LLM 运行时会在请求组装时把图片投影为占位符。
+- **注册随组合条件挂载，执行按路由门禁。** 工具只在 `ctx.inject(['attachments'], …)` 作用域内注册。执行时在 I/O 之前通过 `ctx.llm.resolveModelInfo` 解析调用路由；路由声明图片输入或存在有效的已配置图片识别路由时放行，否则拒绝。纯文本路由会在持久识别报告旁以请求期占位符表示持久图片。
 - **PTC mode 以带外方式转发图像**：嵌套分派返回规范值（仅限本次执行，不含图像块），并延迟提交一条携带信封和图像的 `user` 角色上下文消息，图片仍会到达下一次请求。
 - **llm-replay 模型可以声明 `inputModalities`**，因此 keyless ACP 快照可以覆盖支持图片的结果和纯文本拒绝。
 
@@ -27,6 +27,6 @@ Status: implemented
 
 ## 后果
 
-- 工具在纯文本路由上拒绝执行，而会话历史中已经存在的图片会由请求期占位符表示。
+- 当前路由和已配置识别路由都不接受图片时，工具会拒绝执行。纯文本模型请求以请求期占位符表示持久图片，并以文本接收已完成的识别报告。
 - 重复的图片结果会累积请求成本，直到请求投影或压缩将其移除；内容寻址只去重持久字节。
 - 工具结果卡片现在经由浏览器的 `tool.call.images` 槽位渲染图像本身（见 [tool-card image results 笔记](2026-08-20-tool-card-image-results.zh.md)）；未组合附件呈现插件的 UI 显示结果的信封文本。

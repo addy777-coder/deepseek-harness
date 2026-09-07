@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides model selection in the Web GUI: the `/model` popup command and the composer's model seat, both over one per-session directory of provider-grouped models. Choosing a model submits the complete selection — provider, model, and reasoning effort — which the Host snapshots at the next prompt-assembly boundary, so the following request uses it while a running step keeps its assembled selection. The composer seat shows a two-level Model/Effort menu: models stay provider-grouped, and the selected exact model supplies its adapter-owned effort names and default. When the Host reports that no adapter serves the session's route, the composer input goes inert until a route becomes available.
+This package provides model selection in the Web GUI: the `/model` popup command and the composer's model seat, both over one per-session directory of provider-grouped models. Choosing a model submits the complete selection — provider, model, and reasoning effort — which the Host snapshots at the next prompt-assembly boundary, so the following request uses it while a running step keeps its assembled selection. The composer seat shows a two-level Model/Effort menu: models stay provider-grouped, explicit image-capable entries carry a Vision tag, and the selected exact model supplies its adapter-owned effort names and default. When the Host reports that no adapter serves the session's route, the composer input goes inert until a route becomes available.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount this plugin alongside `ui-conversation` and the commands package; the comp
 
 ### Model and effort
 
-Models stay grouped by provider. The menu shows model and effort names only; catalog descriptions remain available to other consumers. The `/model` popup applies the selected model's default effort; the composer can then choose any advertised effort. An adapter without reasoning metadata leaves the Effort row absent; there is no arbitrary effort input.
+Models stay grouped by provider. The menu shows model and effort names plus a Vision tag when `inputModalities` explicitly contains `image`; catalog descriptions remain available to other consumers. The `/model` popup includes the same tag in its option detail and applies the selected model's default effort. The composer can then choose any advertised effort. An adapter without reasoning metadata leaves the Effort row absent; there is no arbitrary effort input.
 
 ### Unroutable sessions
 

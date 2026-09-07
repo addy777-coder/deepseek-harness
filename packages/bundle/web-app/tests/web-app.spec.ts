@@ -85,7 +85,7 @@ function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: 
 
 /** Deterministic Host Connection face for URL publication and frontend injection. */
 function provideConnection(ctx: Context): void {
-  ctx.provide('connection', {
+  const connection = {
     authenticatedUrl(baseUrl: string) {
       const url = new URL(baseUrl)
       url.pathname = '/'
@@ -95,7 +95,9 @@ function provideConnection(ctx: Context): void {
     authorizeIndex: () => true,
     requestRejection: () => undefined,
     rpc: {},
-  } as never)
+  }
+  ctx.provide('connection', connection as never)
+  ctx.provide('webConnection', connection as never)
 }
 
 /** A fake Loader whose settlement the test controls (the URL line waits on it). */

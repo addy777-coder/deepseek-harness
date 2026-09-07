@@ -57,12 +57,16 @@ const BUNDLE_LAYERS = [
     patch: join(REPO_ROOT, 'packages/bundle/base/cordis.patch.yml'),
   },
   {
+    manifest: join(REPO_ROOT, 'packages/bundle/gui-app/package.json'),
+    patch: join(REPO_ROOT, 'packages/bundle/gui-app/cordis.patch.yml'),
+  },
+  {
     manifest: join(REPO_ROOT, 'packages/bundle/web-app/package.json'),
     patch: join(REPO_ROOT, 'packages/bundle/web-app/cordis.patch.yml'),
   },
 ] as const
 const bundleResolvers = BUNDLE_LAYERS.map(layer => createRequire(layer.manifest))
-const webBundleResolver = bundleResolvers[1]
+const webBundleResolver = bundleResolvers[2]
 if (webBundleResolver === undefined) throw new Error('assembled boot: web bundle resolver missing')
 const workspacePackageManifests = new Map(globSync('packages/*/*/package.json', { cwd: REPO_ROOT }).map((relative) => {
   const path = join(REPO_ROOT, relative)

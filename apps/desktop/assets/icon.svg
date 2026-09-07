@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="background" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2878ed" />
+      <stop offset="1" stop-color="#124bb8" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#background)" />
+  <text
+    x="128"
+    y="151"
+    fill="#fff"
+    font-family="Arial, sans-serif"
+    font-size="70"
+    font-weight="700"
+    letter-spacing="2"
+    text-anchor="middle"
+  >DSH</text>
+</svg>

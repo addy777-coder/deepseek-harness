@@ -178,6 +178,7 @@ async function main(): Promise<number> {
       }
     }
 
+    delete process.env.ELECTRON_RUN_AS_NODE
     const child = sandbox.spawn({
       command: parsed.command,
       args: parsed.args,

@@ -84,6 +84,7 @@ describe('catalog-route model discovery', () => {
     expect(models.map(model => model.id).sort())
       .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
     expect(models.every(model => (model.contextWindow ?? 0) > 0 && (model.maxTokens ?? 0) > 0)).toBe(true)
+    expect(models.every(model => (model.inputModalities?.length ?? 0) > 0)).toBe(true)
     expect(server.paths).toEqual([])
   })
 
@@ -118,6 +119,7 @@ describe('draft-provider model discovery', () => {
     const ctx = await harness()
 
     const models = await ctx.llm.discoverModels('llm-pi-ai', { baseURL: `${server.url}/v1`, apiKey: 'probe-key' })
+    expect(models.every(model => model.inputModalities === undefined)).toBe(true)
 
     expect(models).toEqual([
       { id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096 },

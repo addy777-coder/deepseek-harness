@@ -54,7 +54,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-function mountFrame() {
+function mountFrame(options: { readonly focused?: boolean; readonly titlebar?: boolean } = {}) {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: unknown }[] = []
@@ -64,6 +64,9 @@ function mountFrame() {
     if (key === 'conversation') return <div data-testid="center-content" />
     if (key === 'details') return <div data-testid="details-content" />
     if (key === 'conversation.empty') return <div data-testid="empty-content" />
+    if (key === 'shell.titlebar') return options.titlebar === true
+      ? <div data-testid="desktop-titlebar" />
+      : null
     return <div data-testid="other-content" />
   }) as AppFrameProps['renderSlot']
   const useSessions = ((sel: (s: SessionListState) => unknown) => {
@@ -101,10 +104,13 @@ function mountFrame() {
       useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
+      {...options.focused === undefined ? {} : { focused: options.focused }}
     />
   )
   const utils = render(element())
-  const frame = utils.container.firstElementChild as HTMLElement
+  const frame = options.titlebar === true
+    ? utils.container.firstElementChild?.lastElementChild as HTMLElement
+    : utils.container.firstElementChild as HTMLElement
   return { instance, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
 }
 
@@ -176,6 +182,19 @@ describe('AppFrame', () => {
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([280, 0])
+  })
+
+  it('wraps the frame only when the desktop title bar is present', () => {
+    const { frame, getByTestId } = mountFrame({ titlebar: true })
+    expect(getByTestId('desktop-titlebar')).toBeTruthy()
+    expect(tracks(frame)).toEqual([280, 0])
+  })
+
+  it('removes the navigation track and controls from a focused task window', () => {
+    const { frame, queryByTestId } = mountFrame({ focused: true })
+    expect(tracks(frame)).toEqual([0, 0])
+    expect(queryByTestId('sidebar-content')).toBeNull()
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
   })
 
   it('renders the session pair with empty owner shares (sessionId is framework-standard)', () => {

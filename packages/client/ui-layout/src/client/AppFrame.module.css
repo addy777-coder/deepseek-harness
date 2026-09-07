@@ -1,3 +1,12 @@
+.desktopShell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
 .frame {
   position: relative; /* anchors the drag handles, which straddle column borders */
   display: grid;

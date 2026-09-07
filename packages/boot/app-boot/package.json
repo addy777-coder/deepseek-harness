@@ -18,11 +18,16 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./profile-plugins": {
+      "types": "./lib/types/profile-plugins.d.ts",
+      "default": "./lib/profile-plugins.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
+    "lib/profile-plugins.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",

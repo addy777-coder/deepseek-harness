@@ -80,6 +80,9 @@ export class AppWebEntry {
       await this.mountApp(ctx)
     } catch (reason) {
       console.error(reason)
+      if (reason instanceof AggregateError) {
+        for (const error of reason.errors) console.error(error)
+      }
       this.page.fail(reason instanceof Error ? reason.message : String(reason))
     }
   }

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-session-snapshot` provides the shared support behind keyless recorded-session tests (`pnpm run test:snapshot`): closed manifests, typed identity redaction, normalization, workspace comparison, fixture guards, and protocol adapters for headless, SDK, ACP, and Web owners. The ACP adapter launches the tested profile as a real subprocess, drives a deterministic input script, and registers the complete record, replay, and refresh suite. Every scenario owns enough committed evidence to prove model-visible output and filesystem effects without trusting the agent's report. The package entry imports vitest and is therefore available only inside a vitest run.
+`dsh-session-snapshot` provides the shared support behind keyless recorded-session tests (`pnpm run test:snapshot`): closed manifests, typed identity redaction, normalization, workspace comparison, fixture guards, and protocol adapters for headless, SDK, ACP, Web, and Desktop owners. The ACP adapter launches the tested profile as a real subprocess, drives a deterministic input script, and registers the complete record, replay, and refresh suite. Every scenario owns enough committed evidence to prove model-visible output and filesystem effects without trusting the agent's report. The package entry imports vitest and is therefore available only inside a vitest run.
 
 ## Table of Contents
 
@@ -102,7 +102,7 @@ This section explains the design of the kit; the observable behavior is fully co
 
 ### Design
 
-The shared core owns manifests, workspace setup/comparison, typed identity mapping, normalizers, and fixture invariants. The ACP adapter adds four composable layers: launcher, scenario harness, normalizers, and suite factory. `launchAcpTestAgent` boots a source profile under tsx or a built `lib` profile under plain Node, connects the SDK client over a raw-byte stdout tee, collects session updates and stderr, fails closed on unhandled permission requests, and owns shutdown. `runScenario` drives ACP JSON-RPC stdio and harvests every persisted raw JSONL session log. The pure normalizers replace cwd paths and typed identities with stable tokens, zero times, expand physical provenance ranges, and scrub request-header bulk. `defineAcpSnapshotSuite` registers comparisons, fixture write-back, and the live uniformity guard.
+The shared core owns manifests, workspace setup/comparison, typed identity mapping, normalizers, and fixture invariants. The ACP adapter adds four composable layers: launcher, scenario harness, normalizers, and suite factory. `launchAcpTestAgent` boots a source profile under tsx or a built `lib` profile under plain Node, connects the SDK client over a raw-byte stdout tee, collects session updates and stderr, fails closed on unhandled permission requests, and owns shutdown. `runScenario` drives ACP JSON-RPC stdio and harvests every persisted raw JSONL session log. The pure normalizers replace cwd paths and typed identities with stable tokens, zero times, expand physical provenance ranges, and scrub request-header bulk. The Desktop adapter starts the built Windows Electron shell and replays a committed model/tool round through real MessagePort IPC; `defineAcpSnapshotSuite` registers ACP comparisons, fixture write-back, and the live uniformity guard.
 
 ### Source map
 
@@ -157,6 +157,7 @@ These limits define when the kit needs special care. They are current package co
 - **Session harvest requires raw JSONL mode** — `runScenario` collects persisted `.jsonl` logs, so snapshot configs set the JSONL backend's `compression: 'none'`; compressed JSONL has no snapshot-harvest path.
 - **Built mode requires current artifacts** — run `pnpm run build` before selecting `DSH_EXAMPLE_MODE=lib`; source mode remains the zero-build path.
 - **ACP remains for protocol behavior** — cancellation and permission round trips whose stimulus is the ACP client stay on that adapter; assembled one-shot and persistent-control behavior uses headless and SDK adapters.
+- **Desktop replay requires a built Windows checkout** — non-Windows and clean source-only snapshot lanes skip the Electron adapter; the Windows artifact lane owns the required run.
 
 <a id="dev-note"></a>
 ### Dev Note

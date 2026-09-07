@@ -35,6 +35,12 @@ function isCompactionCheckpoint(event: Parameters<ConversationNodeDefinition['ma
   return source.kind === 'plugin' && source.plugin === 'compact'
 }
 
+/** Whether a context source is the internal image-recognition record hidden from Chat. */
+function isImageRecognitionSource(source: unknown): boolean {
+  return typeof source === 'object' && source !== null
+    && (source as { kind?: unknown }).kind === 'image-recognition'
+}
+
 /** User, steering, and injected-context message classification Definition. */
 export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
@@ -80,6 +86,7 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   update: context => context.state,
   buildViewNode: (context) => {
     if (context.state === undefined) return null
+    if (context.state.kind === 'context' && isImageRecognitionSource(context.state.source)) return null
     return chatNode(context, context.state.kind, context.state.seq, context.state)
   },
 }

@@ -7,6 +7,8 @@ packages:
   - native/landlock-run/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Dependency-only deploy root for the packaged Desktop Utility Process.
+  - apps/desktop/runtime-closure
   - website
   # Deploy root of the single-exe build: a pure dependency manifest whose
   # closure is what the exe bundles and what the Python runtime distributes.
@@ -30,6 +32,10 @@ peerDependencyRules:
 # default and only allow scripts we need. esbuild (native binary) and lefthook
 # (git hooks) genuinely need theirs.
 allowBuilds:
+  # Desktop Chromium/Node runtime downloaded by the pinned Electron package.
+  electron: true
+  # Squirrel.Windows is not a Desktop target; keep its compatibility helper inert.
+  electron-winstaller: false
   esbuild: true
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
@@ -73,6 +79,5 @@ minimumReleaseAgeExclude:
   # All platform aliases resolve to the @openai/codex package name, so their
   # reviewed exact versions must share one version-union policy entry.
   - '@openai/codex@0.149.1||0.149.1-darwin-arm64||0.149.1-darwin-x64||0.149.1-linux-arm64||0.149.1-linux-x64||0.149.1-win32-arm64||0.149.1-win32-x64'
-
 patchedDependencies:
   node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch

@@ -13,7 +13,7 @@
 // never shadow the derived reference. The deletion dialog distinguishes a
 // reference-free profile from a page-managed key before the credential and
 // settings unsets reach the wire.
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
@@ -31,6 +31,8 @@ const CONFIGURED_EXPECTED = join(SNAPSHOT_DIR, 'configured.expected.md')
 const DECLARED_EXPECTED = join(SNAPSHOT_DIR, 'declared.expected.md')
 const DECLARED_EDIT_EXPECTED = join(SNAPSHOT_DIR, 'declared-edit.expected.md')
 const MODEL_PICKER_EXPECTED = join(SNAPSHOT_DIR, 'model-picker.expected.md')
+const RECOGNITION_EXPECTED = join(SNAPSHOT_DIR, 'recognition.expected.md')
+const RECOGNITION_INVALID_EXPECTED = join(SNAPSHOT_DIR, 'recognition-invalid.expected.md')
 const NATIVE_DELETE_EXPECTED = join(SNAPSHOT_DIR, 'native-delete.expected.md')
 const DELETE_EXPECTED = join(SNAPSHOT_DIR, 'delete.expected.md')
 const MODE = webSnapshotMode()
@@ -221,7 +223,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
       Array.from({ length: count }, () => true),
     )
     await picker.getByRole('button', { name: '取消', exact: true }).click()
-    await settingsDialog.getByRole('button', { name: '取消', exact: true }).click()
+    await settingsDialog.getByRole('listitem').getByRole('button', { name: '取消', exact: true }).click()
   }, 60_000)
 
   it('declares a route the adapter does not ship', async () => {
@@ -239,6 +241,8 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(await dialog.getByLabel('推理强度').count()).toBe(0)
     await dialog.getByRole('button', { name: '添加模型' }).click()
     await dialog.getByLabel('模型 ID 1').fill('acme-large')
+    await dialog.getByRole('button', { name: '模型设置 1' }).click()
+    await dialog.getByRole('checkbox', { name: '支持图片输入' }).check()
     await dialog.getByRole('button', { name: '创建提供方', exact: true }).click()
 
     const row = dialog.getByText('Acme Gateway', { exact: true }).first()
@@ -257,6 +261,47 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  it('saves and reloads the global image-recognition route', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-models-image-recognition'))
+    let dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.getByRole('button', { name: '编辑 Acme Gateway (acme-gateway)' }).click()
+    const recognition = dialog.getByLabel('图片识别模型')
+    await expect.poll(
+      async () => recognition.locator('option').allTextContents(),
+      { timeout: 10_000 },
+    ).toContain('Acme Gateway · acme-large')
+    await recognition.selectOption(JSON.stringify(['acme-gateway', 'acme-large']))
+    await dialog.getByRole('button', { name: '保存图片识别模型', exact: true }).click()
+    await expect.poll(
+      async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
+      { timeout: 10_000 },
+    ).toContain('model: acme-large')
+    const providerCard = dialog.getByRole('listitem').filter({ hasText: 'Acme Gateway' }).first()
+    await providerCard.getByText('自定义设置').click()
+    await providerCard.getByRole('button', { name: '模型设置 1' }).click()
+    const imageInput = providerCard.getByRole('checkbox', { name: '支持图片输入' })
+    await imageInput.uncheck()
+    await providerCard.getByText('该模型是当前已保存的图片识别模型。删除它或关闭图片能力前，请先选择其他图片识别模型。').waitFor()
+    await expect.poll(
+      async () => providerCard.getByRole('button', { name: '保存', exact: true }).isEnabled(),
+    ).toBe(false)
+    await imageInput.check()
+    await providerCard.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.getByRole('button', { name: '模型' }).click()
+    await expect.poll(
+      async () => dialog.getByLabel('图片识别模型').inputValue(),
+      { timeout: 10_000 },
+    ).toBe(JSON.stringify(['acme-gateway', 'acme-large']))
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(RECOGNITION_EXPECTED, snapshot, MODE)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
   it('reopens the name and protocol a declared route was created with', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-declared-identity'))
     const dialog = page.getByRole('dialog', { name: '设置' })
@@ -270,9 +315,17 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(await protocol.inputValue()).toBe('openai-completions')
     const name = dialog.getByLabel('显示名称', { exact: true })
     expect(await name.inputValue()).toBe('Acme Gateway')
+    await dialog.getByRole('button', { name: '模型设置 1' }).click()
+    const imageInput = dialog.getByRole('checkbox', { name: '支持图片输入' })
+    await imageInput.uncheck()
+    await dialog.getByText('该模型是当前已保存的图片识别模型。删除它或关闭图片能力前，请先选择其他图片识别模型。').waitFor()
+    await expect.poll(
+      async () => dialog.getByRole('button', { name: '保存', exact: true }).isEnabled(),
+    ).toBe(false)
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(DECLARED_EDIT_EXPECTED, snapshot, MODE)
 
+    await imageInput.check()
     await protocol.selectOption('anthropic-messages')
     await name.fill('Acme 网关')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
@@ -288,6 +341,32 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('api: anthropic-messages')
     expect(document).toContain('displayName: Acme 网关')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('keeps an externally invalidated recognition route visible until it is cleared', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-models-image-recognition-invalid'))
+    const settingsPath = join(scaffold.harnessHome, 'settings.yaml')
+    const document = await readFile(settingsPath, 'utf8')
+    expect(document).toContain('model: acme-large')
+    await writeFile(settingsPath, document.replace('model: acme-large', 'model: missing-vision'))
+
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    const recognition = dialog.getByLabel('图片识别模型')
+    await expect.poll(
+      async () => recognition.locator('option').allTextContents(),
+      { timeout: 10_000 },
+    ).toContain('acme-gateway/missing-vision · 当前不可用')
+    await dialog.getByText('请选择当前可用且支持图片输入的模型，或清除选择。').waitFor()
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(RECOGNITION_INVALID_EXPECTED, snapshot, MODE)
+
+    await recognition.selectOption('')
+    await dialog.getByRole('button', { name: '保存图片识别模型', exact: true }).click()
+    await expect.poll(
+      async () => /^image-recognition:\r?\n\s+\? model\s*$/m.test(await readFile(settingsPath, 'utf8')),
+      { timeout: 10_000 },
+    ).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -327,7 +406,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'configured.expected.md', 'declared-edit.expected.md', 'declared.expected.md',
       'delete.expected.md', 'empty.expected.md', 'model-picker.expected.md',
-      'native-delete.expected.md',
+      'native-delete.expected.md', 'recognition-invalid.expected.md', 'recognition.expected.md',
     ])
   })
 })

@@ -107,7 +107,11 @@ function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
 
 function resolveBase(): string {
   const location = (globalThis as { location?: { origin?: string } }).location
-  return location?.origin !== undefined && location.origin !== 'null' ? location.origin : INTERNAL_BASE
+  return location?.origin !== undefined
+    && location.origin !== 'null'
+    && !location.origin.startsWith('file:')
+    ? location.origin
+    : INTERNAL_BASE
 }
 
 function assertTarget(channel: string, endpoint: string): void {

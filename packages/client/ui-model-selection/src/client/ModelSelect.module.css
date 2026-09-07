@@ -198,7 +198,15 @@
   min-width: 0;
 }
 
+.modelLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .modelName {
+  min-width: 0;
   overflow: hidden;
   color: inherit;
   font-size: 14px;
@@ -206,6 +214,17 @@
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.visionTag {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 500;
 }
 
 .check {

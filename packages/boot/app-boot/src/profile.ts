@@ -140,8 +140,12 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
     patchReload: 'startup',
   },
   web: {
-    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-gui-app', '@deepseek-ai/dsh-web-app'],
     patchReload: 'live',
+  },
+  desktop: {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-gui-app', '@deepseek-ai/dsh-desktop-app'],
+    patchReload: 'startup',
   },
   headless: {
     bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
@@ -159,6 +163,7 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
 
 /** Installation-owned bundle tuples normalized to the shipped template. */
 const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly string[]> = {
+  web: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
   headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'],
 }
 

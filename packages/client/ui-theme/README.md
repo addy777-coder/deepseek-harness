@@ -1,5 +1,5 @@
 ---
-description: "Theme and content-font-size settings for the dsh web client: --dsw-* token stylesheets, ThemeRuntime state, General settings rows, and the pre-plugin bootstrap."
+description: "Theme and content-font-size settings for the DSH GUI: --dsw-* token stylesheets, ThemeRuntime state, General settings rows, and the pre-plugin bootstrap."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-theme` lets Web GUI users choose `light`, `dark`, or `system` and set conversation content text from 12 to 17 px in Settings. A loopback client stores both values in the `ui-theme` settings namespace, which the local provider persists in `$DSH_HOME/settings.yaml` by default. The plugin resolves `system` through `prefers-color-scheme` and publishes immutable `ThemeSnapshot`s; ui-layout applies each snapshot to the document. The package also ships the `--dsw-*` token stylesheets and injects a synchronous bootstrap so the selected palette and font size apply before the shell loads. Third-party themes can register alias-token overrides through `ctx.theme`.
+`dsh-client-ui-theme` lets Web and Desktop GUI users choose `light`, `dark`, or `system` and set conversation content text from 12 to 17 px in Settings. A loopback client stores both values in the `ui-theme` settings namespace, which the local provider persists in `$DSH_HOME/settings.yaml` by default. The plugin resolves `system` through `prefers-color-scheme` and publishes immutable `ThemeSnapshot`s; ui-layout applies each snapshot to the document. The package also ships the `--dsw-*` token stylesheets and contributes a synchronous bootstrap so the selected palette and font size apply before the shell loads. Third-party themes can register alias-token overrides through `ctx.theme`.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Users switch the color scheme and content font size from two rows in Settings (General section); both choices persist across restarts on a loopback browser. Feature plugins consume the current snapshot through `ctx.theme` and read the `--dsw-*` tokens in CSS; they do not manage theme state themselves.
+Users switch the color scheme and content font size from two rows in Settings (General section); both choices persist across restarts on a local GUI carrier (loopback Web or Desktop). Feature plugins consume the current snapshot through `ctx.theme` and read the `--dsw-*` tokens in CSS; they do not manage theme state themselves.
 
 ### Appearance and font size
 
@@ -37,7 +37,7 @@ A composition can register a third-party theme id with alias-token overrides thr
 
 ### Pre-plugin palette
 
-When the host composition includes an HTTP server, the host half embeds the registered `ui-theme` settings, or schema defaults, into each index response. Before the loading page renders, the browser sets `color-scheme`, `body[data-ds-dark-theme]`, and `--dsh-content-font-size`, so the first paint uses the selected palette and text size.
+The Host half contributes the registered `ui-theme` settings, or schema defaults, through `ClientBootRegistry`. Web renders that row into each index response; Desktop carries it in the IPC boot payload. Before the loading page renders, the Renderer sets `color-scheme`, `body[data-ds-dark-theme]`, and `--dsh-content-font-size`, so the first paint uses the selected palette and text size.
 
 -----
 
@@ -63,7 +63,7 @@ The service owns theme and font-size state and publishes snapshots. The ui-layou
 
 ### Preference persistence
 
-The service provides itself immediately with the schema defaults on a loopback browser, then loads the `ui-theme` namespace and writes each accepted theme or font-size change through the Host settings API. Pushed settings changes and reconnects refetch the namespace. Non-loopback pages do not create that Host-backed scope. The persistence boundary is owned by the [Host-backed preferences note](../../../.agents/notes/implemented/bug-fix/2026-08-06-host-backed-web-preferences.md).
+The service provides itself immediately with the schema defaults on a local GUI carrier, then loads the `ui-theme` namespace and writes each accepted theme or font-size change through the Host settings API. Pushed settings changes and reconnects refetch the namespace. Non-loopback Web pages do not create that Host-backed scope. The persistence boundary is owned by the [Host-backed preferences note](../../../.agents/notes/implemented/bug-fix/2026-08-06-host-backed-web-preferences.md).
 
 </details>
 

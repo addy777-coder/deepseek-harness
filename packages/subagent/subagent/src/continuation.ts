@@ -30,7 +30,14 @@ import type {
   AgentOptions,
   CreateAgentOptions,
 } from '@deepseek-ai/dsh-agent'
-import { ReasoningEffortId, boundContextSummary, contentHasImage, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
+import {
+  ReasoningEffortId,
+  boundContextSummary,
+  contentHasImage,
+  createUserMessage,
+  errorChain,
+  hasImageRecognitionTarget,
+} from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionId , SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
@@ -1148,7 +1155,8 @@ export class SubagentContinuationManager {
   }
 
   /**
-   * Refuse image content addressed to a child whose model accepts text only.
+   * Refuse image content addressed to a child whose model accepts text only
+   * unless the deployment has a verified image-recognition target.
    * Callers guard with `contentHasImage`, so text-only delivery never awaits.
    * The check runs inside the per-child delivery lock, before the message
    * exists, so a rejection leaves no partial user message. When the child's
@@ -1157,7 +1165,7 @@ export class SubagentContinuationManager {
    * text-only projection replaces each image with its stable placeholder.
    * @param agent - the live or freshly materialized child agent.
    * @param signal - caller cancellation bounding the model-info read.
-   * @throws {SubagentError} `MODEL_DOES_NOT_SUPPORT_IMAGES` when the child's resolved model declines image input.
+   * @throws {SubagentError} `MODEL_DOES_NOT_SUPPORT_IMAGES` when neither the child model nor image recognition accepts the image.
    */
   private async assertImageCapable(
     agent: Agent,
@@ -1171,8 +1179,9 @@ export class SubagentContinuationManager {
     if (llm === undefined) return
     const info = await llm.resolveModelInfo(provider, model, signal)
     if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+      if (await hasImageRecognitionTarget(this.ctx, signal)) return
       throw new SubagentError(
-        `Model "${model}" does not support image input.`,
+        `Model "${model}" does not support image input; configure an image recognition model in Settings > Models.`,
         'MODEL_DOES_NOT_SUPPORT_IMAGES',
       )
     }

@@ -40,6 +40,7 @@ export * from './error.ts'
 export * from './api-key.ts'
 export * from './types.ts'
 export * from './content.ts'
+export * from './image-recognition.ts'
 export * from './message.ts'
 export * from './retry-policy.ts'
 export { BlockAssembler } from './assembler.ts'
@@ -604,6 +605,9 @@ export class LlmRuntime extends TypertRemoteService {
         ...model.name === undefined ? {} : { name: model.name },
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+        ...model.inputModalities === undefined
+          ? {}
+          : { inputModalities: [...model.inputModalities] },
       })
     }
     return models

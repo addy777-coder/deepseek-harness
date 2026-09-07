@@ -1,0 +1,77 @@
+.bar {
+  position: relative;
+  z-index: 30;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 138px;
+  align-items: center;
+  height: 40px;
+  padding-left: 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--dsw-specific-sidebar-fill) 92%, transparent), transparent 44%),
+    var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.identity,
+.actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.mark {
+  display: grid;
+  width: 30px;
+  height: 22px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+}
+
+.title {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  -webkit-app-region: no-drag;
+}
+
+.action {
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 86%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled {
+  cursor: default;
+  opacity: 0.42;
+}

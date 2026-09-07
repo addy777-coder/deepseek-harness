@@ -119,3 +119,56 @@ jobs:
           DSH_E2E_MAX_WORKERS: 4
           DSH_EXAMPLE_MODE: lib
         run: pnpm run test:e2e
+
+  desktop-e2e:
+    runs-on: windows-2025
+    name: desktop e2e
+    if: >-
+      github.event_name != 'pull_request'
+      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Enable Developer Mode (symlink support)
+        shell: pwsh
+        run: >-
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+          /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install (immutable)
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Preflight (require DEEPSEEK_API_KEY)
+        shell: pwsh
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DEEPSEEK_API_KEY)) {
+            throw 'DEEPSEEK_API_KEY_EXTERNAL is empty; the Desktop real-API smoke cannot run.'
+          }
+          Write-Output 'DEEPSEEK_API_KEY present.'
+
+      - name: Build Desktop and installed Host closure
+        shell: pwsh
+        run: |
+          pnpm run build:official
+          pnpm --filter @deepseek-ai/dsh-desktop run stage:runtime
+
+      - name: Desktop smoke (real DeepSeek API)
+        shell: pwsh
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
+          DEEPSEEK_BASE_URL: https://api.deepseek.com
+          DSH_DESKTOP_LIVE: '1'
+        run: pnpm run test:desktop

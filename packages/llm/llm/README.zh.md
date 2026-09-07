@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`@deepseek-ai/dsh-llm` 是位于 harness LLM 能力核心的提供方无关模型调用服务。任何向模型提供方发起流式请求的组合都会经过它，它拥有 agent loop（智能体循环）、会话日志和所有插件共同使用的共享词汇——消息、内容块与原始流式分片。借助它，你可以注册提供方适配器、流式发起一次模型调用、列出与发现模型、解析精确模型元数据与调用默认值，并捕获每个提供方的重试策略；每个请求都会被记录，因此始终可以从会话日志重建。它不执行重试，也不拥有任何提供方协议逻辑：适配器翻译各自提供方的格式，可选包 `dsh-llm-retry` 在持久步骤边界上重跑失败的请求。请求在分发前会被深度冻结，因此 middleware 与适配器只能读取，绝不能改写。
+`@deepseek-ai/dsh-llm` 是位于 harness LLM 能力核心的提供方无关模型调用服务。任何向模型提供方发起流式请求的组合都会经过它，它拥有共享的消息、内容块、原始流式分片，以及可选图片识别 Service Definition。借助它，你可以注册提供方适配器、流式发起一次模型调用、列出与发现模型、解析精确模型元数据与调用默认值，并提供图片识别 Service Provider；loop 构造的请求始终可以从会话日志重建。它不执行重试，也不拥有任何提供方协议逻辑：适配器翻译各自提供方的格式，可选插件负责重试执行与辅助图片分析。请求在分发前会被深度冻结，因此 middleware 与适配器只能读取，绝不能改写。
 
 ## 目录
 
@@ -62,6 +62,7 @@ for await (const chunk of ctx.llm.stream({
 - **注册提供方适配器**——一个适配器拥有一个或多个提供方路由，其注册会捕获该路由的重试策略；重复注册同一路由会以 `DUPLICATE_ADAPTER` 失败。
 - **通过配置暴露并激活提供方**——适配器声明可配置提供方路由与 settings namespace，配置界面因此可以激活休眠提供方并编辑连接事实，无需重启。
 - **发现与解析模型**——列出适配器公布的模型、询问端点它提供哪些模型，并解析某个精确模型的上下文窗口、输出默认值、推理（reasoning）强度与输入模态。
+- **提供图片识别**——实现 `ImageRecognition`，验证一个显式图片路由，并为纯文本消费方分析按顺序排列的来源消息图片批次。
 - **校验调用配置**——显式或配置的推理强度会在任何提供方 I/O 之前对照精确模型校验；请求省略输出上限时，会填入适配器配置的输出上限。
 
 ### 失败与恢复
@@ -94,6 +95,7 @@ for await (const chunk of ctx.llm.stream({
 | [`src/retry-policy.ts`](src/retry-policy.ts) | 提供方自有重试策略解析（normal 与 always 模式） |
 | [`src/error.ts`](src/error.ts) | `HarnessError`/`LlmError` 分类体系与提供方无关失败 code |
 | [`src/content.ts`](src/content.ts) | 共享图片内容辅助函数，包括请求图片卸载 |
+| [`src/image-recognition.ts`](src/image-recognition.ts) | 可选图片识别 Service Definition、请求/结果类型与目标可用性辅助函数 |
 | [`src/api-key.ts`](src/api-key.ts) | 每个适配器共享的凭据格式校验 |
 | [`src/adapter-failure.ts`](src/adapter-failure.ts) | 把失败归一化为终止 finish 分片 |
 
@@ -122,6 +124,7 @@ for await (const chunk of ctx.llm.stream({
 - [LLM 流式子系统](../../../docs/subsystems/llm-streaming.zh.md)——消息与块类型、组装后的模型请求、`StreamChunk` 协议与适配器约定。
 - [llm-deepseek 适配器](../llm-deepseek/README.zh.md)——DeepSeek chat-completions 直连实现。
 - [llm-pi-ai 适配器](../llm-pi-ai/README.zh.md)——基于 pi-ai 的多提供方实现。
+- [图片识别](../image-recognition-llm/README.zh.md)——出货的纯文本路由 LLM Service Provider。
 - [llm-retry](../llm-retry/README.zh.md)——重跑失败模型请求的重试执行器。
 - [Token 计量](../token-meter/README.zh.md)——具备回放感知的请求与上下文压力测量。
 - [孪生 LLM 适配器](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.zh.md)——为什么 DeepSeek 路由交付两个结构不同的适配器。

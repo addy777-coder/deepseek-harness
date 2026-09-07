@@ -16,17 +16,17 @@ There is no privileged core to patch: you extend dsh by mounting a plugin beside
 
 A running `dsh` is a plugin tree composed at boot from ordered layers.
 
-A **profile** is a named composition stored in the Harness home. It lists the bundles it stacks, holds any out-of-tree plugins it installs, and keeps the user's own `cordis.patch.yml`. `web`, `headless`, `sdk`, `sdk-minimal`, and `acp` ship as templates.
+A **profile** is a named composition stored in the Harness home. It lists the bundles it stacks, holds any out-of-tree plugins it installs, and keeps the user's own `cordis.patch.yml`. `web`, `desktop`, `headless`, `sdk`, `sdk-minimal`, and `acp` ship as templates.
 
 A **bundle** is a distribution format for Cordis config rows and the code they mount, so whatever it inserts stays patchable by the layers above it.
 
 Each declares itself in its own `package.json` under a `dsh` field: `dsh.profile` lists a profile's bundles, and `dsh.bundle` points at a bundle's patch file.
 
-[`dsh-base`](../packages/bundle/base/README.md) is the shared first layer of the `web`, `headless`, `sdk`, and `acp` profiles: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry. [`dsh-web-app`](../packages/bundle/web-app/README.md) adds the browser application, [`dsh-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server, [`dsh-sdk-app`](../packages/bundle/sdk-app/README.md) adds the SDK JSON-RPC server, and [`dsh-acp-app`](../packages/bundle/acp-app/README.md) adds the automation-only ACP server. [`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.md) is the deliberate exception: one bundle owns its complete explicit SDK tree and does not apply `dsh-base`.
+[`dsh-base`](../packages/bundle/base/README.md) is the shared first layer of the `web`, `desktop`, `headless`, `sdk`, and `acp` profiles: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry. [`dsh-gui-app`](../packages/bundle/gui-app/README.md) adds the shared interactive Host and Client composition; [`dsh-web-app`](../packages/bundle/web-app/README.md) and [`dsh-desktop-app`](../packages/bundle/desktop-app/README.md) select its browser or Electron carrier. [`dsh-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server, [`dsh-sdk-app`](../packages/bundle/sdk-app/README.md) adds the SDK JSON-RPC server, and [`dsh-acp-app`](../packages/bundle/acp-app/README.md) adds the automation-only ACP server. [`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.md) is the deliberate exception: one bundle owns its complete explicit SDK tree and does not apply `dsh-base`.
 
 Layers apply to an empty entry list in this order: each bundle in the profile's listed order, then the profile's `cordis.patch.yml`, then the home-level one, then any `--patch` overlay. A patch targets a row by id and replaces its whole config, or inserts new rows.
 
-Custom profiles default to live patch reload. The shipped `web` profile is live; `headless`, `sdk`, `sdk-minimal`, and `acp` apply all layers once at startup because replacing a one-shot or stdio application's dependencies after it owns work would invalidate that lifecycle.
+Custom profiles default to live patch reload. The shipped `web` profile is live; `desktop`, `headless`, `sdk`, `sdk-minimal`, and `acp` apply all layers once at startup because their owning application or process restarts to replace dependencies safely.
 
 To see the tree your machine boots:
 
@@ -38,9 +38,17 @@ Any row it prints can be replaced by a patch of your own.
 
 Composition mechanics are in [app-boot](../packages/boot/app-boot/README.md#profiles); config fields are in the generated [config catalog](config-catalog.md).
 
+## GUI carriers
+
+The `web` and `desktop` profiles share one GUI row graph: `base + gui-app + carrier`. Connection owns transport-neutral RPC, exact Fetch routes, and logical channels. Client Modules owns the boot injection table, module graph, and immutable bundle artifacts. A carrier exposes those two registries without changing the API wire or Client plugin roster.
+
+The Web carrier starts the HTTP server, enforces Host/Origin checks and browser-session cookies, serves `/plugins`, and renders boot injections into the index HTML. The Desktop carrier starts no listener: an Electron Utility Process runs `dsh --profile desktop`, and the main process transfers one MessagePort per sandboxed Renderer. Boot injections and bundle bytes use that port, while the main process handles only lifecycle and operating-system integration.
+
+DSH Desktop uses startup-only profile patches. Plugin changes stop the Host, replace the complete profile, require the new Host to reach ready, and restore the previous profile on failure. This restart transaction replaces live HMR for the Desktop carrier.
+
 ## Application launch
 
-Every supported Node application starts at the `dsh` CLI with a named profile. The shipped applications are `dsh web` (the deliberate alias for `--profile web`), `dsh --profile headless`, `dsh --profile sdk`, `dsh --profile sdk-minimal`, and `dsh --profile acp`. The TypeScript SDK resolves its same-version `dsh` dependency and selects `sdk`; custom plugin composition remains a profile plus ordered patch files, not another executable or inline application tree. `sdk-minimal` is a repository-owned standalone bundle behind the same launcher, not a caller-supplied Cordis tree.
+Every supported Node application starts at the `dsh` CLI with a named profile. The shipped applications are `dsh web` (the deliberate alias for `--profile web`), the Electron-owned `dsh --profile desktop` Host, `dsh --profile headless`, `dsh --profile sdk`, `dsh --profile sdk-minimal`, and `dsh --profile acp`. The TypeScript SDK resolves its same-version `dsh` dependency and selects `sdk`; DSH Desktop invokes the same CLI inside its Utility Process. Custom plugin composition remains a profile plus ordered patch files, not another executable or inline application tree. `sdk-minimal` is a repository-owned standalone bundle behind the same launcher, not a caller-supplied Cordis tree.
 
 Vendored CLIs, build-only and test-only executables, direct in-process plugin mounting, and the private browser WebWorker preview are not Harness application launchers. [`verify-application-entrypoints`](../scripts/verify-application-entrypoints.ts) keeps every package bin, executable source, and root demo in an explicit class and rejects a Node application path that bypasses `dsh`.
 
@@ -83,8 +91,10 @@ turn/start
      reject, or a first enter rewritten empty -> close the turn with no step
      step/start
      append entered messages as user/message
-     derive model history from the log
-     agent/request -> llm/stream -> assistant/chunk* -> assistant/message
+     agent/request -> prepare exact model route
+     agent/request-context -> append returned user/message*
+     derive model history and request/header from the log
+     llm/stream -> assistant/chunk* -> assistant/message
      tool/call* -> tools/pre-execute -> tools/execute -> tools/post-execute -> tool/result*
      step/end
      tools owe another request, or next-step input arrived -> claim -> next step
@@ -92,11 +102,13 @@ turn/start
 turn/end
 ```
 
-`turn/*`, `step/*`, `user/message`, `assistant/*`, and `tool/*` are durable session events; the rest are live extension points across three domains. `agent/pre-step`, `agent/request`, `llm/stream`, and the three `tools/*` events are waterfalls, whose listeners must call `next()` to delegate; `agent/turn-stopping` is serial and has no `next()`.
+`turn/*`, `step/*`, `user/message`, `assistant/*`, and `tool/*` are durable session events; the rest are live extension points across three domains. `agent/pre-step`, `agent/request`, `agent/request-context`, `llm/stream`, and the three `tools/*` events are waterfalls, whose listeners must call `next()` to delegate; `agent/turn-stopping` is serial and has no `next()`.
 
 Input reaches the driver through one inbox. Some messages wake it immediately; injected context waits in the inbox until another message does.
 
 `agent/pre-step` decides what the model sees. Listeners may rewrite the claimed messages or reject them outright; a rejected or empty first claim still closes a durable turn that spent no step, so the log records the attempt. An enter decision may also set `startsRequestSeries` to begin a distinct model-message series: the loop then logs a fresh `request/header` (reason `series`, or `change` carrying `startsSeries: true` when the envelope changed too). A listener that rebuilds a downstream enter decision must spread it (`{ ...decision, messages }`) so the declaration survives. Each step reads the prompt sections and tool schemas that plugins registered.
+
+`agent/request-context` runs after `agent/request` selects and prepares the exact model. The loop has already appended the step's claimed input, and it appends every context message returned by the waterfall before deriving and freezing the request. Plugins use this point for model-dependent generated context; they never rewrite a loop-built request inside `llm/stream`.
 
 Details: the [sequence diagram](agent-lifecycle.md), the [tool pipeline](tool-execution-pipeline.md), and [cancellation and error recovery](subsystems/core.md#the-agent-handle).
 

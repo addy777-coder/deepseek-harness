@@ -15,6 +15,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import * as Connection from '@deepseek-ai/dsh-client-connection'
+import * as ConnectionWeb from '@deepseek-ai/dsh-client-connection/web'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import * as FrontendStatic from '../src/index.ts'
@@ -51,6 +52,7 @@ async function loadComposition(): Promise<Context> {
     "    host: '127.0.0.1'",
     '    port: 0',
     "- name: '@deepseek-ai/dsh-client-connection'",
+    "- name: '@deepseek-ai/dsh-client-connection/web'",
     '- id: frontend',
     "  name: '@deepseek-ai/dsh-host-frontend-static'",
     '  config:',
@@ -66,6 +68,7 @@ async function loadComposition(): Promise<Context> {
     ['@deepseek-ai/dsh-credentials-local', LocalCredentials],
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
     ['@deepseek-ai/dsh-client-connection', Connection],
+    ['@deepseek-ai/dsh-client-connection/web', ConnectionWeb],
     ['@deepseek-ai/dsh-host-frontend-static', FrontendStatic],
   ])
   context.loader.internal = {
@@ -104,7 +107,7 @@ describe('real Loader composition', () => {
     expect(unloaded).toEqual([])
     const server = loaded.webServer
     const port = server.port
-    const launchUrl = loaded.connection.authenticatedUrl(`http://127.0.0.1:${String(port)}`)
+    const launchUrl = loaded.webConnection.authenticatedUrl(`http://127.0.0.1:${String(port)}`)
     const exchange = await fetch(launchUrl, { redirect: 'manual' })
     expect(exchange.status).toBe(303)
     expect(exchange.headers.get('location')).toBe('/')

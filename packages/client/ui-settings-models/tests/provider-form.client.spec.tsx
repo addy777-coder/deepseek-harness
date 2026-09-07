@@ -256,6 +256,23 @@ describe('protocolChoices', () => {
 })
 
 describe('model list editing', () => {
+  it('marks a custom model as visual and persists explicit image input', async () => {
+    const { mutate } = await mountSection()
+    openEditor('openai')
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'vision-model' } })
+    expandModel(1)
+
+    fireEvent.click(screen.getByLabelText(en.modelImageInput))
+    expect(screen.getByText(en.visionTag)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'vision-model', input: ['text', 'image'] },
+    ])
+  })
+
   it('adds, edits, and removes rows without storing emptied optional fields', async () => {
     const { mutate } = await mountSection()
     openEditor('openai')
@@ -313,7 +330,7 @@ describe('model list editing', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     // What lands in settings is always a plain token count.
     expect(firstMutate(mutate).ops[0]?.value)
-      .toEqual([{ id: 'm', contextWindow: 1_000_000, maxTokens: 1000 }])
+      .toEqual([{ id: 'm', contextWindow: 1_000_000, maxTokens: 1000, input: ['text'] }])
   })
 
   it('refuses to apply while a capacity is unreadable', async () => {
@@ -548,7 +565,7 @@ describe('endpoint interrogation', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
       { id: 'kept', contextWindow: 111 },
-      { id: 'fresh', contextWindow: 4096, name: 'Fresh' },
+      { id: 'fresh', contextWindow: 4096, name: 'Fresh', input: ['text'] },
     ])
   })
 
@@ -658,7 +675,10 @@ describe('endpoint interrogation', () => {
 
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     // A disclosed output cap rides along with the candidate that has one.
-    expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'a' }, { id: 'b', maxTokens: 2048 }])
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'a', input: ['text'] },
+      { id: 'b', maxTokens: 2048, input: ['text'] },
+    ])
   })
 
   it('filters by model id or name and scopes bulk selection to visible candidates', async () => {
@@ -795,7 +815,7 @@ describe('hand-declared providers', () => {
           apiKeyEnv: 'ACME_GATEWAY_API_KEY',
           api: 'openai-completions',
           baseURL: 'https://gateway.acme.example/v1',
-          models: [{ id: 'acme-large', contextWindow: 65_536 }],
+          models: [{ id: 'acme-large', contextWindow: 65_536, input: ['text'] }],
         },
       }],
       // The section this card was drafted over: a route another tab declared
@@ -1247,7 +1267,7 @@ describe('hand-declared providers', () => {
     expect(firstMutate(mutate).ops[0]?.value).toEqual({
       api: 'anthropic-messages',
       baseURL: 'https://acme.test/v1',
-      models: [{ id: 'm' }],
+      models: [{ id: 'm', input: ['text'] }],
     })
   })
 
