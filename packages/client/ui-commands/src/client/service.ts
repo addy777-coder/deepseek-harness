@@ -16,7 +16,7 @@ import type { CommandResult } from '@deepseek-ai/dsh-commands/types'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
+import type { Translate, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type {
   CandidateRequest, ClientSessionContext, CommandClaim, PickOutcome, InputTriggerCandidate, InputTriggerPick,
   SubmitEnvelope, SubmitImageAttachment, SubmitOutcome,
@@ -104,6 +104,26 @@ function fuzzyScore(name: string, query: string): number | undefined {
   return best === noMatch ? undefined : best
 }
 
+/**
+ * Localize one host command's menu description: the `description.<name>`
+ * dictionary key wins when the active locale provides it, otherwise the wire
+ * text renders verbatim. Host commands publish their descriptions through the
+ * catalog, so an unknown name (third-party or newly added) falls back instead
+ * of showing a dictionary key.
+ * @param t - the `command`-namespace translate (reads the active locale at call time).
+ * @param name - host command name without the leading slash.
+ * @param wire - the description the host catalog served.
+ * @returns the localized row text.
+ */
+function localizedHostDescription(t: TranslateNS<'command'>, name: string, wire: string): string {
+  const key = `description.${name}`
+  // Open-ended by definition: the key union reads the typed `command`
+  // namespace, while unknown names must still translate and fall back, so
+  // widen to the plain string-form translate like the composer hint seat.
+  const translated = (t as Translate)(key)
+  return translated !== key ? translated : wire
+}
+
 /** Case-insensitive fuzzy filtering with stable ordering for equal matches. */
 function fuzzyCandidates(candidates: readonly InputTriggerCandidate[], rawQuery: string): readonly InputTriggerCandidate[] {
   const query = rawQuery.toLowerCase()
@@ -125,7 +145,7 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
 
   private readonly directory: CommandDirectory
   private readonly live: LiveState = { contributions: new Map(), decorations: new Map(), popups: new Map() }
-  /** `command`-namespace translator (composer refusal notices). */
+  /** `command`-namespace translator (composer refusal notices + host row localization). */
   private readonly t: TranslateNS<'command'>
 
   /**
@@ -253,7 +273,11 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     const seen = new Set<string>()
     for (const c of list) {
       seen.add(c.name)
-      rows.push({ name: c.name, description: c.description, ...(c.input !== undefined ? { hint: c.input.hint } : {}) })
+      rows.push({
+        name: c.name,
+        description: localizedHostDescription(this.t, c.name, c.description),
+        ...(c.input !== undefined ? { hint: c.input.hint } : {}),
+      })
     }
     for (const contribution of this.live.contributions.values()) {
       if (!contribution.available(session)) continue

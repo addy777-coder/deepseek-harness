@@ -92,7 +92,7 @@ type CommandResult =
 
 ## 发现与解析视图
 
-作用域解析后，适配器会获得不含处理器的不可变描述符。`parseCommand()` 在注册表解析前返回 `ParsedCommand`；语法有效的输入仍可能指向不可用的命令。
+作用域解析后，适配器会获得不含处理器的不可变描述符。Web GUI 通过自身 `command` 命名空间的 `description.<name>` 键渲染宿主描述符的 `description`，并以 wire 原文回退，因此目录文本同时作为稳定的英文/源文本，而浏览器本地化该行；`parseCommand()` 在注册表解析前返回 `ParsedCommand`；语法有效的输入仍可能指向不可用的命令。
 
 ```ts type-equiv
 /** Handler-free immutable command view returned to UI adapters. */

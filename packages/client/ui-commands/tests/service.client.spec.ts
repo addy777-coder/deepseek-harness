@@ -40,6 +40,12 @@ interface BenchOptions {
   commands?: (payload: { sessionId: SessionId }) => Promise<{ commands: CommandDescriptor[] }>
   execute?: (payload: { sessionId: SessionId; line: string }) => Promise<ExecuteValue>
   addressed?: SessionId
+  /**
+   * Programmed `description.<name>` translations: a key mapping to a string
+   * localizes the host row; undefined leaves the key unresolved so the wire
+   * description wins. Absent = no host descriptions resolve (fallback path).
+   */
+  descriptionFor?: (key: string) => string | undefined
 }
 
 /**
@@ -95,10 +101,23 @@ async function bench(opts: BenchOptions = {}) {
       return () => { registered.delete(key) }
     },
   })
-  // Deterministic key-echo translator: notice assertions read `key{json}`.
+  // Deterministic fake locale: `description.*` keys resolve through the
+  // scripted descriptionFor (defaulting to unresolved → the key itself, the
+  // missing-key contract exercised by the production fallback); every other
+  // key echoes `ns:key` so the popup shell's notice assertions read
+  // `key{json}` unchanged.
+  const stubTranslate = (key: string, params?: Record<string, unknown>): string => {
+    if (key.startsWith('description.')) {
+      const localized = opts.descriptionFor?.(key)
+      if (localized !== undefined) return localized
+      return key
+    }
+    return `command:${key}${params === undefined ? '' : JSON.stringify(params)}`
+  }
   ctx.provide('locale', {
+    // The `command`-namespace seat every existing assertion already relies on.
     bind: (ns: string) => (key: string, params?: Record<string, unknown>) =>
-      `${ns}:${key}${params === undefined ? '' : JSON.stringify(params)}`,
+      ns === 'command' ? stubTranslate(key, params) : `${ns}:${key}${params === undefined ? '' : JSON.stringify(params)}`,
   })
   // Real scope tags behind a fake sessions face.
   const scopes = new Map<SessionId, { ctx: Context; fiber: { dispose(): Promise<void> } }>()
@@ -229,6 +248,24 @@ describe('candidates', () => {
     await expect(names('query-longer-than-every-name')).resolves.toEqual([])
   })
 
+  it('localizes host rows through description.* when the locale provides them', async () => {
+    const { source, warm } = await bench({
+      descriptionFor: key => key === 'description.plan' ? '进入或离开计划模式' : undefined,
+    })
+    await warm(proj('s1'))
+    const list = await source.candidates(proj('s1'), req(''))
+    expect(list.find(c => c.name === 'plan')?.description).toBe('进入或离开计划模式')
+    // Unlocalized host rows keep the wire description, never a dictionary key.
+    expect(list.find(c => c.name === 'goal')?.description).toBe('leadingInput kind')
+  })
+
+  it('a host row with no dictionary entry falls back to the wire description', async () => {
+    const { source, warm } = await bench()
+    await warm(proj('s1'))
+    const list = await source.candidates(proj('s1'), req(''))
+    expect(list.find(c => c.name === 'plan')?.description).toBe('bare kind')
+  })
+
   it('catalogs are per session: another session pulls its own key', async () => {
     const { source, listCalls } = await bench()
     const names = (await source.candidates(proj('s2'), req(''))).map(c => c.name)
@@ -245,10 +282,15 @@ describe('candidates', () => {
   it('merges available contributions and filters unavailable ones with the per-call projection', async () => {
     const { command, source } = await bench()
     const available = vi.fn((session: ClientSessionContext) => session.sessionId === sid('s1'))
-    command.register(themeContribution({ available }))
+    const contribution = themeContribution({ name: 'theme', description: 'contrib text', available })
+    command.register(contribution)
     const s1Names = (await source.candidates(proj('s1'), req(''))).map(c => c.name)
     expect(s1Names).toEqual(['plan', 'goal', 'theme'])
     expect(available).toHaveBeenLastCalledWith(proj('s1'))
+    // A contribution's own description rides its authoring string, untouched
+    // by the host-row dictionary keys.
+    const s1 = await source.candidates(proj('s1'), req('theme'))
+    expect(s1.find(c => c.name === 'theme')?.description).toBe('contrib text')
     const s2Names = (await source.candidates(proj('s2'), req(''))).map(c => c.name)
     expect(s2Names).not.toContain('theme')
   })

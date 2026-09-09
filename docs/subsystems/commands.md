@@ -92,7 +92,7 @@ type CommandResult =
 
 ## Discovery and parsing views
 
-Adapters receive handler-free immutable descriptors after scope resolution. `parseCommand()` returns `ParsedCommand` before registry resolution; syntax-valid input can still name an unavailable command.
+Adapters receive handler-free immutable descriptors after scope resolution. The Web GUI renders a host descriptor's `description` through its own `command`-namespace `description.<name>` keys with a wire fallback, so the catalog text doubles as the stable English/source text while the browser localizes the row; `parseCommand()` returns `ParsedCommand` before registry resolution; syntax-valid input can still name an unavailable command.
 
 ```ts type-equiv
 /** Handler-free immutable command view returned to UI adapters. */

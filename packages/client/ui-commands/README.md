@@ -31,6 +31,10 @@ Mount this plugin alongside `ui-input-trigger` and `ui-conversation`; the `/` so
 
 A contribution is a client-owned command — a host-name collision fails loud. A decoration adds a bare-invocation popup to an EXISTING host command: the host command keeps its catalog row, its argument claim, and its lifecycle logging, and a decorated name with no host row in the session's directory never fires. Menu queries fuzzy-match ordered, case-insensitive subsequences of command names; prefixes rank first.
 
+### Localizing host descriptions
+
+Host commands publish their menu descriptions through the command catalog, so the `/` menu renders them through the `command` namespace `description.<name>` keys: a key the active locale provides replaces the wire text, an unknown name falls back to the wire description verbatim (never a dictionary key), and the row re-reads the active locale on every candidate build — a language switch refreshes the menu without re-registering anything. Client contributions keep describing themselves through their owning feature's dictionaries.
+
 ### Image-carrying submissions
 
 When the composer submits with image attachments, only a host command declaring `input.images` proceeds; every other command route throws the localized `imagesUnsupported` refusal, which renders as a transient toast while the draft and images stay in place — a command can never consume the text and strand the images.
@@ -79,6 +83,7 @@ None directly; this package neither assembles nor sends a provider request. Comm
 These limits define the current command surface. They are current package constraints, not a general command-line comparison or a task backlog.
 
 - **Detached-result notices fall back to the console off-session** — the fire-and-forget paths route results to the triggering session's composer via `SessionInput.notify`; after session teardown the console line is the only remaining surface.
+- **Client contribution descriptions are registry-held** — a contribution row such as `/model` captures its description through its owning feature's dictionary at registration time and keeps that language until re-registration; host rows re-read the active locale on every candidate build.
 
 <a id="dev-note"></a>
 ### Dev Note
