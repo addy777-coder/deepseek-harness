@@ -1,0 +1,28 @@
+# Run from the repository root after saving the company VPN and model settings.
+# Disconnect the desktop VPN before launching this separate acceptance process.
+- id: headless-startup
+  disabled: true
+
+- id: headless-runner
+  disabled: true
+
+- insert:
+    - id: network-openvpn
+      name: ../../../packages/network/network-openvpn/src/index.ts
+      config:
+        executablePath: !!js "process.cwd() + '/native/vpn/dist/windows-x64/dsh-vpn.exe'"
+
+    - id: vpn-live-acceptance
+      name: ./live-acceptance-plugin.ts
+      inject: [agentDefaultModel]
+      config:
+        provider: gongsi
+        model: !!js ctx.agentDefaultModel.currentSelection().model
+        requestTimeoutMs: 180000
+        maxTokens: 8192
+        minimumLongResponseChars: 10000
+        checkDiscovery: true
+        connectionTimeoutMs: 90000
+        snapshotTimeoutMs: 30000
+        shutdownGraceMs: 5000
+        reportPath: !!js "process.env.DSH_VPN_LIVE_REPORT_PATH ?? process.cwd() + '/native/vpn/.cache/live-acceptance-' + Date.now() + '.json'"

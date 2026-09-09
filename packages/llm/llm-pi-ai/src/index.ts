@@ -62,6 +62,7 @@ import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigu
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-settings'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
+import { networkTargetId } from '@deepseek-ai/dsh-network'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
@@ -165,6 +166,35 @@ export function apply(ctx: Context, config: Config): void {
     return next
   }
   profiles()
+  const targetId = (provider: string) => networkTargetId(`${NS}:${provider}`)
+  const resolveFetch = (provider: string): typeof globalThis.fetch => {
+    const network = ctx.get('network')
+    if (network === undefined) {
+      throw new LlmError(`llm-pi-ai: provider "${provider}" requires the VPN network service`, 'VPN_UNAVAILABLE')
+    }
+    return (input, init) => network.fetch(targetId(provider), input, init)
+  }
+  let refreshNetworkTargets = (): void => {}
+  ctx.inject(['network'], (networkCtx) => {
+    const targets = new Map<string, { baseURL: string; dispose: () => void }>()
+    const refresh = (): void => {
+      const wanted = new Map([...profiles()].flatMap(([provider, profile]) =>
+        profile.network === 'vpn' && profile.baseURL !== undefined ? [[provider, profile.baseURL] as const] : []))
+      for (const [provider, target] of targets) {
+        if (wanted.get(provider) === target.baseURL) continue
+        target.dispose()
+        targets.delete(provider)
+      }
+      for (const [provider, baseURL] of wanted) {
+        if (targets.has(provider)) continue
+        const dispose = networkCtx.effect(() => networkCtx.network.registerTarget(targetId(provider), { baseURL }))
+        targets.set(provider, { baseURL, dispose: () => { void dispose() } })
+      }
+    }
+    refreshNetworkTargets = refresh
+    refresh()
+    networkCtx.effect(() => () => { refreshNetworkTargets = (): void => {} })
+  })
 
   const resolveApiKey = async (
     provider: string,
@@ -198,6 +228,7 @@ export function apply(ctx: Context, config: Config): void {
   const adapter = new PiAiAdapter({
     profiles,
     resolveApiKey,
+    resolveFetch,
     auth,
     resolveAttachments: () => ctx.get('attachments'),
     resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
@@ -248,8 +279,12 @@ export function apply(ctx: Context, config: Config): void {
     const profile = profiles().get(provider)
     if (profile === undefined) return undefined
     return {
+      network: profile.network,
+      baseURL: profile.baseURL,
+      api: profile.api,
       headers: profile.headers,
       resolveApiKey: () => resolveApiKey(provider, profile),
+      resolveFetch: () => resolveFetch(provider),
     }
   }
   // Interrogating an endpoint is a configuration-time action over a draft, so
@@ -303,6 +338,7 @@ export function apply(ctx: Context, config: Config): void {
         current = source
       },
       onChange: () => {
+        refreshNetworkTargets()
         // Named here rather than left to the settings watcher: `assertServiceable`
         // cannot see the llm registry, so a profile claiming a route another
         // adapter family owns is stored successfully and only fails at this swap.

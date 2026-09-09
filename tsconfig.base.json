@@ -28,6 +28,15 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
+      "@deepseek-ai/dsh-network": ["./packages/network/network/src/index.ts"],
+      "@deepseek-ai/dsh-network/types": ["./packages/network/network/src/types.ts"],
+      "@deepseek-ai/dsh-network-openvpn": ["./packages/network/network-openvpn/src/index.ts"],
+      "@deepseek-ai/dsh-api-vpn-controller": ["./packages/api/vpn-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-vpn-controller/types": ["./packages/api/vpn-controller/src/types.ts"],
+      "@deepseek-ai/dsh-api-vpn-controller/client": ["./packages/api/vpn-controller/src/client/index.ts"],
+      "@deepseek-ai/dsh-api-vpn-controller/remote": ["./packages/api/vpn-controller/lib/typert.remote-client.d.ts"],
+      "@deepseek-ai/dsh-client-ui-vpn": ["./packages/client/ui-vpn/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-vpn/client": ["./packages/client/ui-vpn/src/client/index.ts"],
       "@deepseek-ai/cordis": ["./vendor/cordis/src"],
       "@deepseek-ai/cosmokit": ["./vendor/cosmokit/src"],
       "@deepseek-ai/schemastery": ["./vendor/schemastery/src"],
@@ -52,6 +61,9 @@
       "@deepseek-ai/dsh-api-settings-controller": ["./packages/api/settings-controller/src/index.ts"],
       "@deepseek-ai/dsh-api-settings-controller/types": ["./packages/api/settings-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-workspace-controller": ["./packages/api/workspace-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-usage-controller": ["./packages/api/usage-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-usage-controller/client": ["./packages/api/usage-controller/src/client/index.ts"],
+      "@deepseek-ai/dsh-api-usage-controller/types": ["./packages/api/usage-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-workspace-controller/client": ["./packages/api/workspace-controller/src/client/index.ts"],
       "@deepseek-ai/dsh-api-workspace-controller/types": ["./packages/api/workspace-controller/src/types.ts"],
       "@deepseek-ai/dsh-typert-protocol": ["./packages/typert/protocol/src/index.ts"],
@@ -204,6 +216,7 @@
       "@deepseek-ai/dsh-client-ui-trajectory": ["./packages/client/ui-trajectory/src"],
       "@deepseek-ai/dsh-client-ui-workspace": ["./packages/client/ui-workspace/src"],
       "@deepseek-ai/dsh-client-ui-theme": ["./packages/client/ui-theme/src"],
+      "@deepseek-ai/dsh-client-ui-usage": ["./packages/client/ui-usage/src"],
       "@deepseek-ai/dsh-client-ui-settings": ["./packages/client/ui-settings/src"],
       "@deepseek-ai/dsh-client-ui-settings-general": ["./packages/client/ui-settings-general/src"],
       "@deepseek-ai/dsh-client-ui-settings-models": ["./packages/client/ui-settings-models/src"],

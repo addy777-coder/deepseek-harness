@@ -8,6 +8,7 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/desktop/tests/vpn-artifact.spec.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",
     "apps/web/tests/github-ready-review.e2e.ts",
@@ -31,6 +32,8 @@
     "apps/web/tests/details-session-lifecycle.e2e.ts",
     "apps/web/tests/plugin-config.e2e.ts",
     "apps/web/tests/settings-chrome.e2e.ts",
+    "apps/web/tests/usage-statistics.e2e.ts",
+    "apps/web/tests/vpn-settings.e2e.ts",
     "apps/web/tests/models-settings.e2e.ts",
     "apps/web/tests/onboarding-deepseek-config.e2e.ts",
     "apps/web/tests/onboarding-usable-provider.e2e.ts",
@@ -119,6 +122,10 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
+    { "path": "./apps/desktop/tsconfig.main.json" },
+    { "path": "./packages/network/network" },
+    { "path": "./packages/network/network-openvpn" },
+    { "path": "./packages/api/vpn-controller/tsconfig.host.json" },
     { "path": "./vendor/cosmokit" },
     { "path": "./vendor/schemastery" },
     { "path": "./vendor/cordis" },
@@ -154,6 +161,7 @@
     { "path": "./packages/api/session-controller/tsconfig.host.json" },
     { "path": "./packages/api/settings-controller" },
     { "path": "./packages/api/workspace-controller/tsconfig.host.json" },
+    { "path": "./packages/api/usage-controller/tsconfig.host.json" },
     { "path": "./packages/typert/loader" },
     { "path": "./packages/session/session-persistence" },
     { "path": "./packages/session/session-checkpoint-policy" },

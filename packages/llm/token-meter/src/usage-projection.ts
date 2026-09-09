@@ -21,6 +21,12 @@ const zeroBuckets = (): TokenUsageProjection => ({
 const bucketsFrom = (usage: TokenUsage): TokenUsageProjection => ({
   uncachedInputTokens: usage.inputTokens,
   outputTokens: usage.outputTokens,
+  // An adapter that reports cache buckets only when non-zero (pi-ai before
+  // it guaranteed the field) leaves the bucket absent; a missing bucket is a
+  // zero bucket, so absence never demotes a later genuine hit to zero here.
+  // Exact totals remain trustworthy because the same proviso already applies:
+  // a provider-reported total not reproduced by the disjoint buckets is
+  // rejected in `normalizeTokenUsage`, never reconciled here.
   cacheReadTokens: usage.cacheReadTokens ?? 0,
   cacheWriteTokens: usage.cacheWriteTokens ?? 0,
 })

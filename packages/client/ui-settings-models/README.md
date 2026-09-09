@@ -35,6 +35,8 @@ The primary field on an editor card is a single **API key** input — the page n
 
 The collapsed 自定义设置 fold carries the curated extras: `baseURL` for both families, each adapter's model catalog, and the **display name** and **API protocol** of a pi-ai route the adapter does not ship. Each model row edits id, display name, capacities, and **Supports image input**; the switch writes the adapter's existing per-model modality field and a confirmed image model gains a **Vision** tag. Endpoint discovery cannot prove modalities, so a newly adopted model starts text-only until the user enables the switch. Profile headers and other advanced fields remain in `settings.yaml`, while fields outside the curated set survive edits.
 
+Pi-ai provider cards also offer **Connection**: **Direct** or **Built-in VPN**. VPN sends this provider's requests through the configured VPN service and stops when that service is unavailable. It requires an API key and the Anthropic Messages protocol. Save a new VPN provider or changed connection settings before using **Fetch available models**.
+
 ### Image recognition
 
 The page binds the live `image-recognition` settings namespace to one exact provider/model selector above the provider rows. It lists only currently registered models whose resolved metadata explicitly includes image input and keeps a saved missing route visible so the user can clear it. Saving never sends a test image. The card states that images go to the selected model's provider, and a provider editor refuses to delete that model or disable its image capability until another recognition model is saved.

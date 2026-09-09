@@ -98,6 +98,8 @@ export interface PiAiProviderProfile {
   api?: string
   /** Endpoint for this route's models; defaults to the installed catalog's endpoint. */
   baseURL?: string
+  /** Network route for provider HTTP requests; VPN requires the network service. */
+  network?: 'direct' | 'vpn'
   /**
    * This route's model catalog. Omission serves the installed catalog for the
    * route unchanged; an explicit list replaces it, each entry defaulting its
@@ -185,6 +187,8 @@ export interface ResolvedPiAiProviderProfile
   provider: string
   /** Resolved display name for selectors and configuration surfaces. */
   displayName: string
+  /** Network route after defaulting; direct requests do not use the network service. */
+  network: 'direct' | 'vpn'
   /** Validated credential reference, when one is configured. */
   apiKeyEnv?: CredentialRef
   /** Positive finite provider-idle interval after defaulting. */
@@ -316,6 +320,7 @@ const profile = z.object({
   displayName: z.string(),
   api: z.union(supportedProtocols()),
   baseURL: z.string(),
+  network: z.union(['direct', 'vpn']).default('direct'),
   models: z.array(modelProfile),
   modelOverrides: z.dict(modelOverride),
   compat: compatProfile,
@@ -459,11 +464,32 @@ export function resolveProfiles(
       defaultContextWindow: source.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
       defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
     })
+    const network = source.network ?? 'direct'
+    if (network === 'vpn') {
+      if (source.api !== 'anthropic-messages') {
+        throw new Error(`llm-pi-ai: provider "${provider}" VPN requires api anthropic-messages`)
+      }
+      if (source.baseURL === undefined) {
+        throw new Error(`llm-pi-ai: provider "${provider}" VPN requires an explicit baseURL`)
+      }
+      const endpoint = new URL(source.baseURL)
+      if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username !== ''
+        || endpoint.password !== '' || endpoint.search !== '' || endpoint.hash !== '') {
+        throw new Error(`llm-pi-ai: provider "${provider}" VPN baseURL must be an HTTP(S) URL without credentials, query, or fragment`)
+      }
+      if (source.apiKeyEnv === undefined) {
+        throw new Error(`llm-pi-ai: provider "${provider}" VPN requires an apiKeyEnv credential reference`)
+      }
+      if (source.transport !== undefined && source.transport !== 'sse') {
+        throw new Error(`llm-pi-ai: provider "${provider}" VPN supports only the sse streaming transport`)
+      }
+    }
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
     resolved.set(provider, {
       ...rest,
       provider,
       displayName,
+      network,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
       maxRequestImageBytes,
@@ -480,6 +506,7 @@ export function resolveProfiles(
         ...source.baseURL === undefined ? {} : { baseURL: source.baseURL },
         models: catalog.models,
         namesCredential: apiKeyEnv !== undefined,
+        isolatedAuth: network === 'vpn',
       }),
     })
   }

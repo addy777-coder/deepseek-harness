@@ -1,0 +1,29 @@
+DeepSeek Harness VPN helper
+
+The dsh-vpn executable and its original helper source are distributed under
+GNU GPL version 3 only. The accompanying sources/dsh-vpn-corresponding-source.zip
+contains the complete corresponding source, dependency sources, patches and
+build scripts. Unpack it and follow README.md. No warranty is provided.
+
+OpenVPN 3 Core, Copyright OpenVPN Inc. and contributors.
+The selected license for dual-licensed MPL-2.0 OR AGPL-3.0-only files is MPL-2.0.
+openvpn/crypto/tls_crypt_v2.hpp and openvpn/openssl/util/pem.hpp are GPL-3.0-only.
+Their combination with the other compiled sources is distributed under GPL-3.0.
+File-specific notices remain in the source. See openvpn-compiled-files.json,
+OpenVPN3-NOTICE.txt, the OpenVPN3 license texts and GPL-3.0.txt.
+The copied Unicode CVTUTF 2001-2004 notice is in Unicode-CVTUTF.txt.
+
+lwIP: BSD-3-Clause; see lwIP.txt and the original source notices.
+Asio: BSL-1.0; see asio.txt. OpenVPN's six Asio patches are in the source archive.
+fmt: MIT; see fmt.txt.
+JsonCpp: public domain or MIT; see jsoncpp.txt.
+LZ4: BSD-2-Clause library; see lz4.txt.
+OpenSSL 3.6: Apache-2.0; see openssl.txt.
+xxHash: BSD-2-Clause library; see xxhash.txt.
+tap-windows6 public header: MIT; see tap-windows6.txt.
+Only the tap-windows6 header is compiled. No TAP driver is distributed or used.
+
+The Microsoft C/C++ runtime is statically linked under the Visual Studio
+redistribution terms. The executable imports only Windows system libraries.
+Build tools and the Windows SDK are separately supplied prerequisites.
+The pinned vcpkg source and its MIT notice are included in the source archive.

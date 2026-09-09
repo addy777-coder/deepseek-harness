@@ -33,6 +33,8 @@ import {
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
+import type { ProbeTarget } from './ModelListEditor.tsx'
+import { NetworkField } from './NetworkField.tsx'
 import { deriveKeyRef, protocolChoices } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
@@ -243,7 +245,11 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // an edited-but-unsaved endpoint, and a key typed but not yet stored.
   const probeApi = stringAt(draft, 'api') ?? stringAt(fallback, 'api')
   const probeBaseURL = stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL')
-  const probe = {
+  const network = (stringAt(draft, 'network') ?? stringAt(fallback, 'network')) === 'vpn' ? 'vpn' : 'direct'
+  const savedNetwork = stringAt(fallback, 'network') === 'vpn' ? 'vpn' : 'direct'
+  const unsavedNetwork = network !== savedNetwork || (network === 'vpn'
+    && (probeBaseURL !== stringAt(fallback, 'baseURL') || probeApi !== stringAt(fallback, 'api')))
+  const probe: ProbeTarget = {
     settingsNs: namespace.ns,
     // Naming the route lets an adapter that already describes it answer from
     // its own registry — better metadata, no network call, no endpoint needed.
@@ -251,6 +257,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     ...probeBaseURL === undefined ? {} : { baseURL: probeBaseURL },
     ...probeApi === undefined ? {} : { api: probeApi },
     ...keyValue.length === 0 ? {} : { apiKey: keyValue },
+    ...layout === 'pi-ai' && (network === 'vpn' || savedNetwork === 'vpn') ? { network } : {},
   }
   /**
    * The write for this card, or a failure message. Every edit travels as
@@ -439,7 +446,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             </div>
             {/* The protocol sits beside the endpoint it describes, as it does
                 on the create card. */}
-            {ownsIdentity
+            {family === 'pi-ai'
+              ? <NetworkField value={network} onChange={(value) => { setField('network', value) }} disabled={disabled} t={t} />
+              : null}
+            {ownsIdentity || (family === 'pi-ai' && network === 'vpn')
               ? (
                 <div className={styles['field']}>
                   <span className={styles['fieldLabel']}>{t('customApi')}</span>
@@ -479,7 +489,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 <ModelListEditor
                   {...catalogProps}
                   probe={probe}
-                  probeBlocked={keyFailure}
+                  probeBlocked={keyFailure ?? (unsavedNetwork ? 'networkSaveBeforeFetch' : undefined)}
                   operations={operations}
                 />
               )}

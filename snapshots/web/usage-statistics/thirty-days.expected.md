@@ -1,0 +1,20 @@
+- term: Tokens used
+- definition: 31.6K
+- term: Sessions
+- definition: "2"
+- term: Messages
+- definition: "2"
+- term: Active days
+- definition: "2"
+- term: Current streak
+- definition: "1"
+- term: Most used model
+- definition: deepseek-v4-flash · deepseek-official
+- text: 100% of tokens
+- heading "Model usage" [level=3]
+- group "Model usage":
+  - 'img "deepseek-v4-flash · deepseek-official: 31,622 tokens, 100% of tokens"'
+  - text: 31.6K Tokens used
+- list:
+  - listitem: deepseek-v4-flash · deepseek-official 31,622 tokens 100%
+- paragraph

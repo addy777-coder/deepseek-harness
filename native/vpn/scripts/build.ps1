@@ -1,0 +1,41 @@
+#Requires -Version 7.0
+[CmdletBinding()]
+param(
+  [string]$VsDevCmdPath,
+  [string]$LocalDependenciesPath,
+  [switch]$SkipTests,
+  [switch]$SkipPackage
+)
+. (Join-Path $PSScriptRoot 'common.ps1')
+$root = Get-VpnRoot
+$toolchain = Get-VpnToolchain $VsDevCmdPath
+Initialize-VpnSources
+if (-not $LocalDependenciesPath) {
+  & (Join-Path $PSScriptRoot 'prepare-deps.ps1') -VsDevCmdPath $toolchain.VsDevCmd
+  $LocalDependenciesPath = Join-Path $root '.cache/dependencies/installed/x64-windows-dsh-vpn'
+}
+$prefix = (Resolve-Path -LiteralPath $LocalDependenciesPath).Path
+$provenance = Get-Content -LiteralPath (Join-Path $prefix 'dsh-vpn-dependencies.json') -Raw | ConvertFrom-Json
+$pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
+if ($provenance.triplet -ne 'x64-windows-dsh-vpn' -or $provenance.crt -ne 'static' `
+    -or $provenance.registryRevision -ne $pins.vcpkg.revision `
+    -or $provenance.manifestSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root 'deps/vcpkg.json') -Algorithm SHA256).Hash.ToLowerInvariant() `
+    -or $provenance.tripletSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root 'deps/triplets/x64-windows-dsh-vpn.cmake') -Algorithm SHA256).Hash.ToLowerInvariant()) {
+  throw 'LocalDependenciesPath does not contain the pinned native VPN dependencies with static CRT.'
+}
+$build = Join-Path $root 'build'
+foreach ($path in @($root, $build, $prefix, $toolchain.VsDevCmd)) { Assert-VpnCommandPath $path }
+$testing = if ($SkipTests) { 'OFF' } else { 'ON' }
+$command = '"{0}" -arch=x64 -host_arch=x64 -no_logo && cmake -S "{1}" -B "{2}" -G Ninja "-DCMAKE_PREFIX_PATH={3}" "-DOPENSSL_INCLUDE_DIR={3}/include" "-DOPENSSL_SSL_LIBRARY={3}/lib/libssl.lib" "-DOPENSSL_CRYPTO_LIBRARY={3}/lib/libcrypto.lib" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING={4} && cmake --build "{2}" --parallel 2' -f $toolchain.VsDevCmd, $root, $build, $prefix, $testing
+& $env:ComSpec /d /s /c $command
+if ($LASTEXITCODE -ne 0) { throw 'The native VPN executable did not build.' }
+if (-not $SkipTests) {
+  & (Join-Path (Split-Path $toolchain.CMake -Parent) 'ctest.exe') --test-dir $build --output-on-failure
+  if ($LASTEXITCODE -ne 0) { throw 'Native VPN CTest checks failed.' }
+  & node (Join-Path $root 'tests/helper-protocol.test.mjs')
+  if ($LASTEXITCODE -ne 0) { throw 'Native VPN helper protocol checks failed.' }
+}
+if (-not $SkipPackage) {
+  & (Join-Path $PSScriptRoot 'package.ps1') -LocalDependenciesPath $prefix -VsDevCmdPath $toolchain.VsDevCmd
+  if (-not $SkipTests) { & (Join-Path $root 'tests/package.test.ps1') }
+}

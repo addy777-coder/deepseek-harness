@@ -83,6 +83,8 @@ This section explains the design behind the service; the observable behavior is 
 
 The service is built on one separation: **the logical contract is provider-neutral, adapters own the wire.** It defines the canonical message, content-block, and stream-chunk vocabulary once, and every provider adapter translates only its own wire format into that vocabulary. The registry is the topology owner — adapter routes, configurable-provider entries, and discovery offers all register here and are disposed with their fiber — while a request stays a pure function of the session log: loop-built requests arrive deep-frozen, so listeners and adapters read them and never rewrite them.
 
+Model-discovery requests carry an optional `network` choice. The owning adapter validates whether a VPN request names a saved destination and supplies its private HTTP dispatcher; this service forwards the choice without creating network routes.
+
 ### Source map
 
 | File | Role |

@@ -45,7 +45,11 @@ pnpm run package:desktop:win
 
 The build pins Electron 44.1.1, electron-builder 26.15.3, and pnpm 11.7.0. It writes a current-user NSIS installer and portable zip under `apps\desktop\dist-electron`. The staging projects live under ignored `.dsh-build` directories so electron-builder does not interpret the repository workspace as the packaged application.
 
+Runtime staging requires the installed dependency cache. It first verifies the unchanged workspace lock through a frozen offline pnpm install, then deploys those records offline with install scripts disabled. The deployment reuses that successful supply-chain verification because pnpm's generated lock changes local workspace paths; every registry package identity and complete integrity/URL resolution must equal the verified source, and any concurrent source-lock change rejects staging. Missing cache entries or failed verification stop packaging.
+
 The installed runtime and pnpm omit type declarations, source maps, compiler state, debug symbols, and test/example/benchmark/GitHub workflow directories. Runtime modules, native binaries, package metadata, and licenses remain available as ordinary files for Node resolution and subprocess launches.
+
+The native VPN distribution retains its independently verified bytes, licenses and corresponding-source archive under `resources/vpn`. Desktop code signing excludes `dsh-vpn.exe` so its manifest digest remains valid; the application and installer keep their normal signing policy.
 
 -----
 

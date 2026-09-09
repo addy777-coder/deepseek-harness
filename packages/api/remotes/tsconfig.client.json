@@ -22,7 +22,6 @@
     },
     {
       "path": "../../credentials/credentials"
-
     },
     {
       "path": "../../context/file-reference"
@@ -73,7 +72,16 @@
       "path": "../workspace-controller/tsconfig.client.json"
     },
     {
+      "path": "../usage-controller/tsconfig.client.json"
+    },
+    {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../network/network"
+    },
+    {
+      "path": "../vpn-controller/tsconfig.client.json"
     }
   ]
 }

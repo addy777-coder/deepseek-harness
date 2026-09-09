@@ -1,10 +1,13 @@
 /** Stage a workspace-independent electron-builder project under .dsh-build. */
 import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
+import { verifyVpnArtifact } from '../apps/desktop/src/main/vpn-artifact.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const source = resolve(root, 'apps/desktop')
 const staging = resolve(root, '.dsh-build/desktop-app')
+const vpnSource = resolve(root, 'native/vpn/dist/windows-x64')
+await verifyVpnArtifact(vpnSource, true)
 
 const rel = relative(root, staging)
 if (rel !== `.dsh-build${sep}desktop-app`) {
@@ -16,6 +19,7 @@ await mkdir(staging, { recursive: true })
 for (const entry of ['lib', 'dist', 'assets', 'electron-builder.yml']) {
   await cp(join(source, entry), join(staging, entry), { recursive: true, dereference: true })
 }
+await cp(vpnSource, join(staging, 'vpn'), { recursive: true })
 
 const sourceManifest = JSON.parse(await readFile(join(source, 'package.json'), 'utf8')) as {
   name: string

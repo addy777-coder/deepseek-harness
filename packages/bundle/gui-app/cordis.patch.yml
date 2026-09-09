@@ -88,6 +88,12 @@
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
 
+    - id: usage-controller
+      name: '@deepseek-ai/dsh-api-usage-controller'
+      config:
+        concurrentReads: 4
+        cacheSize: 256
+
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
 
@@ -136,6 +142,9 @@
 
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
+
+    - id: ui-usage
+      name: '@deepseek-ai/dsh-client-ui-usage'
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'

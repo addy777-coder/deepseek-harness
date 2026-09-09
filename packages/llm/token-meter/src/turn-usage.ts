@@ -15,9 +15,9 @@ export interface TurnTokenUsage {
   readonly outputTokens: number
   /** Exact aggregate prompt plus output total across all attempts. */
   readonly totalTokens: number
-  /** Present only when every attempt reported the bucket. */
+  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
   readonly cacheReadTokens?: number
-  /** Present only when every attempt reported the bucket. */
+  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
   readonly cacheWriteTokens?: number
   /** Output subset, present only when every attempt reported it. */
   readonly reasoningTokens?: number
@@ -25,7 +25,8 @@ export interface TurnTokenUsage {
   readonly routes?: readonly TurnTokenUsageRoute[]
 }
 
-interface NormalizedAttempt {
+/** One exact, internally consistent provider usage sample with optional attribution. */
+export interface NormalizedTokenUsage {
   readonly inputTokens: number
   readonly outputTokens: number
   readonly totalTokens: number
@@ -73,7 +74,13 @@ function messageRoute(message: AssistantMessage): TurnTokenUsageRoute | undefine
   return provider.length > 0 && model.length > 0 ? { provider, model } : undefined
 }
 
-function normalizeUsage(usage: TokenUsage, route?: TurnTokenUsageRoute): NormalizedAttempt | undefined {
+/**
+ * Validate reported totals or derive them only from complete disjoint buckets.
+ * @param usage - provider usage recorded in a session event.
+ * @param route - optional provider and model attribution.
+ * @returns exact usage, or undefined for incomplete or contradictory accounting.
+ */
+export function normalizeTokenUsage(usage: TokenUsage, route?: TurnTokenUsageRoute): NormalizedTokenUsage | undefined {
   const {
     inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens, totalTokens,
   } = usage
@@ -118,21 +125,19 @@ function normalizeUsage(usage: TokenUsage, route?: TurnTokenUsageRoute): Normali
   }
 }
 
-function aggregateAttempts(attempts: readonly NormalizedAttempt[]): TurnTokenUsage | undefined {
+function aggregateAttempts(attempts: readonly NormalizedTokenUsage[]): TurnTokenUsage | undefined {
   if (attempts.length === 0) return undefined
   const inputTokens = safeSum(attempts.map(attempt => attempt.inputTokens))
   const outputTokens = safeSum(attempts.map(attempt => attempt.outputTokens))
   const totalTokens = safeSum(attempts.map(attempt => attempt.totalTokens))
   if (inputTokens === undefined || outputTokens === undefined || totalTokens === undefined) return undefined
 
-  const cacheRead = attempts.map(attempt => attempt.cacheReadTokens)
-  const cacheWrite = attempts.map(attempt => attempt.cacheWriteTokens)
   const reasoning = attempts.map(attempt => attempt.reasoningTokens)
-  const cacheReadTokens = cacheRead.every(isCount) ? safeSum(cacheRead) : undefined
-  const cacheWriteTokens = cacheWrite.every(isCount) ? safeSum(cacheWrite) : undefined
+  // Each normalized cache bucket is bounded by its attempt's total, so the
+  // validated aggregate total also bounds these sums.
+  const cacheReadTokens = attempts.reduce((sum, attempt) => sum + (attempt.cacheReadTokens ?? 0), 0)
+  const cacheWriteTokens = attempts.reduce((sum, attempt) => sum + (attempt.cacheWriteTokens ?? 0), 0)
   const reasoningTokens = reasoning.every(isCount) ? safeSum(reasoning) : undefined
-  // A present cache bucket is bounded by exact prompt, and reasoning is bounded
-  // by output. Safe required aggregates therefore imply safe optional sums.
 
   let routes: readonly TurnTokenUsageRoute[] | undefined
   const attributed = attempts.map(attempt => attempt.route)
@@ -146,8 +151,8 @@ function aggregateAttempts(attempts: readonly NormalizedAttempt[]): TurnTokenUsa
     uncachedInputTokens: inputTokens,
     outputTokens,
     totalTokens,
-    ...cacheReadTokens === undefined ? {} : { cacheReadTokens },
-    ...cacheWriteTokens === undefined ? {} : { cacheWriteTokens },
+    cacheReadTokens,
+    cacheWriteTokens,
     ...reasoningTokens === undefined ? {} : { reasoningTokens },
     ...routes === undefined ? {} : { routes },
   }
@@ -172,14 +177,14 @@ function sameAttempt(
  */
 export function deriveTurnTokenUsage(events: readonly SessionEvent[]): TurnTokenUsage | undefined {
   let state: AttemptState = { kind: 'idle' }
-  const attempts: NormalizedAttempt[] = []
+  const attempts: NormalizedTokenUsage[] = []
   let turn: number | undefined
   let sawEnd = false
   let invalid = false
 
   const closeOpen = (route?: TurnTokenUsageRoute): boolean => {
     if (state.kind !== 'open' || state.sample === undefined) return false
-    const normalized = normalizeUsage(state.sample, route)
+    const normalized = normalizeTokenUsage(state.sample, route)
     if (normalized === undefined) return false
     attempts.push(normalized)
     return true

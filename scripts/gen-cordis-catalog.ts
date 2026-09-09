@@ -84,6 +84,8 @@ export const SERVICE_PAGE: Record<string, string> = {
   invariants: 'invariants.md',
   imageRecognition: 'llm-streaming.md',
   llm: 'llm-streaming.md',
+  network: 'network.md',
+  vpnController: 'network.md',
   lsp: 'lsp.md',
   messageFeedback: 'feedback.md',
   permissionPresets: 'permission-presets.md',
@@ -93,6 +95,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   sandboxPolicy: 'sandbox.md',
   sessionPersistence: 'persistence.md',
   sessionQuery: 'session-query.md',
+  usageController: 'session-query.md',
   sessionFileReferences: 'session-reference.md',
   sessionReferenceResolver: 'session-reference.md',
   sessionProjectionCache: 'session-projection.md',
@@ -176,6 +179,8 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   slots: 'client-side interface-typed browser service — packages/client/ui-renderer/README.md owns the API',
   theme: 'client-side interface-typed browser service — packages/client/ui-theme/README.md owns the API',
   workspaces: 'client-side interface-typed browser service — packages/api/workspace-controller/README.md owns the API',
+  usage: 'client-side interface-typed statistics reader — packages/api/usage-controller/README.md owns the API',
+  vpn: 'client-side interface-typed VPN settings model — packages/api/vpn-controller/README.md owns the API',
 }
 
 /**
@@ -186,6 +191,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
  * {@link EVENT_WALK_EXEMPTIONS} names each one with its documentation owner.
  */
 export const EVENT_SCOPE_PAGE: Record<string, string> = {
+  network: 'network.md',
   'agent': 'core.md',
   'agent-loop': 'core.md',
   'agent-preset': 'core.md',
@@ -240,6 +246,10 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  NetworkTargetId: 'network.md',
+  NetworkTarget: 'network.md',
+  VpnSettingsView: 'network.md',
+  SaveVpnRequest: 'network.md',
   Agent: 'core.md',
   AgentCancelCause: 'core.md',
   AgentFactory: 'core.md',
@@ -467,6 +477,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionObservation: 'session-query.md',
   SessionObservationOptions: 'session-query.md',
   SessionRecord: 'session-query.md',
+  UsageRequest: 'session-query.md',
+  UsageSnapshot: 'session-query.md',
   SessionResultFilter: 'session-query.md',
   SessionSearchExecContext: 'session-query.md',
   SessionSearchHit: 'session-query.md',
@@ -646,6 +658,10 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
 /** TypeScript lib and pinned framework types with no repository-owned data page. */
 export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
   'AbortSignal',
+  'RequestInfo',
+  'RequestInit',
+  'Response',
+  'URL',
   'AsyncIterable',
   'Context',
   'Error',

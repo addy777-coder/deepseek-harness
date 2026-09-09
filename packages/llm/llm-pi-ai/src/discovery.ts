@@ -13,11 +13,8 @@
  * metadata the surface offers for adoption. `settings.yaml` remains the only
  * thing that decides what a route serves.
  *
- * Only OpenAI-compatible protocols are interrogated. Their listing is the one
- * shape a gateway, a self-hosted server, and the official endpoints all agree
- * on, which is the case this action exists for; every other protocol reports
- * that it cannot be interrogated so the surface falls back to hand-entry
- * rather than guessing a response shape.
+ * OpenAI-compatible and Anthropic Messages endpoints expose a readable model
+ * listing. Other protocols require manual model entry.
  *
  * @module dsh-llm-pi-ai/discovery
  */
@@ -28,16 +25,14 @@ import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { catalogModels } from './catalog.ts'
 
 /**
- * Protocols whose model listing this module can read: the two that speak
- * OpenAI's `GET /models` shape with bearer auth. Azure is absent despite its
- * OpenAI lineage — it authenticates with an `api-key` header and requires an
- * `api-version` query — and Codex authenticates through OAuth; guessing at
- * either would report an authentication failure as a provider with no models.
- * pi-ai's remaining protocols are absent for the same reason.
+ * OpenAI's GET /models uses bearer auth; Anthropic's GET /v1/models uses
+ * x-api-key and anthropic-version. Other protocols need authentication or
+ * listing parameters that the discovery request does not declare.
  */
 const LISTABLE_PROTOCOLS: ReadonlySet<string> = new Set([
   'openai-completions',
   'openai-responses',
+  'anthropic-messages',
 ])
 
 /**
@@ -83,8 +78,8 @@ function label(...candidates: readonly unknown[]): string | undefined {
  * `https://gateway.example/openai/v1` keeps its segments instead of losing
  * them to `URL` resolution.
  */
-function listingUrl(baseURL: string): string {
-  return `${baseURL.replace(/\/+$/, '')}/models`
+function listingUrl(baseURL: string, api: string): string {
+  return `${baseURL.replace(/\/+$/, '')}${api === 'anthropic-messages' ? '/v1/models' : '/models'}`
 }
 
 /**
@@ -182,6 +177,14 @@ function usableProbeKey(raw: string): string {
 
 /** Host-owned profile inputs that a configuration draft deliberately omits. */
 export interface StoredModelDiscoveryProfile {
+  /** Saved network route; absence preserves direct discovery for other consumers. */
+  readonly network?: 'direct' | 'vpn'
+  /** Saved endpoint that constrains VPN discovery. */
+  readonly baseURL?: string | undefined
+  /** Saved protocol that constrains VPN discovery. */
+  readonly api?: string | undefined
+  /** Resolve private HTTP dispatch; called only for a matching saved VPN route. */
+  readonly resolveFetch?: () => typeof globalThis.fetch
   /** Deployment headers configured on the named route. */
   readonly headers: Readonly<Record<string, string>> | undefined
   /** Resolve the named route's credential only when the draft carries none. */
@@ -236,22 +239,39 @@ export async function discoverModels(
       'DISCOVERY_UNSUPPORTED',
     )
   }
-  const url = listingUrl(request.baseURL)
+  const url = listingUrl(request.baseURL, api)
   // A key typed into the form wins: it may replace the stored key that is
   // failing. The stored profile is asked past the catalog and protocol checks,
   // and its credential resolver remains lazy so a typed key cannot fail over a
   // stored credential it supersedes. A route may still authenticate through a
   // deployment-owned Authorization header when neither key exists.
   const stored = storedProfile?.()
+  const network = request.network ?? stored?.network ?? 'direct'
+  if (stored?.network === 'vpn' && network !== 'vpn') {
+    throw new LlmError('save the provider network selection before fetching models', 'DISCOVERY_FAILED')
+  }
+  let fetchRequest = globalThis.fetch
+  if (network === 'vpn') {
+    if (stored?.network !== 'vpn' || stored.baseURL !== request.baseURL || stored.api !== api) {
+      throw new LlmError('save this VPN provider and its endpoint before fetching models', 'DISCOVERY_FAILED')
+    }
+    if (stored.resolveFetch === undefined) {
+      throw new LlmError('VPN model discovery requires the VPN network service', 'VPN_UNAVAILABLE')
+    }
+    fetchRequest = stored.resolveFetch()
+  }
   const supplied = request.apiKey ?? await stored?.resolveApiKey()
   const apiKey = supplied === undefined ? undefined : usableProbeKey(supplied)
   let response: Response
   try {
     const headers = new Headers(stored?.headers === undefined ? undefined : Object.entries(stored.headers))
     headers.set('accept', 'application/json')
-    if (apiKey !== undefined) headers.set('authorization', `Bearer ${apiKey}`)
+    if (api === 'anthropic-messages') {
+      headers.set('anthropic-version', '2023-06-01')
+      if (apiKey !== undefined) headers.set('x-api-key', apiKey)
+    } else if (apiKey !== undefined) headers.set('authorization', `Bearer ${apiKey}`)
     for (const [name, value] of Object.entries(attributionHeaders())) headers.set(name, value)
-    response = await fetch(url, {
+    response = await fetchRequest(url, {
       method: 'GET',
       headers,
       ...request.signal === undefined ? {} : { signal: request.signal },

@@ -64,6 +64,8 @@ export interface ProbeTarget {
   api?: string
   /** Key typed into the form and not yet stored, when there is one. */
   apiKey?: string
+  /** Network route selected by the provider form. */
+  network?: 'direct' | 'vpn'
 }
 
 /** Props of {@link ModelListEditor}. */
@@ -242,6 +244,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
         ...probe.api === undefined ? {} : { api: probe.api },
         ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
+        ...probe.network === undefined ? {} : { network: probe.network },
       })
       if (answer.kind === 'refused') {
         setFailure(answer.message)

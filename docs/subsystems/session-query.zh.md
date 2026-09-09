@@ -6,6 +6,10 @@
 
 源码：[`packages/session-query/session-query/src/types.ts`](../../packages/session-query/session-query/src/types.ts)
 
+## 使用统计
+
+[用量控制器](../../packages/api/usage-controller/README.zh.md)汇总此语料库，为[设置中的使用统计页](../../packages/client/ui-usage/README.zh.md)提供数据。它的 `usage.get` Remote 接受包含 7 天或 30 天区间及 IANA 时区的 `UsageRequest`；`UsageSnapshot` 返回已记录的 token 总量、主会话用户活动、每日模型用量、365 天热力图和历史数据缺失计数。[用量类型](../../packages/api/usage-controller/src/types.ts)拥有响应字段。只读观测使归档和冷会话无需激活 Agent 即可参与统计。
+
 ## 逻辑记录
 
 `SessionRecord` 由全语料库列表返回。它除了克隆的、优先取自 live 源的 header 外，还单独公开各源的可用性。`SessionEventRecord` 是轻量的原始日志投影；分类使用与模型历史推导相同的 `foldSurface()` 状态转换。
@@ -506,4 +510,23 @@ async readEvent(request: SessionEventReadRequest, signal?: AbortSignal): Promise
 Types: [SessionId](core.zh.md) · [SessionTitleSnapshot](session-title.zh.md)
 
 Source: [`packages/session-query/session-query/src/index.ts`](../../packages/session-query/session-query/src/index.ts)
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host service backing generated `ctx.remote.usage.get()`.
+
+```ts cordis-catalog
+/**
+ * Aggregate readable history without attaching sessions or starting agents.
+ * @param request - 7/30-day calendar interval and valid IANA time zone.
+ * @param signal - caller cancellation, combined with plugin lifetime.
+ * @returns exact reported usage and explicit incomplete-history counters.
+ * @throws RemoteError for invalid requests, corpus listing failures, or cancellation.
+ */
+@Remote async get(request: UsageRequest, signal: AbortSignal): Promise<UsageSnapshot>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

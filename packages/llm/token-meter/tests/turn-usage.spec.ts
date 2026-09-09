@@ -81,6 +81,21 @@ describe('deriveTurnTokenUsage', () => {
     }))))).toBeUndefined()
   })
 
+  it('reports zero cache totals when every attempt omits both buckets', () => {
+    expect(deriveTurnTokenUsage(completeAttempt(message(3, usage({
+      totalTokens: 120,
+      cacheReadTokens: undefined,
+      cacheWriteTokens: undefined,
+    }))))).toEqual({
+      uncachedInputTokens: 100,
+      outputTokens: 20,
+      totalTokens: 120,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      routes: [{ provider: 'deepseek', model: 'deepseek-chat' }],
+    })
+  })
+
   it('lets final message usage replace the latest streaming sample', () => {
     const result = deriveTurnTokenUsage(completeAttempt(
       event(3, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'usage', usage: usage() } }),
@@ -114,6 +129,7 @@ describe('deriveTurnTokenUsage', () => {
       outputTokens: 30,
       totalTokens: 240,
       cacheReadTokens: 70,
+      cacheWriteTokens: 0,
     })
   })
 
@@ -180,7 +196,44 @@ describe('deriveTurnTokenUsage', () => {
       event(7, 'step/end', { turn: 1, step: 2 }),
       event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
     ]
-    expect(deriveTurnTokenUsage(events)).toEqual({ uncachedInputTokens: 200, outputTokens: 40, totalTokens: 345 })
+    // reasoning stays full-disclosure: one attempt omitting it demotes the
+    // aggregate. cache buckets treat absence as zero, so the first attempt's
+    // cacheRead still sums in.
+    expect(deriveTurnTokenUsage(events)).toEqual({
+      uncachedInputTokens: 200,
+      outputTokens: 40,
+      totalTokens: 345,
+      cacheReadTokens: 50,
+      cacheWriteTokens: 5,
+    })
+  })
+
+  it('keeps a later cache hit when an earlier attempt omits the bucket', () => {
+    const events = [
+      event(1, 'turn/start', { turn: 1 }),
+      event(2, 'step/start', { turn: 1, step: 1 }),
+      message(3, usage({ cacheReadTokens: undefined, cacheWriteTokens: undefined })),
+      event(4, 'step/end', { turn: 1, step: 1 }),
+      event(5, 'step/start', { turn: 1, step: 2 }),
+      message(6, usage({
+        inputTokens: 100, outputTokens: 20, totalTokens: 235, cacheReadTokens: 100, cacheWriteTokens: 15,
+      }), 'deepseek', 'deepseek-chat', 2),
+      event(7, 'step/end', { turn: 1, step: 2 }),
+      event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+    ]
+    // Attempt 1 reports a direct total (uncached input 100, cache 0, no cache
+    // buckets); attempt 2 carries a cache hit inside a valid direct total.
+    // Absence is zero, so the hit survives aggregation.
+    expect(deriveTurnTokenUsage(events)).toEqual({
+      uncachedInputTokens: 200,
+      outputTokens: 40,
+      totalTokens: 405,
+      cacheReadTokens: 100,
+      cacheWriteTokens: 15,
+      routes: [
+        { provider: 'deepseek', model: 'deepseek-chat' },
+      ],
+    })
   })
 
   it('sums multiple steps and preserves distinct attributed routes', () => {
@@ -199,6 +252,7 @@ describe('deriveTurnTokenUsage', () => {
       outputTokens: 40,
       totalTokens: 340,
       cacheReadTokens: 100,
+      cacheWriteTokens: 0,
       routes: [
         { provider: 'deepseek', model: 'deepseek-chat' },
         { provider: 'openai', model: 'gpt-5' },

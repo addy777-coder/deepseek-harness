@@ -1,0 +1,17 @@
+{
+  "openvpn3": {
+    "repository": "https://github.com/OpenVPN/openvpn3.git",
+    "revision": "87fd40bb583cc89787c0bf4da79744f0e6d02ac3",
+    "license": "MPL-2.0 and GPL-3.0-only; file-specific notices apply"
+  },
+  "lwip": {
+    "repository": "https://github.com/lwip-tcpip/lwip.git",
+    "revision": "d08f4773edd0182b7910fc8f046eed82ffcd67c9",
+    "license": "BSD-3-Clause"
+  },
+  "vcpkg": {
+    "repository": "https://github.com/microsoft/vcpkg.git",
+    "revision": "3af1d1e60af2b2abf55760538cd607829029b07a",
+    "license": "MIT"
+  }
+}

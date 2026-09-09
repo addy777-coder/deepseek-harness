@@ -233,6 +233,24 @@ export interface Config {
 
 Source: [`packages/api/settings-controller/src/index.ts:36`](../packages/api/settings-controller/src/index.ts)
 
+<a id="deepseek-aidsh-api-usage-controller"></a>
+
+## `@deepseek-ai/dsh-api-usage-controller`
+
+Requires: `sessionQuery` · `sessions`
+
+```ts config-catalog
+/** Deployment limits for parallel reads and compact session summaries. */
+export interface Config {
+  /** Maximum simultaneous session observations within one request. */
+  concurrentReads: number
+  /** Maximum compact session summaries retained between requests. */
+  cacheSize: number
+}
+```
+
+Source: [`packages/api/usage-controller/src/index.ts:16`](../packages/api/usage-controller/src/index.ts)
+
 <a id="deepseek-aidsh-attachment-local"></a>
 
 ## `@deepseek-ai/dsh-attachment-local`
@@ -1054,6 +1072,8 @@ export interface PiAiProviderProfile {
   api?: string
   /** Endpoint for this route's models; defaults to the installed catalog's endpoint. */
   baseURL?: string
+  /** Network route for provider HTTP requests; VPN requires the network service. */
+  network?: 'direct' | 'vpn'
   /**
    * This route's model catalog. Omission serves the installed catalog for the
    * route unchanged; an explicit list replaces it, each entry defaulting its
@@ -1287,7 +1307,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:216`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:220`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -1509,6 +1529,46 @@ export interface Config {
 ```
 
 Source: [`packages/feedback/message-feedback/src/index.ts:50`](../packages/feedback/message-feedback/src/index.ts)
+
+<a id="deepseek-aidsh-network-openvpn"></a>
+
+## `@deepseek-ai/dsh-network-openvpn`
+
+Requires: `credentials` · `settings` · `subprocess`
+
+```ts config-catalog
+/** Deployment configuration for the local native network provider. */
+export interface Config {
+  /** Absolute helper path; defaults to the desktop-bundled VPN asset. */
+  readonly executablePath?: string
+  /** Expected helper digest; omitted reads its adjacent .sha256 file. */
+  readonly executableSha256?: string
+  /** Host directory for managed helper processes. */
+  readonly dshHome?: string
+  /** Seconds allowed for an OpenVPN connection attempt. */
+  readonly connectTimeoutSeconds?: number
+  /** Milliseconds allowed for process exit before tree termination. */
+  readonly shutdownGraceMs?: number
+  /** Initial delay between network-failure reconnect attempts. */
+  readonly reconnectDelayMs?: number
+  /** Maximum reconnect delay. Authentication failures are never retried. */
+  readonly reconnectMaxDelayMs?: number
+  /** Maximum concurrent proxy streams. */
+  readonly maxConnections?: number
+  /** Maximum time to receive an authenticated CONNECT header. */
+  readonly headerTimeoutMs?: number
+  /** Maximum time to connect a target through the tunnel. */
+  readonly targetConnectTimeoutMs?: number
+  /** lwIP timer polling interval. */
+  readonly pollIntervalMs?: number
+  /** Maximum pending IP packet bytes between lwIP and OpenVPN. */
+  readonly maxPendingPacketBytes?: number
+  /** Maximum aggregate bytes in a profile import. */
+  readonly maxProfileBytes?: number
+}
+```
+
+Source: [`packages/network/network-openvpn/src/types.ts:4`](../packages/network/network-openvpn/src/types.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -3342,6 +3402,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-acp-app` — requires `cmdlineArgs` ([`packages/bundle/acp-app/src/index.ts`](../packages/bundle/acp-app/src/index.ts))
 - `@deepseek-ai/dsh-agent` ([`packages/core/agent/src/index.ts`](../packages/core/agent/src/index.ts))
 - `@deepseek-ai/dsh-api-remotes` — requires `typertGateway` ([`packages/api/remotes/src/index.ts`](../packages/api/remotes/src/index.ts))
+- `@deepseek-ai/dsh-api-vpn-controller` ([`packages/api/vpn-controller/src/index.ts`](../packages/api/vpn-controller/src/index.ts))
 - `@deepseek-ai/dsh-api-workspace-controller` — requires `typert` · `workspaceRegistry` ([`packages/api/workspace-controller/src/index.ts`](../packages/api/workspace-controller/src/index.ts))
 - `@deepseek-ai/dsh-authorization` — requires `credentials` ([`packages/credentials/authorization/src/index.ts`](../packages/credentials/authorization/src/index.ts))
 - `@deepseek-ai/dsh-client-connection` ([`packages/client/connection/src/index.ts`](../packages/client/connection/src/index.ts))
@@ -3382,7 +3443,9 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-theme` — requires `clientBoot` ([`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-usage` ([`packages/client/ui-usage/src/index.ts`](../packages/client/ui-usage/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-user-questions` ([`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-vpn` ([`packages/client/ui-vpn/src/index.ts`](../packages/client/ui-vpn/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workspace` ([`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts))
 - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compaction` ([`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts))
@@ -3431,6 +3494,7 @@ Abstract service classes — a deployment loads a concrete implementation packag
 - `@deepseek-ai/dsh-fs` — abstract `FileSystem` ([`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts))
 - `@deepseek-ai/dsh-host-directory-picker` — abstract `DirectoryPicker` ([`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts))
 - `@deepseek-ai/dsh-jobs` — abstract `JobRegistry` ([`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts))
+- `@deepseek-ai/dsh-network` — abstract `NetworkService` ([`packages/network/network/src/index.ts`](../packages/network/network/src/index.ts))
 - `@deepseek-ai/dsh-sandbox` — abstract `SandboxProvider` ([`packages/sandbox/sandbox/src/index.ts`](../packages/sandbox/sandbox/src/index.ts))
 - `@deepseek-ai/dsh-session-persistence` — abstract `SessionPersistence` ([`packages/session/session-persistence/src/index.ts`](../packages/session/session-persistence/src/index.ts))
 - `@deepseek-ai/dsh-session-query` — abstract `SessionQueryEngine` ([`packages/session-query/session-query/src/index.ts`](../packages/session-query/session-query/src/index.ts))

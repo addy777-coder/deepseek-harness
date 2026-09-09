@@ -2,6 +2,12 @@
    font-weight: 500 in this UI — non-variable webfonts snap intermediate
    weights unpredictably across platforms. */
 body {
+  --dsw-alias-chart-1: var(--dsw-static-blue-600);
+  --dsw-alias-chart-2: var(--dsw-static-green-500);
+  --dsw-alias-chart-3: rgb(124, 88, 204);
+  --dsw-alias-chart-4: var(--dsw-static-amber-600);
+  --dsw-alias-chart-5: var(--dsw-static-red-500);
+  --dsw-alias-chart-other: var(--dsw-static-neutral-500);
   --dsw-static-amber-100: rgb(254, 245, 231);
   --dsw-static-amber-400: rgb(247, 173, 49);
   --dsw-static-amber-500: rgb(245, 158, 11);
@@ -78,6 +84,12 @@ body {
 }
 
 body[data-ds-dark-theme] {
+  --dsw-alias-chart-1: var(--dsw-static-blue-400);
+  --dsw-alias-chart-2: var(--dsw-static-green-400);
+  --dsw-alias-chart-3: rgb(176, 151, 242);
+  --dsw-alias-chart-4: var(--dsw-static-amber-400);
+  --dsw-alias-chart-5: var(--dsw-static-red-400);
+  --dsw-alias-chart-other: var(--dsw-static-neutral-400);
   --dsw-static-amber-100: rgb(254, 245, 231);
   --dsw-static-amber-400: rgb(247, 173, 49);
   --dsw-static-amber-500: rgb(245, 158, 11);

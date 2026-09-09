@@ -1275,6 +1275,49 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'network',
+    summary: 'Application-owned tunnel service.',
+    description: 'Application-owned tunnel service. Consumers register configured model destinations through effects. Requests fail when the tunnel is unavailable; implementations must never retry them through host networking.',
+    methods: [
+      {
+        signature: 'abstract get(): Promise<VpnSettingsView>',
+        description: 'Read local VPN state without exposing credentials.',
+        parameters: [],
+        returns: 'redacted configuration and current connection state.',
+      },
+      {
+        signature: 'abstract save(request: SaveVpnRequest, signal?: AbortSignal): Promise<void>',
+        description: 'Validate an import and commit its credential reference and startup preference.',
+        parameters: [{ name: 'request', description: 'local profile files and credentials; passwords are write-only.' }, { name: 'signal', description: 'cancels validation before the durable commit.' }],
+        returns: 'settlement after persistence; connection is a separate operation.',
+      },
+      {
+        signature: 'abstract connect(): Promise<void>',
+        description: 'Start a connection with the saved profile and credentials.',
+        parameters: [],
+        returns: 'settlement after connection succeeds or its redacted failure is published.',
+      },
+      {
+        signature: 'abstract disconnect(): Promise<void>',
+        description: 'Cancel pending connection intent and stop the current tunnel.',
+        parameters: [],
+        returns: 'settlement after all owned requests and the helper process have stopped.',
+      },
+      {
+        signature: 'abstract registerTarget(id: NetworkTargetId, target: NetworkTarget): () => void',
+        description: 'Allow one configured model destination until its consumer unloads.',
+        parameters: [{ name: 'id', description: 'consumer-owned destination identifier.' }, { name: 'target', description: 'absolute API root; credentials and fragments are rejected.' }],
+        returns: 'an idempotent disposer that revokes this registration and its active requests.',
+      },
+      {
+        signature: 'abstract fetch(id: NetworkTargetId, input: RequestInfo | URL, init?: RequestInit): Promise<Response>',
+        description: 'Fetch through the owned tunnel while preserving response streaming and cancellation.',
+        parameters: [{ name: 'id', description: 'an active registered destination.' }, { name: 'input', description: 'HTTP request URL under the registered API root.' }, { name: 'init', description: 'Fetch options; redirects never escape the registered destination.' }],
+        returns: 'a streaming response, or a sanitized failure without direct fallback.',
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s permission presets and their write path.',
     description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -2649,6 +2692,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'usageController',
+    summary: 'Host service backing generated `ctx.remote.usage.get()`.',
+    description: 'Host service backing generated `ctx.remote.usage.get()`.',
+    methods: [
+      {
+        signature: '@Remote async get(request: UsageRequest, signal: AbortSignal): Promise<UsageSnapshot>',
+        description: 'Aggregate readable history without attaching sessions or starting agents.',
+        parameters: [{ name: 'request', description: '7/30-day calendar interval and valid IANA time zone.' }, { name: 'signal', description: 'caller cancellation, combined with plugin lifetime.' }],
+        returns: 'exact reported usage and explicit incomplete-history counters.',
+        throws: ['RemoteError for invalid requests, corpus listing failures, or cancellation.'],
+      },
+    ],
+  },
+  {
     key: 'userQuestions',
     summary: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
     description: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
@@ -2659,6 +2716,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `ASK_ABORTED` when the supplied signal is already or becomes aborted, `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'vpnController',
+    summary: 'Exposes password-free VPN status and write-only configuration commands.',
+    description: 'Exposes password-free VPN status and write-only configuration commands.',
+    methods: [
+      {
+        signature: '@Remote async get(signal?: AbortSignal): Promise<VpnSettingsView>',
+        description: 'Read the application\'s current VPN status.',
+        parameters: [{ name: 'signal', description: 'cancels a read before it starts.' }],
+        returns: 'redacted VPN state, including unsupported deployments.',
+      },
+      {
+        signature: '@Remote async saveAndConnect(request: SaveVpnRequest, signal: AbortSignal): Promise<VpnSettingsView>',
+        description: 'Save validated credentials and start the tunnel; the existing company provider opts into VPN on first configuration.',
+        parameters: [{ name: 'request', description: 'imported files and write-only password.' }, { name: 'signal', description: 'cancels profile validation before persistence.' }],
+        returns: 'redacted state after the connection attempt; connection failures remain visible in its failure field.',
+      },
+      {
+        signature: '@Remote async connect(signal?: AbortSignal): Promise<VpnSettingsView>',
+        description: 'Replace the current tunnel with a fresh connection attempt.',
+        parameters: [{ name: 'signal', description: 'prevents connection startup if cancelled before replacement finishes.' }],
+        returns: 'redacted state after the attempt settles.',
+      },
+      {
+        signature: '@Remote async disconnect(signal?: AbortSignal): Promise<VpnSettingsView>',
+        description: 'Cancel pending connection intent and stop the active tunnel.',
+        parameters: [{ name: 'signal', description: 'cancels before shutdown starts; an accepted shutdown always finishes.' }],
+        returns: 'redacted state after all owned tunnel resources have stopped.',
       },
     ],
   },
@@ -3179,6 +3267,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Waterfall around every streaming model call (retry, replay, routing).',
     description: 'Waterfall around every streaming model call (retry, replay, routing). Bound to the LlmRuntime; call `next()` to reach the resolved adapter\'s stream, or yield your own chunks to short-circuit.',
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; their messages already obey the immutable creation contract.' }],
+  },
+  {
+    name: 'network/changed',
+    mode: 'emit',
+    signature: '\'network/changed\'(view: VpnSettingsView): void',
+    summary: 'Redacted VPN state after the provider commits a configuration or lifecycle change.',
+    description: 'Redacted VPN state after the provider commits a configuration or lifecycle change.',
+    parameters: [{ name: 'view', description: 'password-free local configuration and connection state.' }],
   },
   {
     name: 'session-telemetry/record',
@@ -4338,7 +4434,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmModelDiscoveryRequest',
-    declaration: 'export interface LlmModelDiscoveryRequest {\n    provider?: string;\n    baseURL?: string;\n    api?: string;\n    apiKey?: string;\n}',
+    declaration: 'export interface LlmModelDiscoveryRequest {\n    network?: \'direct\' | \'vpn\';\n    provider?: string;\n    baseURL?: string;\n    api?: string;\n    apiKey?: string;\n}',
   },
   {
     name: 'LlmModelInfo',
@@ -4535,6 +4631,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ModelReasoningEffort',
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
+  },
+  {
+    name: 'NetworkTarget',
+    declaration: 'export interface NetworkTarget {\n    readonly baseURL: string;\n}',
+  },
+  {
+    name: 'NetworkTargetId',
+    declaration: 'export type NetworkTargetId = Branded<\'NetworkTargetId\'>;',
   },
   {
     name: 'ObjectJsonSchema',
@@ -4779,6 +4883,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SaveTextSpill',
     declaration: 'export interface SaveTextSpill {\n    owner: SpillOwner;\n    source: SpillSource;\n    suggestedName: string;\n    content: string;\n}',
+  },
+  {
+    name: 'SaveVpnRequest',
+    declaration: 'export interface SaveVpnRequest {\n    readonly profile?: VpnImportFile;\n    readonly files?: readonly VpnImportFile[];\n    readonly username: string;\n    readonly password?: string;\n    readonly autoConnect: boolean;\n}',
   },
   {
     name: 'ScheduledToolDispatch',
@@ -5997,12 +6105,52 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
   {
+    name: 'UsageDay',
+    declaration: 'export interface UsageDay {\n    date: string;\n    tokens: number;\n    messages: number;\n    sessions: number;\n    models: UsageModel[];\n}',
+  },
+  {
+    name: 'UsageHeatmapDay',
+    declaration: 'export interface UsageHeatmapDay {\n    date: string;\n    messages: number;\n}',
+  },
+  {
+    name: 'UsageModel',
+    declaration: 'export interface UsageModel {\n    provider: string;\n    model: string;\n    tokens: number;\n}',
+  },
+  {
+    name: 'UsageRequest',
+    declaration: 'export interface UsageRequest {\n    days: 7 | 30;\n    timeZone: string;\n}',
+  },
+  {
+    name: 'UsageSnapshot',
+    declaration: 'export interface UsageSnapshot {\n    days: 7 | 30;\n    timeZone: string;\n    from: string;\n    to: string;\n    generatedAt: number;\n    summary: UsageSummary;\n    daily: UsageDay[];\n    models: UsageModel[];\n    heatmap: UsageHeatmapDay[];\n    coverage: {\n        unreadableSessions: number;\n        missingUsageAttempts: number;\n    };\n}',
+  },
+  {
+    name: 'UsageSummary',
+    declaration: 'export interface UsageSummary {\n    totalTokens: number;\n    sessionCount: number;\n    messageCount: number;\n    activeDays: number;\n    currentStreak: number;\n    mostUsedModel: UsageModel | null;\n}',
+  },
+  {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends Message {\n    readonly role: \'user\';\n}',
   },
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'VpnConnectionState',
+    declaration: 'export type VpnConnectionState = \'unconfigured\' | \'disconnected\' | \'connecting\' | \'connected\' | \'reconnecting\' | \'error\';',
+  },
+  {
+    name: 'VpnFailure',
+    declaration: 'export interface VpnFailure {\n    readonly code: string;\n    readonly message?: string;\n}',
+  },
+  {
+    name: 'VpnImportFile',
+    declaration: 'export interface VpnImportFile {\n    readonly name: string;\n    readonly content: string;\n}',
+  },
+  {
+    name: 'VpnSettingsView',
+    declaration: 'export interface VpnSettingsView {\n    readonly supported: boolean;\n    readonly profileName: string | null;\n    readonly username: string;\n    readonly passwordConfigured: boolean;\n    readonly autoConnect: boolean;\n    readonly connection: VpnConnectionState;\n    readonly failure: VpnFailure | null;\n}',
   },
   {
     name: 'WebBootBatch',

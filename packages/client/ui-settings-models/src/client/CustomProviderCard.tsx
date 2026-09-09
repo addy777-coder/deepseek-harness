@@ -28,6 +28,7 @@ import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { validateDeepSeekModels } from './DeepSeekModelsEditor.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
+import { NetworkField } from './NetworkField.tsx'
 import type { ModelDraft } from './ModelListEditor.tsx'
 import { deriveKeyRef } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
@@ -81,6 +82,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [baseURL, setBaseURL] = useState('')
+  const [network, setNetwork] = useState<'direct' | 'vpn'>('direct')
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
@@ -142,6 +144,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         ...storesKey ? { apiKeyEnv: keyRef } : {},
         api: protocol,
         baseURL,
+        ...network === 'direct' ? {} : { network },
         models: models.map(model => ({ ...model })),
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
@@ -262,6 +265,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           ? null
           : <p className={styles['error']}>{t(keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure)}</p>}
       </div>
+      <NetworkField value={network} onChange={setNetwork} disabled={profileDisabled} t={t} />
       <ModelListEditor
         models={models}
         onChange={setModels}
@@ -269,9 +273,10 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           settingsNs: NS,
           baseURL,
           api: protocol,
+          ...network === 'vpn' ? { network } : {},
           ...keyValue.length === 0 ? {} : { apiKey: keyValue },
         }}
-        probeBlocked={keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure}
+        probeBlocked={keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure ?? (network === 'vpn' ? 'networkSaveBeforeFetch' : undefined)}
         operations={operations}
         t={t}
         disabled={profileDisabled}

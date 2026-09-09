@@ -21,7 +21,10 @@ describe('dsh-desktop-app bundle', () => {
       { schema: entryListSchema },
     ) as Array<{ insert?: Array<{ id?: string; name?: string }> }>
     const rows = patches.flatMap(patch => patch.insert ?? [])
-    expect(rows).toEqual([
+    expect(rows.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: 'network-openvpn', name: '@deepseek-ai/dsh-network-openvpn' },
+      { id: 'vpn-controller', name: '@deepseek-ai/dsh-api-vpn-controller' },
+      { id: 'ui-vpn', name: '@deepseek-ai/dsh-client-ui-vpn' },
       { id: 'desktop-transport', name: '@deepseek-ai/dsh-desktop-transport' },
       { id: 'desktop-directory-picker', name: '@deepseek-ai/dsh-host-directory-picker-native' },
       { id: 'desktop-directory-picker-ui', name: '@deepseek-ai/dsh-client-ui-directory-picker-native' },

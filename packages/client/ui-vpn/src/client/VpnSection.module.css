@@ -1,0 +1,30 @@
+/* VPN settings use the existing settings card geometry and semantic colors. */
+
+.section { display: flex; flex-direction: column; gap: 16px; max-width: 720px; min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 20px; }
+.header h2 { margin: 0; font-size: 16px; font-weight: 500; line-height: 24px; }
+.header p { margin: 4px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 14px; line-height: 22px; }
+.card { display: flex; flex-direction: column; gap: 18px; padding: 18px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: 16px; }
+.statusRow, .actions, .fileActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.statusRow { justify-content: space-between; gap: 12px; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; corner-shape: round; background: var(--dsw-alias-label-tertiary); }
+.status[data-state='connected'] .dot { background: var(--dsw-alias-state-success-primary); }
+.status[data-state='connecting'] .dot, .status[data-state='reconnecting'] .dot { background: var(--dsw-alias-state-business-primary); }
+.status[data-state='error'] .dot { background: var(--dsw-alias-state-error-primary); }
+.field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.label { font-weight: 500; }
+.hint, .filename, .loading { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.filename { color: var(--dsw-alias-label-secondary); }
+.fileList { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 20px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.credentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.toggle input { flex: none; margin: 3px 0 0; accent-color: var(--dsw-alias-state-business-primary); }
+.toggleText { display: flex; flex-direction: column; gap: 3px; }
+.error { margin: 0; padding: 10px 12px; border-radius: 8px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-module-platform); overflow-wrap: anywhere; }
+.actions { justify-content: flex-end; padding-top: 4px; }
+.fileInput { display: none; }
+
+@media (max-width: 640px) {
+  .credentials { grid-template-columns: minmax(0, 1fr); }
+  .card { padding: 14px; }
+}

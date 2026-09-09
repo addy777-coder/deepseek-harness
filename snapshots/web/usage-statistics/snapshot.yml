@@ -1,0 +1,9 @@
+version: 1
+scenario: usage-statistics
+profile: web
+composition: web-default
+recording: authored
+header:
+  class: web-default
+session:
+  source: ../turn-tail-actions/session.jsonl

@@ -11,6 +11,7 @@ import type {
 import { parseDesktopHostLifecycleFrame } from '@deepseek-ai/dsh-desktop-transport'
 import { channels } from './channels.ts'
 import { waitForHostReadiness } from './host-startup.ts'
+import { verifyVpnArtifact } from './vpn-artifact.ts'
 
 const HOST_STOP_TIMEOUT_MS = 5_000
 
@@ -83,12 +84,15 @@ export class DesktopHostProcess {
     this.stderrTail = []
     let startupPhase: DesktopHostStartupPhase = 'bootstrap'
     const runtimeEntry = dshEntry()
+    const vpn = app.isPackaged ? await verifyVpnArtifact(join(process.resourcesPath, 'vpn'), false) : undefined
     const child = utilityProcess.fork(hostEntry(), ['--profile', 'desktop'], {
       cwd: homedir(),
       env: {
         ...process.env,
         DSH_DESKTOP_DSH_ENTRY: runtimeEntry ?? '',
         DSH_HOME: process.env.DSH_HOME ?? join(homedir(), '.dsh'),
+        DSH_VPN_EXECUTABLE: vpn?.executablePath ?? join(sourceRoot(), 'native', 'vpn', 'dist', 'windows-x64', 'dsh-vpn.exe'),
+        DSH_VPN_EXECUTABLE_SHA256: vpn?.executableSha256 ?? '',
         ...(runtimeEntry !== undefined
           ? {}
           : { TSX_TSCONFIG_PATH: join(sourceRoot(), 'tsconfig.base.json') }),

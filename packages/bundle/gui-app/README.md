@@ -40,6 +40,8 @@ In-box bundles resolve from the `dsh` installation. Reconciliation activates a d
 
 The layer provides the GUI-specific prompt defaults, in-memory Session search setting, workspace and controller services, API Remotes, Connection core, client-module registry, client runner, and the complete shared UI roster. It also moves per-agent tools behind the preset registry so every GUI Session can select its own agent composition.
 
+The [usage page](../../client/ui-usage/README.md) reads directory-wide history through the [usage controller](../../api/usage-controller/README.md). Both carriers share its read limits, Client model, and Settings contribution.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -13,6 +13,9 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "Usage statistics":
+      - img
+      - text: Usage statistics
   - button "Open configuration file"
   - button "Close":
     - img

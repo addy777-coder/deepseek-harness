@@ -99,6 +99,23 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'network',
+    pkg: 'network',
+    title: 'Application-only model networking',
+    mode: 'seam',
+    implementations: ['network-openvpn'],
+    consumers: ['llm-pi-ai', 'api-vpn-controller'],
+    note: 'Configured model destinations use an owned userspace VPN without changing system networking; unavailable tunnels reject requests.',
+  },
+  {
+    key: 'vpnController',
+    pkg: 'api-vpn-controller',
+    title: 'Local VPN settings controller',
+    mode: 'core',
+    consumers: ['client-ui-vpn'],
+    note: 'Carries profile imports and write-only credentials to the local network provider and returns redacted connection state.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',
@@ -199,6 +216,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Host Workspace Remote controller',
     mode: 'core',
     note: 'Owns Workspace commands and reconnect-safe Workspace state delivery through the generated Remote namespace.',
+  },
+  {
+    key: 'usageController',
+    pkg: 'api-usage-controller',
+    title: 'Host usage statistics controller',
+    mode: 'core',
+    consumers: ['client-ui-usage'],
+    note: 'Aggregates recorded usage and user activity through read-only session observations; its Client model owns on-demand query state.',
   },
   {
     key: 'directoryPickerController',
@@ -321,7 +346,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Session reads, traces, filters, and search',
     mode: 'seam',
     implementations: ['session-query-sqlite'],
-    consumers: ['session-reference', 'tool-session-query'],
+    consumers: ['session-reference', 'tool-session-query', 'api-usage-controller'],
     note: 'The interface supplies exact reads, filters, and traces; its concrete backend adds full-text reconciliation, ranking, snippets, and cursor generations, while the model consumer owns workspace authority and cursor-free rendering.',
   },
   {

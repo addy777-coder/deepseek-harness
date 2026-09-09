@@ -1,0 +1,23 @@
+- heading "VPN" [level=2]
+- paragraph: Import your company VPN profile to connect to private model services.
+- status "VPN status": Not configured
+- button "Refresh"
+- button "Disconnect" [disabled]
+- text: VPN profile
+- paragraph: Choose an OpenVPN profile and include any certificates or keys it references.
+- button "Choose .ovpn file"
+- text: No profile imported Certificates and referenced files
+- paragraph: Add the CA, certificate, or key files referenced by the profile, using the matching file names.
+- button "Add referenced files"
+- paragraph: No referenced files selected
+- text: VPN username
+- textbox "VPN username"
+- text: VPN password
+- textbox "VPN password":
+  - /placeholder: Enter VPN password
+- text: The password is used only for VPN authentication and is not displayed in settings.
+- checkbox "Connect automatically at startup"
+- text: Connect automatically at startup Connect with the saved profile and credentials when the project next starts.
+- paragraph: Only model providers configured to use VPN connect to the private network through this connection.
+- button "Reconnect" [disabled]
+- button "Save and connect"

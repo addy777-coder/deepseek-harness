@@ -1,0 +1,6 @@
+# Desktop VPN settings exercised over the browser carrier; native I/O belongs to the test fixture.
+- insert:
+    - id: vpn-controller
+      name: '@deepseek-ai/dsh-api-vpn-controller'
+    - id: ui-vpn
+      name: '@deepseek-ai/dsh-client-ui-vpn'

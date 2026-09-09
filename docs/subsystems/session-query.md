@@ -6,6 +6,10 @@ Query vocabulary over the live-preferred logical session corpus. The [Service De
 
 Source: [`packages/session-query/session-query/src/types.ts`](../../packages/session-query/session-query/src/types.ts)
 
+## Usage statistics
+
+The [usage controller](../../packages/api/usage-controller/README.md) aggregates this corpus for the [Settings usage page](../../packages/client/ui-usage/README.md). Its `usage.get` Remote accepts `UsageRequest` with a 7-day or 30-day interval and an IANA time zone; `UsageSnapshot` returns recorded token totals, main-session user activity, daily model totals, a 365-day heatmap, and incomplete-history counts. [Usage types](../../packages/api/usage-controller/src/types.ts) own the response fields. Read-only observations keep archived and cold sessions available without activating their Agents.
+
 ## Logical records
 
 `SessionRecord` is returned by the cross-corpus list. It exposes source availability independently from the cloned live-preferred header. `SessionEventRecord` is a lightweight raw-log projection; classification uses the same `foldSurface()` transitions as model-history derivation.
@@ -506,4 +510,23 @@ async readEvent(request: SessionEventReadRequest, signal?: AbortSignal): Promise
 Types: [SessionId](core.md) · [SessionTitleSnapshot](session-title.md)
 
 Source: [`packages/session-query/session-query/src/index.ts`](../../packages/session-query/session-query/src/index.ts)
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host service backing generated `ctx.remote.usage.get()`.
+
+```ts cordis-catalog
+/**
+ * Aggregate readable history without attaching sessions or starting agents.
+ * @param request - 7/30-day calendar interval and valid IANA time zone.
+ * @param signal - caller cancellation, combined with plugin lifetime.
+ * @returns exact reported usage and explicit incomplete-history counters.
+ * @throws RemoteError for invalid requests, corpus listing failures, or cancellation.
+ */
+@Remote async get(request: UsageRequest, signal: AbortSignal): Promise<UsageSnapshot>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

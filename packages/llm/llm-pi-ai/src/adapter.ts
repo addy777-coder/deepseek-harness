@@ -83,6 +83,8 @@ export interface PiAiAdapterOptions {
    * `MISSING_CREDENTIAL` rather than falling back.
    */
   resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  /** Resolve private HTTP dispatch for a VPN route; throw when the network service is unavailable. */
+  resolveFetch?: (provider: string, profile: ResolvedPiAiProviderProfile) => typeof globalThis.fetch
   /**
    * How every collection this adapter builds resolves auth the request-level
    * `apiKey` override does not cover. Required rather than optional: a
@@ -336,6 +338,12 @@ export class PiAiAdapter extends LlmAdapter {
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
     const model = this.modelOf(snapshot, options.provider, options.model)
+    const fetch = profile.network === 'vpn'
+      ? this.config.resolveFetch?.(options.provider, profile)
+      : undefined
+    if (profile.network === 'vpn' && fetch === undefined) {
+      throw new LlmError(`llm-pi-ai: provider "${options.provider}" requires the VPN network service`, 'VPN_UNAVAILABLE')
+    }
     const reasoning = resolveReasoningLevel(
       model,
       options.reasoningEffort ?? profile.reasoning,
@@ -374,6 +382,7 @@ export class PiAiAdapter extends LlmAdapter {
         }, onReplayDegrade)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
+        ...fetch === undefined ? {} : { fetch },
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

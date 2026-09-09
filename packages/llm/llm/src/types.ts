@@ -231,6 +231,8 @@ export interface LlmConfigurableProvider {
  * route: a provider being added has no route to name.
  */
 export interface LlmModelDiscoveryRequest {
+  /** Network route requested by the draft; VPN discovery requires a matching saved provider. */
+  network?: 'direct' | 'vpn'
   /**
    * Route the draft is editing, when it edits an existing one. A route whose
    * adapter already knows its models answers from that knowledge instead of

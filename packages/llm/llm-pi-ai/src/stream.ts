@@ -17,17 +17,23 @@ import { toPiReplayState } from './replay.ts'
 
 /**
  * Map pi-ai usage (reasoning folded into output by pi-ai).
+ *
+ * pi-ai always reports cache buckets — as values or zero — so both are
+ * mapped unconditionally. Emitting an explicit zero keeps downstream folds
+ * (turn usage, the tokenUsage projection, and the chat stats strings)
+ * whole: they treat a missing bucket as "not reported" and drop it, which
+ * would zero out a later genuine cache hit when earlier attempts report
+ * none.
  * @param usage - cumulative usage from the terminal pi-ai event.
- * @returns harness counts with pi-ai's exact total; cache fields appear only
- *   when non-zero (pi-ai reports zeros, not absence).
+ * @returns harness counts with pi-ai's exact total and cache buckets.
  */
 export function mapUsage(usage: PiUsage): TokenUsage {
   return {
     inputTokens: usage.input,
     outputTokens: usage.output,
     totalTokens: usage.totalTokens,
-    ...usage.cacheRead > 0 ? { cacheReadTokens: usage.cacheRead } : {},
-    ...usage.cacheWrite > 0 ? { cacheWriteTokens: usage.cacheWrite } : {},
+    cacheReadTokens: usage.cacheRead,
+    cacheWriteTokens: usage.cacheWrite,
   }
 }
 

@@ -31,6 +31,7 @@ const PiAiConfig = Schema.object({
     displayName: Schema.string(),
     api: Schema.union(PROTOCOLS),
     baseURL: Schema.string(),
+    network: Schema.union(['direct', 'vpn']).default('direct'),
     models: Schema.array(Schema.object({
       id: Schema.string().required(),
       name: Schema.string(),
@@ -770,6 +771,36 @@ describe('provider rows', () => {
 })
 
 describe('hand-declared providers', () => {
+  it('saves a per-provider VPN choice and blocks discovery until that selection is saved', async () => {
+    const { mutate, discover } = await mountSection({
+      providers: { company: { apiKeyEnv: 'COMPANY_KEY', api: 'anthropic-messages', baseURL: 'https://company.invalid' } },
+      declaredRoutes: ['company'],
+    })
+    openEditor('company')
+    expect(screen.getByLabelText<HTMLSelectElement>(en.network).value).toBe('direct')
+    fireEvent.change(screen.getByLabelText(en.network), { target: { value: 'vpn' } })
+    expect(buttonNamed(en.fetchModels).disabled).toBe(true)
+    expect(buttonNamed(en.fetchModels).title).toBe(en.networkSaveBeforeFetch)
+    expect(screen.getByText(en.networkVpnHint).textContent).toMatchInlineSnapshot('"VPN requires a configured VPN connection, an API key, and the Anthropic Messages protocol. Requests stop if the VPN is unavailable."')
+    fireEvent.click(screen.getByRole('button', { name: en.apply }))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops).toEqual([{ op: 'set', path: ['providers', 'company', 'network'], value: 'vpn' }])
+    expect(discover).not.toHaveBeenCalled()
+  })
+
+  it('sends the saved VPN choice on discovery and blocks an edited VPN endpoint', async () => {
+    const { discover } = await mountSection({
+      providers: { company: { apiKeyEnv: 'COMPANY_KEY', network: 'vpn', api: 'anthropic-messages', baseURL: 'https://company.invalid' } },
+      declaredRoutes: ['company'],
+    })
+    openEditor('company')
+    fireEvent.click(buttonNamed(en.fetchModels))
+    await waitFor(() => { expect(discover).toHaveBeenCalled() })
+    expect(firstProbe(discover)).toMatchObject({ provider: 'company', network: 'vpn', baseURL: 'https://company.invalid' })
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://other.invalid' } })
+    expect(buttonNamed(en.fetchModels).disabled).toBe(true)
+  })
+
   function mountCard(
     overrides: Partial<Parameters<typeof CustomProviderCard>[0]> = {},
     wire: Parameters<typeof scriptedFace>[0] = {},
@@ -790,6 +821,15 @@ describe('hand-declared providers', () => {
     )
     return { ...scripted, onClose }
   }
+
+  it('keeps a new VPN provider draft offline until it has been saved', () => {
+    const { discover } = mountCard()
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://company.invalid' } })
+    fireEvent.change(screen.getByLabelText(en.network), { target: { value: 'vpn' } })
+    expect(buttonNamed(en.fetchModels).disabled).toBe(true)
+    expect(buttonNamed(en.fetchModels).title).toBe(en.networkSaveBeforeFetch)
+    expect(discover).not.toHaveBeenCalled()
+  })
 
   it('writes the whole profile and the key under the derived reference', async () => {
     const { mutate, set, onClose } = mountCard()
@@ -836,7 +876,7 @@ describe('hand-declared providers', () => {
 
     mountCard()
     fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme' } })
-    expect(fields()).toEqual([en.customRoute, en.customDisplayName, en.baseUrl, en.customApi, en.keyInput])
+    expect(fields()).toEqual([en.customRoute, en.customDisplayName, en.baseUrl, en.customApi, en.keyInput, en.network])
     cleanup()
 
     // A shipped route's models each carry their own protocol, so its editor
@@ -844,7 +884,7 @@ describe('hand-declared providers', () => {
     await mountSection({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
     openEditor('openai')
     fireEvent.click(screen.getByText(en.customized))
-    expect(fields()).toEqual([en.keyInput, en.baseUrl])
+    expect(fields()).toEqual([en.keyInput, en.baseUrl, en.network])
     cleanup()
 
     // A hand-declared route named its own protocol at creation, so editing it
@@ -854,7 +894,7 @@ describe('hand-declared providers', () => {
       declaredRoutes: ['acme-gateway'],
     })
     openEditor('acme-gateway')
-    expect(fields()).toEqual([en.keyInput, en.customDisplayName, en.baseUrl, en.customApi])
+    expect(fields()).toEqual([en.keyInput, en.customDisplayName, en.baseUrl, en.network, en.customApi])
   })
 
   it('renames a declared route and falls back to its id when the name is cleared', async () => {

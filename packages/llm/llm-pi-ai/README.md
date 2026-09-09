@@ -76,6 +76,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `displayName` | provider name | Label shown by selector surfaces |
 | `api` | catalog protocol | Wire protocol; only needed for routes the catalog does not supply |
 | `baseURL` | catalog endpoint | Endpoint of every model on the route |
+| `network` | `direct` | `vpn` sends provider HTTP through the optional network service; requests fail if it is unavailable |
 | `models` | installed catalog | Replaces the route's catalog wholesale; each entry defaults from the installed model |
 | `modelOverrides` | none | Reshapes individual installed-catalog models without replacing the rest |
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
@@ -87,6 +88,8 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `retryPolicy` | normal, 5 retries | Provider-owned retry policy executed by `dsh-llm-retry` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-llm-pi-ai) is the exhaustive source for every accepted field and its JSDoc.
+
+Choose `network: vpn` for a private Anthropic endpoint after configuring the [VPN provider](../../network/network-openvpn/README.md). VPN routes require explicit `api: anthropic-messages`, `baseURL`, and `apiKeyEnv`; `transport` may be omitted or set to `sse`. Streaming and model discovery use the registered endpoint through the same private HTTP dispatcher. Provider-native authentication, WebSocket transports, and unsupported APIs are refused; the adapter never falls back to direct networking. Save a changed VPN route or endpoint before fetching models.
 
 ### Sign in to a provider
 
@@ -106,7 +109,7 @@ Profiles are re-read once per operation through the optional settings seam: the 
 
 ### Discover models from endpoints
 
-The plugin answers "which models can this provider serve?" for a route a configuration surface is editing or drafting. A route the installed catalog ships is answered from that catalog with no network call and retains each model's known input modalities; only a route the catalog does not describe is interrogated over the wire (`openai-completions` and `openai-responses` shapes), whose listing leaves modalities unknown. A named configured route supplies its stored credential and profile `headers` inside the Host, so deployment headers configured through `settings.yaml` or Cordis config reach `GET /models` without becoming discovery-request or Models-page fields; a key typed into the form still wins over the stored credential. The reply is candidate metadata a surface may offer for adoption — nothing is stored, and `settings.yaml` remains the only thing that decides what a route serves.
+The plugin discovers models from the installed catalog or a provider endpoint. Catalog answers retain known input modalities without a network call. OpenAI-compatible endpoints use `GET /models` with bearer authentication; Anthropic Messages endpoints use `GET /v1/models` with `x-api-key` and `anthropic-version`. A configured route supplies stored credentials and profile headers inside the Host, while a key typed into the form takes precedence. VPN discovery requires the requested network, endpoint, and protocol to match a saved VPN provider. Replies provide candidate metadata for adoption; they do not change the configured model list.
 
 ### Failures and recovery
 
@@ -192,7 +195,7 @@ pi-ai events become harness reasoning, text, tool-call, usage, and finish chunks
 
 #### Token effect
 
-Generated content affects later inputs only after the loop records it. pi-ai folds reasoning tokens into output usage when the provider does not report them separately, and preserves its exact `totalTokens` value unchanged.
+Generated content affects later inputs only after the loop records it. pi-ai folds reasoning tokens into output usage when the provider does not report them separately, and preserves its exact `totalTokens` value unchanged. Cache buckets are always emitted — as values or zero — so downstream usage folds and the chat stats row can calculate a cache-hit share instead of erasing it when an earlier attempt reported zero.
 
 #### KV Cache effect
 

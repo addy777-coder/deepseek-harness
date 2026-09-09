@@ -3,12 +3,14 @@ import { spawn } from 'node:child_process'
 import { cp, lstat, mkdir, readFile, readdir, realpath, rm, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pnpmInvocation } from './pnpm-invocation.ts'
+import { verifyDesktopRuntimeLock } from './desktop-runtime-lock.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const deployRoot = resolve(root, 'apps/desktop/runtime-closure')
 const staging = resolve(root, '.dsh-build/desktop-runtime')
 const workspaceStatePath = resolve(root, 'node_modules/.pnpm-workspace-state-v1.json')
 const workspaceConfigPath = resolve(root, 'pnpm-workspace.yaml')
+const workspaceLockPath = resolve(root, 'pnpm-lock.yaml')
 
 function assertStagingPath(): void {
   const rel = relative(root, staging)
@@ -109,26 +111,33 @@ async function materializeLinks(): Promise<void> {
 
 assertStagingPath()
 await rm(staging, { recursive: true, force: true })
+const verifiedLock = await readFile(workspaceLockPath, 'utf8')
+const verification = pnpmInvocation(['install', '--offline', '--frozen-lockfile', '--ignore-scripts', '--config.trust-lockfile=false'])
+await run('verify workspace lock', verification.command, verification.args)
+if (await readFile(workspaceLockPath, 'utf8') !== verifiedLock) throw new Error('stage-desktop-runtime: workspace lock changed during verification')
 const workspaceState = await readOptional(workspaceStatePath)
 const workspaceConfig = await readOptional(workspaceConfigPath)
 const invocation = pnpmInvocation([
   '--filter', 'dsh-desktop-runtime-closure',
-  'deploy', '--legacy', '--prod',
+  'deploy', '--prod', '--offline', '--trust-lockfile', '--ignore-scripts',
+  '--config.inject-workspace-packages=true',
   '--config.node-linker=hoisted',
-  '--config.auto-install-peers=false',
   '--config.link-workspace-packages=true',
   staging,
 ])
 let stageError: unknown
 try {
   await run('deploy', invocation.command, invocation.args)
+  if (await readFile(workspaceLockPath, 'utf8') !== verifiedLock) throw new Error('stage-desktop-runtime: workspace lock changed during deploy')
+  verifyDesktopRuntimeLock(verifiedLock, await readFile(join(staging, 'pnpm-lock.yaml'), 'utf8'))
   await restoreDirectDependencies()
   await materializeLinks()
+  if (await readFile(workspaceLockPath, 'utf8') !== verifiedLock) throw new Error('stage-desktop-runtime: workspace lock changed during staging')
 } catch (error) {
   stageError = error
 }
 try {
-  // Legacy deploy records its production/hoisted options in the source workspace.
+  // Deploy can record its production/hoisted options in the source workspace.
   // Restore its generated state and release-age edits so staging leaves the
   // source workspace byte-identical.
   await restoreFile(workspaceStatePath, workspaceState)

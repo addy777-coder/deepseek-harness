@@ -76,6 +76,7 @@ kind: "package-reference"
 | `displayName` | 提供方名 | 选择器界面显示的标签 |
 | `api` | 目录协议 | 协议格式；仅目录不提供的路由需要 |
 | `baseURL` | 目录端点 | 路由上所有模型的端点 |
+| `network` | `direct` | `vpn` 通过可选网络服务发送提供方 HTTP 请求；服务不可用时请求失败 |
 | `models` | 已安装目录 | 整体替换路由目录；每个条目从已安装模型取默认值 |
 | `modelOverrides` | 无 | 重塑个别已安装目录模型，而不替换其余模型 |
 | `compat` | 目录检测 | 无法识别端点的协议兼容开关 |
@@ -87,6 +88,8 @@ kind: "package-reference"
 | `retryPolicy` | normal，5 次重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
+
+配置 [VPN 提供方](../../network/network-openvpn/README.zh.md)后，可为私有 Anthropic 端点选择 `network: vpn`。VPN 路由要求显式配置 `api: anthropic-messages`、`baseURL` 和 `apiKeyEnv`；`transport` 可省略或设为 `sse`。流式请求与模型发现通过同一个私有 HTTP 分发器访问已注册端点。提供方原生认证、WebSocket 传输和不支持的 API 会被拒绝；适配器绝不回退到直连网络。更改 VPN 路由或端点后，须先保存再获取模型。
 
 ### 登录提供方
 
@@ -106,7 +109,7 @@ profile 通过可选 settings seam 每次操作重新读取：base 与用户的 
 
 ### 从端点发现模型
 
-插件会回答"该提供方可以提供哪些模型？"，供配置界面正在编辑或起草的路由使用。已安装目录提供的路由直接由目录回答，不发网络请求，并保留每个模型的已知输入模态；只有目录未描述的路由才会经网络询问（`openai-completions` 与 `openai-responses` 形状），这种列表的模态保持未知。已配置且具名的路由会在 Host 内部提供已存凭据与 profile `headers`，因此通过 `settings.yaml` 或 Cordis 配置设置的部署标头可以到达 `GET /models`，但不会成为发现请求或 Models 页面的字段；表单中新键入的密钥仍优先于已存凭据。回答是界面可以提供给用户采纳的候选元数据——不存储任何内容，`settings.yaml` 仍然是决定路由服务内容的唯一事实。
+插件从已安装目录或提供方端点发现模型。目录回答保留已知输入模态，且不发送网络请求。OpenAI 兼容端点使用带 bearer 认证的 `GET /models`；Anthropic Messages 端点使用带 `x-api-key` 和 `anthropic-version` 的 `GET /v1/models`。已配置路由在 Host 内提供已存凭据与 profile headers，表单中键入的密钥优先。VPN 发现要求请求的网络、端点和协议与已保存的 VPN 提供方一致。回答只提供可供采纳的候选元数据，不更改已配置的模型列表。
 
 ### 失败与恢复
 
@@ -192,7 +195,7 @@ pi-ai 事件变成 harness 的推理、文本、工具调用、用量与 finish 
 
 #### Token 影响
 
-生成内容只在 loop 记录后才影响后续输入。提供方未单独报告推理 token 时，pi-ai 会把推理 token 并入输出用量，并原样保留其精确 `totalTokens` 值。
+生成内容只在 loop 记录后才影响后续输入。提供方未单独报告推理 token 时，pi-ai 会把推理 token 并入输出用量，并原样保留其精确 `totalTokens` 值。缓存分桶始终输出——无论数值还是 0——因此下游用量折叠与聊天统计行能计算缓存命中占比，而不是在较早尝试报告 0 时把它抹掉。
 
 #### KV Cache 影响
 

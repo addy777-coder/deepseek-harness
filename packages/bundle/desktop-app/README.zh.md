@@ -1,5 +1,5 @@
 ---
-description: "共享 GUI 之上的 Windows Desktop 载体层，添加 Electron MessagePort IPC、原生目录选择与 Desktop 专用 Client 集成。"
+description: "共享 GUI 之上的 Windows Desktop 载体层，添加 Electron IPC、原生目录选择、内置 VPN 与 Desktop Client 集成。"
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`dsh-desktop-app` 把共享 GUI 组合变成 Windows 上 DSH Desktop 使用的 Host。随附 `desktop` profile 把它放在 `dsh-base` 与 `dsh-gui-app` 之后，并在启动时一次性应用用户 patch。本层添加 Electron MessagePort 传输、原生目录选择的两侧，以及 Desktop 专用标题栏、通知、偏好与插件管理呈现。Electron 应用而非本 bundle 拥有窗口、系统注册、进程关闭与打包资源。
+`dsh-desktop-app` 把共享 GUI 组合变成 Windows 上 DSH Desktop 使用的 Host。随附 `desktop` profile 把它放在 `dsh-base` 与 `dsh-gui-app` 之后，并在启动时一次性应用用户 patch。本层添加 Electron MessagePort 传输、原生目录选择、内置 VPN 设置，以及 Desktop 标题栏、通知、偏好与插件管理呈现。Electron 应用拥有窗口、系统注册、进程关闭与打包资源。
 
 ## 目录
 
@@ -40,6 +40,8 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-desktop-app
 
 本载体不会打开 HTTP listener。每个 Renderer 都会获得专用 MessagePort，原生目录选择器的 Host 与 Client 配置项则保留 Windows chooser 及其取消行为。Desktop UI 配置项添加 shell 集成，但不会复制共享对话、设置、Session、审批、附件或终端实现。
 
+[VPN 设置](../../client/ui-vpn/README.zh.md)允许用户导入 OpenVPN 配置并保存账号，供应用自有连接使用。[网络提供方](../../network/network-openvpn/README.zh.md)仅传送已配置使用 VPN 的模型提供方请求；它拥有需要认证的回环代理，保持操作系统路由与 DNS 不变。Electron 应用提供经过验证的原生分发资源与可执行文件校验和。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -48,11 +50,11 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-desktop-app
 <details>
 <summary>实现细节——点击展开</summary>
 
-静态 patch 插入四个配置项：传输、原生目录选择 Host、原生目录选择 Client 与 Desktop UI。Host 传输仅在 Loader settle 后宣告就绪。应用在每个窗口加载完成后转交端口，并在终止 Utility Process 进程树之前请求有界 Host 关闭。
+静态 patch 选择传输、原生目录选择 Host 与 Client、Desktop UI，以及 VPN 提供方、控制器和设置 UI。Host 传输仅在 Loader settle 后宣告就绪。应用在每个窗口加载完成后转交端口，并在终止 Utility Process 进程树之前请求有界 Host 关闭。
 
 | 文件 | 职责 |
 |---|---|
-| [`cordis.patch.yml`](cordis.patch.yml) | Electron 载体与原生交互配置项 |
+| [`cordis.patch.yml`](cordis.patch.yml) | Electron 载体、原生交互与 VPN 配置项 |
 | [`src/index.ts`](src/index.ts) | 可安装 bundle 的空包入口 |
 | [`tests/desktop-app.spec.ts`](tests/desktop-app.spec.ts) | manifest 与原生 Host/Client 配对检查 |
 | — | 不发布运行时不变式伴生入口；该静态 patch 不拥有可变状态，每个插入包拥有自己的生命周期检查。 |
@@ -68,6 +70,7 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-desktop-app
 - [共享 GUI bundle](../gui-app/README.zh.md)——本层下方与载体无关的配置项。
 - [Desktop 传输](../../desktop/transport/README.zh.md)——MessagePort 协议与关闭。
 - [Desktop UI](../../client/ui-desktop/README.zh.md)——标题栏、窗口、通知与设置。
+- [应用网络](../../../docs/subsystems/network.zh.md)——目标所有权、凭据和连接生命周期。
 - [Desktop 架构决策](../../../.agents/notes/implemented/architecture/2026-09-03-windows-desktop-client.zh.md)——安全与生命周期理由。
 
 -----

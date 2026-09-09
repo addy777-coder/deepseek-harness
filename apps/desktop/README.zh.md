@@ -45,7 +45,11 @@ pnpm run package:desktop:win
 
 构建固定 Electron 44.1.1、electron-builder 26.15.3 与 pnpm 11.7.0，并在 `apps\desktop\dist-electron` 下写入当前用户 NSIS 安装器和 portable zip。staging 项目位于已忽略的 `.dsh-build` 目录，避免 electron-builder 把仓库 workspace 当作待打包应用解释。
 
+runtime staging 要求依赖已在本机缓存中。它先通过冻结锁文件的离线 pnpm 安装验证未变化的 workspace 锁文件，再离线部署相同记录，并禁用安装脚本。由于 pnpm 生成的部署锁会改变本地 workspace 路径，部署复用这次成功的供应链验证；每个 registry 包标识及完整的完整性／URL resolution 都必须与已验证的源记录相等，源锁文件并发变化时也会拒绝 staging。缓存缺失或验证失败都会停止打包。
+
 安装后的 runtime 与 pnpm 不包含类型声明、源映射、编译器状态、调试符号，以及测试／示例／基准测试／GitHub 工作流目录。运行模块、原生二进制文件、包元数据和许可证保留为普通文件，供 Node 解析与子进程启动使用。
+
+原生 VPN 分发文件在 `resources/vpn` 下保留其独立验证的字节、许可证和对应源码压缩包。桌面代码签名排除 `dsh-vpn.exe`，保证其 manifest 摘要有效；应用和安装器仍使用各自的常规签名策略。
 
 -----
 

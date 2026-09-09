@@ -257,6 +257,35 @@ describe('tokenUsage session projection', () => {
     })
   })
 
+  it('accumulates cache buckets in later attempts even when an earlier attempt omits them', async () => {
+    const { ctx, session } = await harness()
+    startStep(session, 1, 1)
+    // pi-ai-used-to omit zero buckets; the projection defaults the absence to
+    // zero so a later genuine cache hit is not erased from the window.
+    const first = usageChunk(session, { inputTokens: 12, outputTokens: 4 }, 1, 1)
+    finalUsage(session, { inputTokens: 12, outputTokens: 4 }, 1, 1, [first])
+    startStep(session, 1, 2)
+    const second = usageChunk(session, {
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 1,
+    }, 1, 2)
+    finalUsage(session, {
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 1,
+    }, 1, 2, [second])
+
+    expect(projected(ctx, session)).toEqual({
+      uncachedInputTokens: 22,
+      outputTokens: 6,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 1,
+    })
+  })
+
   it('does not erase historical billing when the visible surface is replaced', async () => {
     const { ctx, session } = await harness()
     startStep(session, 1, 1)

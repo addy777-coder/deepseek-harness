@@ -40,6 +40,8 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-gui-app
 
 本层提供 GUI 专用提示词默认值、内存 Session 搜索设置、工作区与 controller 服务、API Remotes、Connection 核心、客户端模块 registry、客户端 runner 与完整共享 UI 名录。它还把逐 agent 工具移到 preset registry 之后，让每个 GUI Session 可以选择自己的 agent 组合。
 
+[使用统计页](../../client/ui-usage/README.zh.md)通过[使用统计控制器](../../api/usage-controller/README.zh.md)读取整个数据目录的历史。两个载体共用其读取限制、Client 模型和设置贡献。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -27,6 +27,8 @@ English | [中文](README.zh.md)
 
 Users switch the color scheme and content font size from two rows in Settings (General section); both choices persist across restarts on a local GUI carrier (loopback Web or Desktop). Feature plugins consume the current snapshot through `ctx.theme` and read the `--dsw-*` tokens in CSS; they do not manage theme state themselves.
 
+The `--dsw-alias-chart-1` through `--dsw-alias-chart-5` aliases provide ordered series colors, and `--dsw-alias-chart-other` represents grouped remaining series. Each alias has light and dark values; the [usage page](../ui-usage/README.md) shares them between its daily bars, model ring, and legend.
+
 ### Appearance and font size
 
 The plugin registers Appearance preference cubes and a font-size stepper in the General section. The stepper accepts integer values from 12 through 17 px and defaults to 14 px. It changes conversation headings and base text by the same increment, including the user bubble and composer draft; flow-row titles, summaries, and tables follow one step under the body size, while small text and code keep fixed sizes. Each accepted change writes through the Host settings API. Rapid changes serialize in gesture order with namespace revisions, and a rejected latest write reloads the durable values. Non-loopback pages keep both choices process-local.

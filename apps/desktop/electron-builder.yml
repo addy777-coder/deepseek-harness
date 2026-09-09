@@ -10,6 +10,10 @@ files:
   - assets/**
   - package.json
 extraResources:
+  - from: vpn
+    to: vpn
+    filter:
+      - '**/*'
   - from: ../desktop-runtime/package.json
     to: runtime/package.json
   - from: ../desktop-runtime/node_modules
@@ -32,6 +36,8 @@ protocols:
       - dsh
 win:
   icon: assets/icon.ico
+  signExts:
+    - '!dsh-vpn.exe'
   target:
     - target: nsis
       arch: [x64]
