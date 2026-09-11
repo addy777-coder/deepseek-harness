@@ -4,6 +4,8 @@ import { cp, lstat, mkdir, readFile, readdir, realpath, rm, unlink, writeFile } 
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pnpmInvocation } from './pnpm-invocation.ts'
 import { verifyDesktopRuntimeLock } from './desktop-runtime-lock.ts'
+import { prepareDesktopRuntimeAssets } from './desktop-runtime-assets.ts'
+import { resolveVpnTarget } from '../apps/desktop/src/main/vpn-artifact.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const deployRoot = resolve(root, 'apps/desktop/runtime-closure')
@@ -11,6 +13,7 @@ const staging = resolve(root, '.dsh-build/desktop-runtime')
 const workspaceStatePath = resolve(root, 'node_modules/.pnpm-workspace-state-v1.json')
 const workspaceConfigPath = resolve(root, 'pnpm-workspace.yaml')
 const workspaceLockPath = resolve(root, 'pnpm-lock.yaml')
+const target = resolveVpnTarget()
 
 function assertStagingPath(): void {
   const rel = relative(root, staging)
@@ -132,6 +135,7 @@ try {
   verifyDesktopRuntimeLock(verifiedLock, await readFile(join(staging, 'pnpm-lock.yaml'), 'utf8'))
   await restoreDirectDependencies()
   await materializeLinks()
+  await prepareDesktopRuntimeAssets(staging, target)
   if (await readFile(workspaceLockPath, 'utf8') !== verifiedLock) throw new Error('stage-desktop-runtime: workspace lock changed during staging')
 } catch (error) {
   stageError = error

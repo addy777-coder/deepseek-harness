@@ -1,25 +1,30 @@
-# 在 Windows 上使用 DSH Desktop
+# 使用 DSH Desktop
 
 [English](desktop.md) | 中文
 
-DSH Desktop 是 Windows x64 应用，与 Web UI 共用会话、工作区、模型与设置。它从本地文件加载 GUI，并连接到私有 Host 进程，不会打开本地 HTTP 端口。
+DSH Desktop 是 Windows x64、macOS Apple Silicon/Intel 和 Linux x64 应用，与 Web UI 共用会话、工作区、模型与设置。它从本地文件加载 GUI，并连接到私有 Host 进程，不会打开本地 HTTP 端口。
 
 ## 前提条件
 
-- x64 版 Windows 10 或 Windows 11
+- Windows 10/11 x64、Apple Silicon 或 Intel 上的 macOS，或具有桌面会话的 Ubuntu 24.04 x64
 - DeepSeek 兼容 API endpoint 与凭据
 - 希望 agent 使用的工作区目录
 
-首版未签名。Windows SmartScreen 可能会对内部安装产物显示未知发布者警告。
+这些安装包没有发布者证书。Windows SmartScreen 可能显示未知发布者警告。macOS 使用 ad-hoc 签名，未经过 Apple 公证；若 Gatekeeper 阻止下载的应用，可在**系统设置 → 隐私与安全性**中允许该应用。
 
 ## 安装或使用便携构建
 
-使用以下两种发布产物之一：
+在 [GitHub Releases](https://github.com/addy777-coder/deepseek-harness/releases) 中选择版本及对应系统和 CPU 的文件。Latest 表示最新正式版；alpha、beta 和 rc 版本标记为 Pre-release。每个发行版都提供用于检查下载文件的 SHA256SUMS。
 
 - 运行 `DSH-Desktop-<version>-win-x64.exe` 执行当前用户安装。安装器会注册 `dsh://` 链接，之后可以启用登录后启动。
 - 解压 `DSH-Desktop-<version>-win-x64.zip` 使用 portable 构建。它不会注册 `dsh://`，也不能启用登录后启动。
 
-移除应用时，两种变体都会保留 `%USERPROFILE%\.dsh`。该目录存放共享模型设置、凭据、profile、工作区与会话。
+- macOS 打开 `DSH-Desktop-<version>-mac-<arch>.dmg`，将 DSH Desktop 复制到 Applications；Apple Silicon 选择 `arm64`，Intel 选择 `x64`。对应 ZIP 包含同一应用。
+- Linux 为 `DSH-Desktop-<version>-linux-x64.AppImage` 添加执行权限后启动，或通过系统包管理器安装对应 DEB。AppImage 需要 FUSE 支持，以及用于目录选择的 zenity 或 kdialog；DEB 声明 zenity 依赖。桌面集成使用 X11 或 XWayland。
+
+Ubuntu 24.04 的 DEB 安装会配置 Chromium 沙箱需要的 AppArmor 权限。AppImage 需要管理员为固定安装路径授权用户命名空间；没有该权限时会拒绝启动。请使用不带版本号的固定文件名，例如 `dsh-desktop.AppImage`，让更新保留该路径。不要使用 `--no-sandbox` 绕过此要求。
+
+移除应用时会保留 Harness home：Windows 使用 `%USERPROFILE%\.dsh`，macOS/Linux 使用 `~/.dsh`。该目录存放共享模型设置、凭据、profile、工作区与会话。
 
 ## 开始任务
 
@@ -31,7 +36,7 @@ DSH Desktop 是 Windows x64 应用，与 Web UI 共用会话、工作区、模�
 
 打开**设置 → 常规 → Desktop 集成**可修改或禁用默认 `Ctrl+Shift+Space` 快捷键。该快捷键会聚焦主窗口并打开新任务视图。冲突会显示在设置中，但不会阻止应用运行。
 
-已安装构建可以启用登录 Windows 后启动。托盘菜单可以显示主窗口、打开新任务或退出。仅当没有聚焦的 DSH Desktop 窗口显示对应 Session 时，才会出现完成或失败通知；选择通知会打开其任务窗口。
+已注册协议处理的 Windows 或 macOS 安装构建可以启用登录后启动；Linux 不提供该设置。托盘菜单可以显示主窗口、打开新任务或退出。仅当没有聚焦的 DSH Desktop 窗口显示对应 Session 时，才会出现完成或失败通知；选择通知会打开其任务窗口。
 
 支持的链接有意保持严格：
 
@@ -41,6 +46,12 @@ dsh://session/<base64url-session-id>
 ```
 
 DSH Desktop 会拒绝 query string、fragment、提示词、磁盘路径与其他全部 route。
+
+## 更新 DSH Desktop
+
+Windows 和受支持的 Linux 安装包使用 GitHub Releases feed 更新。macOS 安装包需要从发行版页面手动下载并替换。打开**设置 → 关于与更新**，选择**检查更新**，选择**下载更新**，下载完成后选择**安装并重启**。安装前需要原生确认；安装会先关闭 DSH Desktop，再以新版本重新打开。
+
+Windows 便携 ZIP 构建没有自己的安装目标，执行该流程时会安装当前用户应用。关于页面也提供发行版页面链接，以便手动下载。
 
 ## 恢复 Host
 
@@ -58,8 +69,8 @@ DSH Desktop 使用 pnpm 11.7.0 在临时 profile 中解析候选，并且不执�
 
 ## 当前限制
 
-- 仅支持 Windows x64；不包含 macOS、Linux 与远端 Host。
-- 不包含账号登录、代码签名、自动更新或插件市场搜索。
+- 不包含 Windows/Linux ARM64、Linux RPM 包与远端 Host。
+- 不包含账号登录、发布者签名、Apple 公证或插件市场搜索。
 - 首版无法安装依赖安装脚本的插件。
 - 应用重启后不会恢复任务窗口。
 

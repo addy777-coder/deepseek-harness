@@ -25,7 +25,7 @@ Configure the company VPN from desktop settings and save the account to start co
 <a id="use-this-package"></a>
 ## Use this package
 
-Open **Settings → VPN** in the desktop application. This page requires the [VPN controller](../../api/vpn-controller/README.md), locale service, and settings renderer. Unsupported hosts display the Windows x64 requirement and disable configuration.
+Open **Settings → VPN** in the desktop application. This page requires the [VPN controller](../../api/vpn-controller/README.md), locale service, and settings renderer. Unsupported hosts display the supported operating systems and CPU architectures and disable configuration.
 
 ### Configure a connection
 
@@ -81,7 +81,7 @@ No effect; editing the form does not construct or send model requests.
 
 The page manages one saved VPN configuration:
 
-- The desktop VPN implementation requires Windows x64 and a compatible company profile.
+- The desktop VPN implementation requires Windows/Linux x64 or macOS x64/arm64, and a compatible company profile.
 - The page cannot select an external OpenVPN client's active connection or recover its password.
 - Closing the page discards unsaved drafts; persisted connection resources remain owned by the network provider.
 - Profile validation, credential storage, startup recovery, and model routing are provided by the Host.

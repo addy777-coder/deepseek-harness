@@ -11,7 +11,8 @@ import type {
 import { parseDesktopHostLifecycleFrame } from '@deepseek-ai/dsh-desktop-transport'
 import { channels } from './channels.ts'
 import { waitForHostReadiness } from './host-startup.ts'
-import { verifyVpnArtifact } from './vpn-artifact.ts'
+import { HostProcessTree, waitForHostExit } from './host-process-tree.ts'
+import { resolveVpnTarget, verifyVpnArtifact } from './vpn-artifact.ts'
 
 const HOST_STOP_TIMEOUT_MS = 5_000
 
@@ -49,9 +50,10 @@ function hostEntry(): string {
   return join(app.getAppPath(), 'lib', 'host-bootstrap.js')
 }
 
-async function terminateUtilityProcess(child: UtilityProcess): Promise<void> {
+async function terminateUtilityProcess(child: UtilityProcess, tree: HostProcessTree | undefined): Promise<void> {
   if (process.platform !== 'win32') {
-    child.kill()
+    if (tree === undefined) child.kill()
+    else await tree.terminate(HOST_STOP_TIMEOUT_MS)
     return
   }
   await new Promise<void>((resolvePromise) => {
@@ -67,6 +69,7 @@ async function terminateUtilityProcess(child: UtilityProcess): Promise<void> {
 /** Owns exactly one Host process and proves its stop before replacement. */
 export class DesktopHostProcess {
   private child: UtilityProcess | undefined
+  private processTree: HostProcessTree | undefined
   private exitState: Deferred<void> | undefined
   private expectedExit = false
   private stderrTail: string[] = []
@@ -76,7 +79,7 @@ export class DesktopHostProcess {
 
   /** Start a fresh Host and await its Loader readiness frame. */
   async start(): Promise<void> {
-    if (this.child !== undefined) throw new Error('desktop host: a process is already owned')
+    if (this.child !== undefined || this.processTree !== undefined) throw new Error('desktop host: a process is already owned')
     const ready = deferred<void>()
     const exited = deferred<void>()
     this.exitState = exited
@@ -84,14 +87,15 @@ export class DesktopHostProcess {
     this.stderrTail = []
     let startupPhase: DesktopHostStartupPhase = 'bootstrap'
     const runtimeEntry = dshEntry()
-    const vpn = app.isPackaged ? await verifyVpnArtifact(join(process.resourcesPath, 'vpn'), false) : undefined
+    const vpnTarget = resolveVpnTarget()
+    const vpn = app.isPackaged ? await verifyVpnArtifact(join(process.resourcesPath, 'vpn'), false, vpnTarget) : undefined
     const child = utilityProcess.fork(hostEntry(), ['--profile', 'desktop'], {
       cwd: homedir(),
       env: {
         ...process.env,
         DSH_DESKTOP_DSH_ENTRY: runtimeEntry ?? '',
         DSH_HOME: process.env.DSH_HOME ?? join(homedir(), '.dsh'),
-        DSH_VPN_EXECUTABLE: vpn?.executablePath ?? join(sourceRoot(), 'native', 'vpn', 'dist', 'windows-x64', 'dsh-vpn.exe'),
+        DSH_VPN_EXECUTABLE: vpn?.executablePath ?? join(sourceRoot(), 'native', 'vpn', 'dist', vpnTarget.directory, vpnTarget.binary),
         DSH_VPN_EXECUTABLE_SHA256: vpn?.executableSha256 ?? '',
         ...(runtimeEntry !== undefined
           ? {}
@@ -102,6 +106,15 @@ export class DesktopHostProcess {
       stdio: 'pipe',
     })
     this.child = child
+    child.once('spawn', () => {
+      if (process.platform === 'win32') return
+      try {
+        if (child.pid === undefined) throw new Error('desktop host: spawned process has no PID')
+        this.processTree = new HostProcessTree(child.pid)
+      } catch (error) {
+        ready.reject(error)
+      }
+    })
     child.on('message', (message: unknown) => {
       let frame
       try {
@@ -136,11 +149,11 @@ export class DesktopHostProcess {
         stderrTail: this.stderrTail,
       }))
     } catch (error) {
-      if (this.child === child) {
-        this.expectedExit = true
-        await terminateUtilityProcess(child)
-        await exited.promise
-        this.exitState = undefined
+      this.expectedExit = true
+      try {
+        await this.finishStop(child, exited)
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'desktop host: startup failed and process cleanup did not complete')
       }
       throw error
     }
@@ -160,8 +173,15 @@ export class DesktopHostProcess {
   async stop(): Promise<void> {
     const child = this.child
     const exited = this.exitState
-    if (child === undefined || exited === undefined) return
+    const tree = this.processTree
+    if (child === undefined || exited === undefined) {
+      await tree?.terminate(HOST_STOP_TIMEOUT_MS)
+      this.processTree = undefined
+      this.exitState = undefined
+      return
+    }
     this.expectedExit = true
+    tree?.capture()
     const frame: DesktopHostControlFrame = { v: 1, t: 'shutdown' }
     child.postMessage(frame)
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -175,8 +195,14 @@ export class DesktopHostProcess {
     } finally {
       if (timer !== undefined) clearTimeout(timer)
     }
-    if (this.child === child) await terminateUtilityProcess(child)
-    await exited.promise
+    await this.finishStop(child, exited)
+  }
+
+  private async finishStop(child: UtilityProcess, exited: Deferred<void>): Promise<void> {
+    if (this.child === child) await terminateUtilityProcess(child, this.processTree)
+    else await this.processTree?.terminate(HOST_STOP_TIMEOUT_MS)
+    await waitForHostExit(exited.promise, HOST_STOP_TIMEOUT_MS)
+    this.processTree = undefined
     this.exitState = undefined
   }
 

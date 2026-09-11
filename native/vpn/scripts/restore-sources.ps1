@@ -37,4 +37,4 @@ $files = @(Get-ChildItem -LiteralPath $sources, $ports -File -Recurse | Sort-Obj
 })
 [ordered]@{ revisions = $index.revisions; files = $files } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root '.cache/source-provenance.json') -Encoding utf8
 Initialize-VpnSources
-Write-Output 'Restored verified upstream sources, port patches and dependency source archives. Run scripts/build.ps1 with Visual Studio C++ Build Tools installed.'
+Write-Output 'Restored verified upstream sources, port patches and dependency source archives. Run scripts/build.ps1 on the matching target host with its C++ build tools installed.'

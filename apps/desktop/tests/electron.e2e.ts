@@ -1,8 +1,10 @@
 /** Real Electron/Utility Process smoke for the shipped Desktop profile. */
 import { execFile, spawn } from 'node:child_process'
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { createServer, type Server } from 'node:http'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,10 +13,10 @@ import { _electron as electron, type ElectronApplication, type Page } from 'play
 import type {} from '../src/shared/contracts.ts'
 import { assertNativeDirectoryPicker } from './native-directory-picker.ts'
 
-if (process.platform !== 'win32') {
-  console.log('desktop Electron e2e: skipped outside Windows')
-  process.exit(0)
-}
+const windows = process.platform === 'win32'
+const shellTool = windows ? 'pwsh' : 'bash'
+const shellOutput = windows ? 'PWSH_OK' : 'TERMINAL_OK'
+const shellCommand = windows ? "Write-Output 'PWSH_OK'" : 'echo TERMINAL_OK'
 
 const appDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repository = resolve(appDirectory, '..', '..')
@@ -25,12 +27,12 @@ const liveMode = process.env.DSH_DESKTOP_LIVE === '1'
 if (liveMode && (process.env.DEEPSEEK_API_KEY === undefined || process.env.DEEPSEEK_API_KEY === '')) {
   throw new Error('desktop Electron e2e: DSH_DESKTOP_LIVE requires DEEPSEEK_API_KEY')
 }
-const replayFixture = resolve(repository, 'snapshots', 'session', 'pwsh-tool-turn', 'session.jsonl')
+const replayFixture = resolve(repository, 'snapshots', 'session', `${shellTool}-tool-turn`, 'session.jsonl')
 const toolPrompt = liveMode
   ? 'Reply with exactly DSH_DESKTOP_LIVE_OK and nothing else.'
-  : replayMode
+  : replayMode && windows
     ? "Use the pwsh tool to run exactly: [Console]::Out.Write('PWSH_OK'). Then reply with the single word DONE and stop."
-    : "Use the pwsh tool to run exactly: Write-Output 'PWSH_OK'. Then reply with the single word DONE and stop."
+    : `Use the ${shellTool} tool to run exactly: ${shellCommand}. Then reply with the single word DONE and stop.`
 const expectedReply = liveMode ? 'DSH_DESKTOP_LIVE_OK' : 'DONE'
 const home = await mkdtemp(join(tmpdir(), 'dsh-desktop-e2e-home-'))
 const userData = await mkdtemp(join(tmpdir(), 'dsh-desktop-e2e-user-'))
@@ -40,13 +42,142 @@ let stderr = ''
 let mockServer: MockLlmServer | undefined = replayMode || liveMode ? undefined : await startMockLlmServer({
   apiKey: 'desktop-e2e-key',
   sequence: ['tool_call_success', 'success'],
-  toolName: 'pwsh',
+  toolName: shellTool,
   toolArguments: JSON.stringify({
-    command: "Write-Output 'PWSH_OK'",
-    description: 'Write PWSH_OK to console',
+    command: shellCommand,
+    description: `Write ${shellOutput} to console`,
   }),
   successText: 'DONE',
 })
+
+/** One release in the local update feed fixture, served over plain HTTP. */
+interface UpdateFeed {
+  readonly url: string
+  readonly version: string
+  readonly fileName: string
+  readonly releaseName: string
+  allowChecks(): void
+  downloadCount(): number
+  cancelledCount(): number
+  close(): Promise<void>
+}
+
+function nextFixtureVersion(version: string): string {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/u.exec(version)
+  if (match === null) {
+    throw new Error(`desktop Electron e2e: unsupported app version for the update fixture: ${version}`)
+  }
+  return `${match[1]}.${match[2]}.${String(Number(match[3]) + 1)}`
+}
+
+/**
+ * Publish one newer release for the in-app update check; `latest.yml` carries
+ * the same sha512 the fake installer serves, so sha verification passes.
+ */
+async function startUpdateFeed(): Promise<UpdateFeed> {
+  const manifest = JSON.parse(await readFile(join(appDirectory, 'package.json'), 'utf8')) as {
+    version?: string
+  }
+  const version = nextFixtureVersion(manifest.version ?? '0.1.2-alpha.5')
+  const releaseName = `DSH Desktop ${version}`
+  let suffix = windows ? 'win-x64.exe' : 'linux-x64.AppImage'
+  if (process.platform === 'linux') {
+    const executable = packagedExecutable ?? createRequire(import.meta.url)('electron') as string
+    try {
+      const packageType = (await readFile(join(dirname(executable), 'resources', 'package-type'), 'utf8')).trim()
+      if (packageType !== 'deb') throw new Error(`Unexpected Linux update package type: ${packageType}`)
+      suffix = 'linux-x64.deb'
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  const fileName = `DSH-Desktop-${version}-${suffix}`
+  const installer = Buffer.alloc(128 * 1024, `desktop-e2e-fixture-installer-${version}`)
+  const sha512 = createHash('sha512').update(installer).digest('base64')
+  const latestYml = [
+    `version: ${version}`,
+    `releaseName: ${releaseName}`,
+    'releaseNotes: Fixture release notes.',
+    'files:',
+    `  - url: ${fileName}`,
+    `    sha512: ${sha512}`,
+    `    size: ${String(installer.byteLength)}`,
+    `path: ${fileName}`,
+    `sha512: ${sha512}`,
+    'releaseDate: 2030-01-01T00:00:00.000Z',
+    '',
+  ].join('\n')
+  let checksAllowed = false
+  let downloads = 0
+  let cancellations = 0
+  const server: Server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://localhost').pathname
+    if (pathname === '/latest.yml' || pathname === '/latest-linux.yml') {
+      if (!checksAllowed) {
+        response.writeHead(503)
+        response.end()
+        return
+      }
+      response.writeHead(200, { 'content-type': 'text/yaml' })
+      response.end(latestYml)
+      return
+    }
+    if (pathname === `/${fileName}`) {
+      downloads += 1
+      response.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-length': installer.byteLength,
+      })
+      if (downloads === 1) {
+        // Hold the first response open until the client cancels the download.
+        response.once('close', () => { cancellations += 1 })
+        response.write(installer.subarray(0, 64 * 1024))
+        return
+      }
+      response.end(installer)
+      return
+    }
+    response.writeHead(404)
+    response.end()
+  })
+  const close = async (): Promise<void> => {
+    await new Promise<void>((resolvePromise, reject) => {
+      server.close((error) => {
+        if (error === undefined || (error as NodeJS.ErrnoException).code === 'ERR_SERVER_NOT_RUNNING') resolvePromise()
+        else reject(error)
+      })
+      server.closeAllConnections()
+    })
+  }
+  try {
+    await new Promise<void>((resolvePromise, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject)
+        resolvePromise()
+      })
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') {
+      throw new Error('desktop Electron e2e: update feed fixture has no address')
+    }
+    return {
+      url: `http://127.0.0.1:${String(address.port)}`,
+      version,
+      fileName,
+      releaseName,
+      allowChecks: () => { checksAllowed = true },
+      downloadCount: () => downloads,
+      cancelledCount: () => cancellations,
+      close,
+    }
+  } catch (error) {
+    await close()
+    throw error
+  }
+}
+
+let updateFeedToClose: UpdateFeed | undefined
 
 interface ProcessRow {
   readonly ProcessId: number
@@ -112,6 +243,26 @@ async function powershell(command: string): Promise<string> {
 }
 
 async function descendantProcesses(parentPid: number): Promise<ProcessRow[]> {
+  if (!windows) {
+    const output = await new Promise<string>((resolvePromise, reject) => {
+      execFile('ps', ['-eo', 'pid=,ppid=,args='], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+        if (error !== null) reject(new Error('desktop Electron e2e: process query failed', { cause: error }))
+        else resolvePromise(stdout)
+      })
+    })
+    const all = output.split('\n').flatMap((line) => {
+      const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/u.exec(line)
+      return match === null ? [] : [{ ProcessId: Number(match[1]), ParentProcessId: Number(match[2]), CommandLine: match[3] }]
+    })
+    const result: ProcessRow[] = []
+    let frontier = new Set([parentPid])
+    while (frontier.size > 0) {
+      const children = all.filter(row => frontier.has(row.ParentProcessId))
+      result.push(...children)
+      frontier = new Set(children.map(row => row.ProcessId))
+    }
+    return result
+  }
   const output = (await powershell(
     `$all = @(Get-CimInstance Win32_Process); $frontier = @(${String(parentPid)}); $result = @(); `
     + 'for ($depth = 0; $depth -lt 5 -and $frontier.Count -gt 0; $depth++) { '
@@ -125,12 +276,33 @@ async function descendantProcesses(parentPid: number): Promise<ProcessRow[]> {
 }
 
 async function processExists(pid: number): Promise<boolean> {
+  if (!windows) {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') return true
+      throw error
+    }
+  }
   return (await powershell(
     `if (Get-CimInstance Win32_Process -Filter 'ProcessId = ${String(pid)}') { 'yes' }`,
   )).trim() === 'yes'
 }
 
 async function tcpListenerCount(pid: number): Promise<number> {
+  if (!windows) {
+    return await new Promise<number>((resolvePromise, reject) => {
+      execFile('lsof', ['-nP', '-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN', '-Fp'], (error, stdout, stderr) => {
+        // lsof exits 1 when the selected process has no matching descriptors.
+        if (error !== null && !(error.code === 1 && stdout === '' && stderr === '')) {
+          reject(new Error('desktop Electron e2e: listener query failed', { cause: error }))
+        }
+        else resolvePromise(stdout.split('\n').filter(line => /^p\d+$/u.test(line)).length)
+      })
+    })
+  }
   const output = (await powershell(
     `@((Get-NetTCPConnection -State Listen -OwningProcess ${String(pid)} -ErrorAction SilentlyContinue)).Count`,
   )).trim()
@@ -169,7 +341,7 @@ async function hostPid(parentPid: number, excluded?: number): Promise<number> {
 
 async function runSecondInstance(link: string): Promise<void> {
   const executable = packagedExecutable
-    ?? resolve(appDirectory, 'node_modules', 'electron', 'dist', 'electron.exe')
+    ?? createRequire(import.meta.url)('electron') as string
   const args = [
     ...(packagedExecutable === undefined ? [appDirectory] : []),
     '--lang=en-US',
@@ -273,12 +445,12 @@ const modelPatch = replayMode ? `
           - id: deepseek-official
             name: DeepSeek
             models:
-              - id: deepseek-v4-pro
+              - id: ${windows ? 'deepseek-v4-pro' : 'deepseek-v4-flash'}
 
 - id: agent-default-model
   config:
     provider: deepseek-official
-    model: deepseek-v4-pro
+    model: ${windows ? 'deepseek-v4-pro' : 'deepseek-v4-flash'}
 ` : liveMode ? '' : `
 - id: agent-default-model
   config:
@@ -306,7 +478,9 @@ ${modelPatch.trim()}
 `.trimStart())
 
 try {
-  if (!replayMode) {
+  const updateFeed = await startUpdateFeed()
+  updateFeedToClose = updateFeed
+  if (!replayMode && windows) {
     await assertNativeDirectoryPicker(
       packagedExecutable ?? createRequire(import.meta.url)('electron') as string,
       packagedExecutable === undefined ? runtime : join(dirname(packagedExecutable), 'resources', 'runtime'),
@@ -323,6 +497,11 @@ try {
     env: {
       ...process.env,
       DSH_HOME: home,
+      DSH_DESKTOP_UPDATE_FEED: updateFeed.url,
+      // electron-updater uses LOCALAPPDATA independently of --user-data-dir.
+      LOCALAPPDATA: join(userData, 'cache'),
+      XDG_CACHE_HOME: join(userData, 'cache'),
+      ...(process.platform === 'linux' ? { APPIMAGE: packagedExecutable ?? createRequire(import.meta.url)('electron') as string } : {}),
       ...modelEnvironment(),
       ...(packagedExecutable === undefined && !replayMode ? { DSH_DESKTOP_RUNTIME_DIR: runtime } : {}),
     },
@@ -389,7 +568,7 @@ try {
   }
   let exitHostPid = initialHostPid
   if (!liveMode) {
-    const pwshRow = main.locator('[data-tool="pwsh"]').first()
+    const pwshRow = main.locator(`[data-tool="${shellTool}"]`).first()
     const owningTurn = await pwshRow.evaluate(element =>
       element.closest<HTMLElement>('[data-chat-turn]')?.dataset.chatTurn)
     if (owningTurn !== undefined && !await pwshRow.isVisible()) {
@@ -401,7 +580,7 @@ try {
     if (await pwshRow.getAttribute('aria-expanded') !== 'true') await pwshRow.click()
     const terminalCard = main.locator('[data-terminal]').first()
     await terminalCard.waitFor({ timeout: 20_000 })
-    assert.match(await terminalCard.innerText(), /PWSH_OK/u)
+    assert.ok((await terminalCard.innerText()).includes(shellOutput))
     let currentSessionId: string
     if (replayMode) {
       const bootstrap = await main.evaluate(async () => await window.dshDesktop.bootstrap())
@@ -440,16 +619,16 @@ try {
         port: mockPort,
         apiKey: 'desktop-e2e-key',
         sequence: ['tool_call_success', 'success'],
-        toolName: 'pwsh',
+        toolName: shellTool,
         toolArguments: JSON.stringify({
-          command: "Write-Output 'APPROVED_OK'",
+          command: windows ? "Write-Output 'APPROVED_OK'" : 'echo APPROVED_OK',
           description: 'Exercise Desktop approval',
           sandbox_permissions: 'danger-full-access',
           justification: 'The Desktop E2E verifies the approval response path.',
         }),
         successText: 'APPROVAL_DONE',
       })
-      await composer.fill('Request one approved PowerShell command, then reply with APPROVAL_DONE.')
+      await composer.fill(`Request one approved ${shellTool} command, then reply with APPROVAL_DONE.`)
       await composer.press('Enter')
       const approval = main.locator('[data-approval-key]')
       await approval.waitFor({ state: 'visible', timeout: 20_000 })
@@ -596,6 +775,43 @@ try {
       assert.equal('@dsh-desktop-e2e/failing-plugin' in (rolledBackProfile.dependencies ?? {}), false)
     }
 
+    await main.getByRole('button', { name: 'Settings', exact: true }).first().click()
+    const settingsDialog = main.getByRole('dialog', { name: 'Settings', exact: true })
+    await settingsDialog.waitFor({ timeout: 10_000 })
+    await settingsDialog.getByRole('button', { name: 'About & updates', exact: true }).click()
+    if (process.platform === 'darwin') {
+      await settingsDialog.getByText('Automatic updates are not available in this build.', { exact: true }).waitFor()
+      assert.equal(await settingsDialog.getByRole('button', { name: 'Open releases page', exact: true }).isEnabled(), true)
+    } else {
+      await settingsDialog.getByRole('button', { name: 'Check for updates', exact: true }).click()
+      const updateError = settingsDialog.getByRole('alert')
+      await updateError.waitFor({ timeout: 30_000 })
+      assert.match(await updateError.innerText(), /503/u)
+      updateFeed.allowChecks()
+      await settingsDialog.getByRole('button', { name: 'Check for updates', exact: true }).click()
+      await settingsDialog.getByText(updateFeed.releaseName, { exact: true }).waitFor({ timeout: 10_000 })
+      await settingsDialog.getByText('Fixture release notes.', { exact: true }).waitFor({ timeout: 10_000 })
+      await updateError.waitFor({ state: 'detached', timeout: 10_000 })
+      await settingsDialog.getByRole('button', { name: 'Download update', exact: true }).click()
+      await waitFor(async () => updateFeed.downloadCount(), count => count === 1, 'update download did not start')
+      const partialInstaller = join(userData, 'cache', 'dsh-desktop-updater', 'pending', `temp-${updateFeed.fileName}`)
+      await waitFor(async () => {
+        try {
+          return (await stat(partialInstaller)).size
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0
+          throw error
+        }
+      }, size => size > 0, 'update download did not write the partial installer')
+      await settingsDialog.getByRole('button', { name: 'Cancel download', exact: true }).click()
+      await waitFor(async () => updateFeed.cancelledCount(), count => count === 1, 'cancelled download connection survived')
+      await settingsDialog.getByRole('button', { name: 'Download update', exact: true }).click()
+      await settingsDialog.getByText('The update is downloaded. Install and restart to apply it.', { exact: true }).waitFor({ timeout: 10_000 })
+      assert.equal(updateFeed.downloadCount(), 2)
+    }
+    await settingsDialog.getByRole('button', { name: 'Close', exact: true }).last().click()
+    await settingsDialog.waitFor({ state: 'detached', timeout: 10_000 })
+
     const runningHostPid = replayMode ? initialHostPid : await hostPid(mainPid, initialHostPid)
     process.kill(runningHostPid)
     const failure = main.locator('.desktop-failure')
@@ -613,7 +829,7 @@ try {
   await waitFor(async () => !(await processExists(exitHostPid)), Boolean, 'Host survived application exit')
   assert.doesNotMatch(stderr, /Object has been destroyed/u)
   console.log(
-    `desktop Electron e2e: ${packagedExecutable === undefined ? 'source' : 'packaged'} ${liveMode ? 'real DeepSeek smoke' : replayMode ? 'recorded-session replay' : 'transport, model, tool, approval, attachment, terminal, windows, deep links, notifications, plugins, Host recovery'}, and graceful exit passed`,
+    `desktop Electron e2e: ${packagedExecutable === undefined ? 'source' : 'packaged'} ${liveMode ? 'real DeepSeek smoke' : replayMode ? 'recorded-session replay' : 'transport, model, tool, approval, attachment, terminal, windows, deep links, notifications, plugins, updates, Host recovery'}, and graceful exit passed`,
   )
 } catch (error) {
   console.error(`desktop Electron e2e: main stderr\n${stderr}`)
@@ -621,6 +837,7 @@ try {
 } finally {
   if (application !== undefined) await application.close().catch(() => {})
   await mockServer?.close()
+  await updateFeedToClose?.close().catch(() => {})
   await Promise.all([
     rm(home, { recursive: true, force: true }),
     rm(userData, { recursive: true, force: true }),

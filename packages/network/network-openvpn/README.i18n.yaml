@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/network/network-openvpn/README.md
-README.md: 5178a61d9ecc98d1b6e1159a35b5821240cb72d7
-README.zh.md: 4ee15c6d31910559e891d524de11a8b76485f3d1
+README.md: f9f9eb4af5f3bceba44241f317da540d4c090a21
+README.zh.md: a9a3966a46ce8963480f3fe9127615546e0ed5dc

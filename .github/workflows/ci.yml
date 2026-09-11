@@ -485,11 +485,13 @@ jobs:
           node --import tsx/esm apps/desktop/tests/electron.e2e.ts
       - name: Verify packaged Desktop native dependencies
         shell: pwsh
+        env:
+          EXPECTED_NATIVE: win32-x64
         run: |
           $executable = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\dist-electron\win-unpacked\DSH Desktop.exe'
           $env:ELECTRON_RUN_AS_NODE = '1'
           $env:DSH_DESKTOP_RUNTIME_DIR = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\dist-electron\win-unpacked\resources\runtime'
-          & $executable (Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\tests\native-runtime.smoke.cjs')
+          & $executable (Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\tests\native-runtime.smoke.cjs') | Out-Host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   windows-coverage:

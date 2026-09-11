@@ -8,6 +8,10 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/desktop/tests/host-process-tree.spec.ts",
+    "apps/desktop/tests/updater-http.spec.ts",
+    "apps/desktop/tests/updater-runtime.spec.ts",
+    "apps/desktop/tests/updater.spec.ts",
     "apps/desktop/tests/vpn-artifact.spec.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",

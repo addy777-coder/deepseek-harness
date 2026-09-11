@@ -74,6 +74,26 @@ describe('application entrypoints', () => {
     ])
   })
 
+  it('excludes bundled executables from Desktop installer artifacts', () => {
+    const root = fixture()
+    write(root, 'apps/desktop/dist-electron/win-unpacked/resources/pnpm/bin/pnpm.cjs', '#!/usr/bin/env node\n')
+
+    expect(applicationEntrypointViolations(root)).toEqual([])
+  })
+
+  it.each([
+    'apps/desktop/src/rogue.mjs',
+    'apps/desktop/src/dist-electron/rogue.mjs',
+    'apps/example/dist-electron/rogue.mjs',
+  ])('rejects unclassified source outside Desktop artifacts: %s', (path) => {
+    const root = fixture()
+    write(root, path, '#!/usr/bin/env node\n')
+
+    expect(applicationEntrypointViolations(root)).toEqual([
+      `${path}: executable source has no application/build/test classification`,
+    ])
+  })
+
   it('rejects a private Python application carrier outside dsh', () => {
     const root = fixture()
     write(root, 'packages/sdk/rogue-python-runtime/package.json', JSON.stringify({ private: true }))

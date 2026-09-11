@@ -41,7 +41,6 @@ const windowsUnsupportedTests = process.platform === 'win32'
       ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
       'packages/subprocess/subprocess/tests/**/*.spec.ts',
       'packages/subprocess/subprocess-local/tests/local.spec.ts',
-      'packages/subprocess/subprocess-local/tests/process-inspector.spec.ts',
       'packages/subprocess/subprocess-local/tests/spawn.spec.ts',
       'packages/subprocess/subprocess-local/tests/terminal.spec.ts',
       // Oracle-diff suites: they compare the worker's POSIX path/url faces
@@ -137,6 +136,7 @@ const coveragePartitionMode = coveragePartitionRaw === '1'
 // that worker threads cannot isolate reliably under aggregate gate contention.
 // Keep the narrow exception in forks while the rest of the inventory avoids per-file processes.
 const processBoundTests = [
+  'apps/desktop/tests/host-process-tree.spec.ts',
   'packages/session/session-persistence-jsonl/tests/jsonl.spec.ts',
   'packages/subagent/subagent-acp/tests/subagent-acp.spec.ts',
   'packages/subprocess/subprocess-local/tests/process-exit.spec.ts',

@@ -140,6 +140,7 @@
       "@deepseek-ai/dsh-client-*/invariant": ["./packages/client/*/src/invariant.ts"],
       "@deepseek-ai/dsh-headless/startup": ["./packages/bundle/headless/src/startup.ts"],
       "@deepseek-ai/dsh-app-boot/profile-plugins": ["./packages/boot/app-boot/src/profile-plugins.ts"],
+      "@deepseek-ai/dsh-subprocess-local/posix-process-inspector": ["./packages/subprocess/subprocess-local/src/posix-process-inspector.ts"],
       "@deepseek-ai/dsh-web-app/startup": ["./packages/bundle/web-app/src/startup.ts"],
       "@deepseek-ai/dsh-client-*/client": ["./packages/client/*/src/client"],
       "@deepseek-ai/dsh-client-connection/web": ["./packages/client/connection/src/web.ts"],

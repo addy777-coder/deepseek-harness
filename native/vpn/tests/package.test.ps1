@@ -1,11 +1,21 @@
 #Requires -Version 7.0
 [CmdletBinding()]
-param()
+param([string]$Target)
 . (Join-Path $PSScriptRoot '../scripts/common.ps1')
 $root = Get-VpnRoot
-$distribution = Join-Path $root 'dist/windows-x64'
+$targetInfo = Get-VpnTarget $Target
+$distribution = Join-Path $root "dist/$($targetInfo.Name)"
 $manifest = Get-Content -LiteralPath (Join-Path $distribution 'manifest.json') -Raw | ConvertFrom-Json
 if ($manifest.formatVersion -ne 1 -or $manifest.license -ne 'GPL-3.0-only') { throw 'The release manifest has unexpected metadata.' }
+if ($manifest.platform -ne $targetInfo.Platform -or $manifest.arch -ne $targetInfo.Arch -or $manifest.binary -ne $targetInfo.Binary) { throw 'The release manifest targets a different host.' }
+if (-not $IsWindows) {
+  & test -x (Join-Path $distribution $manifest.binary)
+  if ($LASTEXITCODE -ne 0) { throw 'The distributed helper is not executable.' }
+}
+if ($IsMacOS) {
+  & codesign --verify --strict (Join-Path $distribution $manifest.binary)
+  if ($LASTEXITCODE -ne 0) { throw 'The distributed helper signature did not verify.' }
+}
 $files = @(Get-ChildItem -LiteralPath $distribution -File -Recurse)
 if ($files.Count -ne $manifest.assets.Count + 1) { throw 'The release manifest does not enumerate every asset.' }
 foreach ($asset in $manifest.assets) {

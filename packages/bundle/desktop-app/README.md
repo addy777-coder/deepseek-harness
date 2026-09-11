@@ -1,5 +1,5 @@
 ---
-description: "Windows Desktop carrier layer over the shared GUI, adding Electron IPC, native directory selection, built-in VPN, and Desktop Client integration."
+description: "Desktop carrier layer over the shared GUI, adding Electron IPC, native directory selection, built-in VPN, and Desktop Client integration."
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-desktop-app` turns the shared GUI composition into the Host used by DSH Desktop on Windows. The shipped `desktop` profile places it after `dsh-base` and `dsh-gui-app`, then applies user patches once at startup. This layer adds Electron MessagePort transport, native directory selection, built-in VPN settings, and Desktop title bar, notification, preference, and plugin-management presentation. The Electron application owns windows, system registration, process shutdown, and packaged resources.
+`dsh-desktop-app` turns the shared GUI composition into the Host used by DSH Desktop on Windows, macOS, and Linux. The shipped `desktop` profile places it after `dsh-base` and `dsh-gui-app`, then applies user patches once at startup. This layer adds Electron MessagePort transport, native directory selection, built-in VPN settings, and Desktop title bar, notification, preference, and plugin-management presentation. The Electron application owns windows, system registration, process shutdown, and packaged resources.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ In-box bundles resolve from the `dsh` installation, and reconciliation activates
 
 ### What you get
 
-The carrier opens no HTTP listener. Each Renderer receives a dedicated MessagePort, while the native directory-picker Host and Client rows retain the Windows chooser and its cancellation behavior. The Desktop UI row adds shell integration without duplicating the shared conversation, settings, Session, approval, attachment, or terminal implementations.
+The carrier opens no HTTP listener. Each Renderer receives a dedicated MessagePort, while the directory-picker Host and Client rows open the platform’s native chooser. The Desktop UI row adds shell integration without duplicating the shared conversation, settings, Session, approval, attachment, or terminal implementations.
 
 The [VPN settings](../../client/ui-vpn/README.md) let users import an OpenVPN profile and save its account for application-owned connections. The [network provider](../../network/network-openvpn/README.md) carries requests only for model providers configured to use VPN; it owns an authenticated loopback proxy and leaves operating-system routes and DNS unchanged. The Electron application supplies the verified native distribution and executable checksum.
 
@@ -88,12 +88,12 @@ The carrier contributes no model-request prefix and does not change cache reuse.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-These constraints match the first Windows-only application release.
+The carrier requires a local interactive desktop session.
 
 - **The bundle requires an Electron Utility Process** — launching `dsh --profile desktop` in ordinary Node fails before serving a client.
 - **The profile is startup-only** — user patch and plugin changes require the Desktop-owned Host restart path.
 - **Remote Hosts are unsupported** — the carrier accepts only ports transferred by the local Electron main process.
-- **Native directory selection assumes a local interactive Windows session** — unattended and remote deployments should use another carrier and picker.
+- **Native directory selection requires an interactive session** — Linux also requires zenity or kdialog.
 
 <a id="dev-note"></a>
 ### Dev Note

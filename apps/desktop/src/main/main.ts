@@ -31,6 +31,8 @@ import {
   type StoredDesktopPreferences,
   writeDesktopPreferences,
 } from './preferences.ts'
+import { DesktopUpdater } from './updater.ts'
+import { createDefaultUpdaterRuntime } from './updater-runtime.ts'
 import { readWindowBounds, visibleWindowBounds, writeWindowBounds } from './window-state.ts'
 
 const PRODUCT_NAME = 'DSH Desktop'
@@ -161,8 +163,10 @@ async function createMainWindow(): Promise<WindowRecord> {
     show: false,
     title: PRODUCT_NAME,
     icon: icon(),
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: '#6b7280', height: 40 },
+    titleBarStyle: process.platform === 'darwin' ? 'default' : 'hidden',
+    ...(process.platform === 'darwin' ? {} : {
+      titleBarOverlay: { color: '#00000000', symbolColor: '#6b7280', height: 40 },
+    }),
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
@@ -204,8 +208,10 @@ function createTaskWindow(sessionId: string): WindowRecord {
     show: false,
     title: PRODUCT_NAME,
     icon: icon(),
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: '#6b7280', height: 40 },
+    titleBarStyle: process.platform === 'darwin' ? 'default' : 'hidden',
+    ...(process.platform === 'darwin' ? {} : {
+      titleBarOverlay: { color: '#00000000', symbolColor: '#6b7280', height: 40 },
+    }),
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
@@ -330,6 +336,12 @@ const pluginManager = new DesktopPluginManager({
   parentWindow: () => mainWindow?.window,
 })
 
+const updater = new DesktopUpdater(createDefaultUpdaterRuntime(() => mainWindow?.window))
+updater.subscribe((state) => {
+  const main = mainWindow?.window
+  if (main !== undefined && !main.isDestroyed()) main.webContents.send(channels.updateState, state)
+})
+
 async function restartHost(): Promise<void> {
   hostReady = false
   hostError = undefined
@@ -363,6 +375,7 @@ function installIpcHandlers(): void {
       kind: record.kind,
       ...(record.sessionId === undefined ? {} : { sessionId: record.sessionId }),
       installed: app.isPackaged,
+      version: app.getVersion(),
       ...(hostError === undefined ? {} : { hostError }),
     }
   })
@@ -429,6 +442,37 @@ function installIpcHandlers(): void {
     }
     throw new TypeError('desktop preferences: invalid mutation')
   })
+  ipcMain.handle(channels.updateGet, (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    return updater.snapshot()
+  })
+  ipcMain.handle(channels.updateCheck, async (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    return await updater.check()
+  })
+  ipcMain.handle(channels.updateDownload, async (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    return await updater.download()
+  })
+  ipcMain.handle(channels.updateInstall, async (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    return await updater.install()
+  })
+  ipcMain.handle(channels.updateCancel, (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    updater.cancel()
+    return updater.snapshot()
+  })
+  ipcMain.handle(channels.updateOpenReleases, (event) => {
+    const record = recordForSender(event)
+    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    updater.openReleases()
+  })
   ipcMain.on(channels.reportSelection, (event, sessionId: unknown) => {
     const record = recordForSender(event)
     record.sessionId = sessionId === undefined ? undefined : validSessionId(sessionId) ? sessionId : record.sessionId
@@ -456,6 +500,10 @@ async function main(): Promise<void> {
     return
   }
   app.on('second-instance', (_event, argv) => { routeSecondInstance(argv) })
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    routeSecondInstance([url])
+  })
   app.on('before-quit', (event) => {
     if (quitting) return
     event.preventDefault()
@@ -463,11 +511,13 @@ async function main(): Promise<void> {
   })
   await app.whenReady()
   preferences = await readDesktopPreferences(preferencesPath())
-  launchAtLoginAvailable = app.isPackaged && app.isDefaultProtocolClient('dsh')
+  launchAtLoginAvailable = process.platform !== 'linux' && app.isPackaged && app.isDefaultProtocolClient('dsh')
   if (launchAtLoginAvailable) {
     app.setLoginItemSettings({ openAtLogin: preferences.launchAtLogin })
   }
-  Menu.setApplicationMenu(null)
+  Menu.setApplicationMenu(process.platform === 'darwin'
+    ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }])
+    : null)
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write')
   })

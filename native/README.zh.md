@@ -4,7 +4,7 @@
 
 与 DeepSeek Harness 一同维护的原生源码和公开包。[`landlock-run/` workspace](landlock-run/README.zh.md) 负责 harness 使用的 Landlock 自限后执行启动器，包括其架构、由三个包组成的 npm 包家族、平台支持、开发工作流和[发布流程](landlock-run/docs/release.md)。
 
-[`vpn/` 辅助进程](vpn/README.zh.md)在 Windows x64 上通过应用自有 OpenVPN 隧道传送指定模型流量。其文档负责原生构建、协议限制、许可证与对应源码分发；[网络包](../packages/network/README.zh.md)负责配置及 HTTP 消费方。
+[`vpn/` 辅助进程](vpn/README.zh.md)在 Windows x64、macOS x64/arm64 与 Linux x64 上通过应用自有 OpenVPN 隧道传送指定模型流量。其文档负责原生构建、协议限制、许可证与对应源码分发；[网络包](../packages/network/README.zh.md)负责配置及 HTTP 消费方。
 
 ## Workspace 与发布边界
 

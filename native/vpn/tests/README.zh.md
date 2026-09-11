@@ -6,7 +6,7 @@ description: "离线原生 VPN 检查，以及通过受支持的 dsh 启动器�
 
 [English](README.md) | 中文
 
-[辅助进程构建](../scripts/build.ps1)会运行原生数据包/CONNECT 测试、离线进程检查和源码包恢复验证，不需要公司凭据。单独的真实连接测试通过正式的凭据、网络和 pi-ai 服务验证已保存的公司提供商。
+[辅助进程构建](../scripts/build.ps1)会在各受支持目标上运行原生数据包/CONNECT 测试、离线进程检查和源码包恢复验证，不需要公司凭据。单独的真实连接测试通过正式的凭据、网络和 pi-ai 服务验证已保存的公司提供商。原生 CI 矩阵验证 macOS/Linux 二进制文件；拥有已保存公司凭据的维护者负责各目标上的真实 VPN 验收。
 
 ## 真实连接运行
 
@@ -20,7 +20,7 @@ description: "离线原生 VPN 检查，以及通过受支持的 dsh 启动器�
 & native/vpn/tests/run-live-acceptance.ps1
 ```
 
-脚本在启动任何 Harness 插件之前记录 Windows 路由、DNS 和网卡，发现活动的外部 OpenVPN 进程或已有辅助进程时拒绝运行，然后通过 `node --import tsx/esm apps/cli/src/bin.ts --profile headless --patch native/vpn/tests/live-acceptance.patch.yml` 启动测试。子进程继承选定的 Harness 主目录。`-ReportPath` 指定新的主机报告文件；`-RunTimeoutSeconds` 限制整个运行时长（默认 1800），`-ShutdownGraceMs` 限制启动器终止等待时间（默认 10000）。运行超时时，脚本仅终止自己启动的进程树。
+脚本在启动任何 Harness 插件之前记录系统路由、DNS 和网络接口，发现活动的外部 OpenVPN 进程或已有辅助进程时拒绝运行，然后通过 `node --import tsx/esm apps/cli/src/bin.ts --profile headless --patch native/vpn/tests/live-acceptance.patch.yml` 启动测试。子进程继承选定的 Harness 主目录，并选择当前平台的辅助进程。`PATH` 中必须存在 PowerShell 7；Linux 快照需要 `iproute2`。`-ReportPath` 指定新的主机报告文件；`-RunTimeoutSeconds` 限制整个运行时长（默认 1800），`-ShutdownGraceMs` 限制启动器终止等待时间（默认 10000）。运行超时时，脚本仅终止自己启动的进程树。
 
 测试禁用普通 headless 任务解析器和执行器，等待 `appReady`，连接原生提供商，然后验证文本流、工具调用回放、长输出、取消、后续请求和模型发现。仅当公司端点不实现模型列表时，才设置 `checkDiscovery: false`；报告会将该项标为未请求。
 

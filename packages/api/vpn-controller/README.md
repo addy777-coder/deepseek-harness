@@ -91,7 +91,7 @@ No effect; settings operations do not construct or send model requests.
 
 This controller exposes one application VPN configuration:
 
-- VPN support depends on the mounted provider; the desktop implementation requires Windows x64.
+- VPN support depends on the mounted provider; the desktop implementation supports Windows/Linux x64 and macOS x64/arm64.
 - Provider selection and credential persistence are separate writes. A provider-selection failure after persistence requires correcting that provider's settings.
 - Native compatibility, DNS, retries, request routing, and process cleanup belong to the network provider.
 

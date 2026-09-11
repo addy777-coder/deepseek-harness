@@ -1,6 +1,7 @@
 /** Offline helper protocol tests. Remote traffic is restricted to an owned loopback listener. */
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import { open, mkdtemp, rm, writeFile, access } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -9,8 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { rootCertificates } from 'node:tls';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const binary = join(root, 'build', 'dsh-vpn.exe');
-if (process.argv.length !== 2) throw new Error('Usage: node helper-protocol.test.mjs');
+const platform = process.platform === 'win32' ? 'windows' : process.platform;
+const binary = process.argv[2] ?? join(root, 'build', `${platform}-${process.arch}`, process.platform === 'win32' ? 'dsh-vpn.exe' : 'dsh-vpn');
+if (process.argv.length > 3) throw new Error('Usage: node helper-protocol.test.mjs [executable]');
 const active = new Set();
 const canary = `protocol-canary-${randomUUID()}`;
 const fakeUsername = `${canary}-username`;
@@ -129,6 +131,22 @@ async function evaluate(profile, description) {
   ++checks;
 }
 
+async function evaluateFifo(profile) {
+  // Windows has no POSIX FIFO; the ordinary child stdio case covers named pipes there.
+  if (process.platform === 'win32') return;
+  const path = join(scratch, 'bootstrap.fifo');
+  await command('mkfifo', [path]);
+  const pipe = await open(path, constants.O_RDWR);
+  try {
+    const record = launch(pipe.fd);
+    await pipe.write(JSON.stringify({ profileContent: profile, evaluateOnly: true }) + '\n');
+    const output = await completed(record, 0, 'FIFO bootstrap');
+    require(output.length === 1 && output[0].event === 'profile-evaluated' && output[0].accepted,
+      'FIFO bootstrap: profile was not accepted');
+    ++checks;
+  } finally { await pipe.close(); }
+}
+
 async function listener() {
   const server = createServer();
   const connections = new Set();
@@ -223,14 +241,8 @@ async function command(commandName, args) {
 }
 
 async function snapshotNetwork() {
-  const script = `
-$ErrorActionPreference = 'Stop'
-$routes = @(Get-NetRoute | Select-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric | Sort-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric)
-$dns = @(Get-DnsClientServerAddress | Select-Object InterfaceIndex, AddressFamily, ServerAddresses | Sort-Object InterfaceIndex, AddressFamily)
-$interfaces = @(Get-NetAdapter -IncludeHidden | Select-Object InterfaceIndex, InterfaceGuid, InterfaceDescription | Sort-Object InterfaceIndex)
-[ordered]@{routes = $routes; dns = $dns; interfaces = $interfaces} | ConvertTo-Json -Depth 6 -Compress
-`;
-  return command('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
+  const output = await command('pwsh', ['-NoProfile', '-NonInteractive', '-File', join(root, 'tests', 'network-snapshot.ps1'), '-AsJson']);
+  return JSON.parse(output).network;
 }
 
 function syntheticProfile(port) {
@@ -239,7 +251,7 @@ function syntheticProfile(port) {
 }
 
 try {
-  require(process.platform === 'win32', 'These helper process tests target Windows');
+  require(['windows-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'].includes(`${platform}-${process.arch}`), 'Unsupported helper test target');
   await access(binary);
   scratch = await mkdtemp(join(tmpdir(), 'dsh-vpn-protocol-'));
   const before = await snapshotNetwork();
@@ -293,6 +305,7 @@ try {
     const invalidTimeout = { ...bootstrap(profile), connectTimeoutSeconds: 0 };
     await rejectBootstrap(JSON.stringify(invalidTimeout) + '\n', 'INVALID_RUNTIME_CONFIG', 'Invalid timeout');
     await evaluate(profile, 'Synthetic profile evaluation');
+    await evaluateFifo(profile);
     require(endpoint.acceptedConnections === 0, 'Bootstrap validation or evaluateOnly started a connection');
     ++checks;
     await lifecycle(profile, endpoint, 'stdin-eof');
@@ -308,9 +321,9 @@ try {
   }
   require(active.size === 0, 'A helper process remains active after the tests');
   const after = await snapshotNetwork();
-  require(before === after, 'Windows routes, DNS, or interfaces changed');
+  require(before === after, 'System routes, DNS, or interfaces changed');
   ++checks;
-  console.log(`PASS ${checks} offline helper protocol checks: bootstrap validation/redaction, profile evaluation, stdin lifecycle, peer socket closure, unchanged Windows routes/DNS/interfaces, no remaining helper`);
+  console.log(`PASS ${checks} offline helper protocol checks: bootstrap validation/redaction, profile evaluation, stdin lifecycle, peer socket closure, unchanged system routes/DNS/interfaces, no remaining helper`);
 } catch (error) {
   console.error(`FAIL: ${error instanceof Error ? error.message : 'offline helper protocol test failed'}`);
   process.exitCode = 1;

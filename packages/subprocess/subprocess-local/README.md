@@ -52,6 +52,8 @@ Collect mode keeps the last `maxBytes` of a stream in memory — errors and fina
 
 Normal disposal terminates every running tree and terminal and awaits their exit. During a JavaScript-observable host exit — direct `process.exit()`, default uncaught exceptions, default unhandled rejections — a synchronous finalization force-terminates everything still owned (SIGKILL to the group, `taskkill /T /F` on Windows) without creating promises or timers. Unhandled `SIGTERM`/`SIGINT`/`SIGHUP`, `SIGKILL`, fatal OOM, native crashes, and power loss need an external supervisor.
 
+POSIX supervisors can import `createPosixProcessInspector` from `@deepseek-ai/dsh-subprocess-local/posix-process-inspector` without loading native addons. It observes descendant identities across process groups, fences individual signals against PID reuse, and treats zombie/dead processes as quiescent. Callers retain observed identities after reparenting and await quiescence after sending signals; a process-table snapshot alone does not prove termination.
+
 ### What can go wrong
 
 An executable that cannot be resolved fails loud with a stable error; a spawn that never starts rejects `done`. A read past the retained tail is `lossy` and points at the spill file when one exists. A daemonized descendant that leaves the tree or terminal session can outlive cleanup — see the limitations below.
@@ -77,7 +79,8 @@ The provider treats the process tree as the unit of lifetime. POSIX children spa
 | [`src/index.ts`](src/index.ts) | Service wiring: live-handle sets, disposal, host-exit finalization, executable lookup |
 | [`src/spawn.ts`](src/spawn.ts) | Process plumbing: detached spawn, tail-keep collection, spill files, escalation, tree-exit observer |
 | [`src/terminal.ts`](src/terminal.ts) | `node-pty` terminal handle: foreground inspection, session cleanup, Windows teardown |
-| [`src/process-inspector.ts`](src/process-inspector.ts) | POSIX process-tree and session inspection |
+| [`src/process-inspector.ts`](src/process-inspector.ts) | Platform inspector selection |
+| [`src/posix-process-inspector.ts`](src/posix-process-inspector.ts) | POSIX process-tree and session inspection without native addons |
 | [`src/windows-inspector.ts`](src/windows-inspector.ts) | Windows Toolhelp32 process-table inspection via koffi |
 | — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. |
 

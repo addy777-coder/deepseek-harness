@@ -10,7 +10,7 @@
     - id: network-openvpn
       name: ../../../packages/network/network-openvpn/src/index.ts
       config:
-        executablePath: !!js "process.cwd() + '/native/vpn/dist/windows-x64/dsh-vpn.exe'"
+        executablePath: !!js "process.cwd() + '/native/vpn/dist/' + (process.platform === 'win32' ? 'windows' : process.platform) + '-' + process.arch + '/dsh-vpn' + (process.platform === 'win32' ? '.exe' : '')"
 
     - id: vpn-live-acceptance
       name: ./live-acceptance-plugin.ts

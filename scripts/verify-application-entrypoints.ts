@@ -68,6 +68,7 @@ const SOURCE_PATTERNS = [
 ]
 
 const SOURCE_EXCLUDES = [
+  'apps/desktop/dist-electron/**',
   '**/node_modules/**',
   '**/lib/**',
   '**/dist/**',

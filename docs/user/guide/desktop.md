@@ -1,25 +1,30 @@
-# Use DSH Desktop on Windows
+# Use DSH Desktop
 
 English | [中文](desktop.zh.md)
 
-DSH Desktop is the Windows x64 application for the same sessions, workspaces, models, and settings as the Web UI. It loads the GUI from local files and connects to its private Host process without opening a local HTTP port.
+DSH Desktop is the Windows x64, macOS Apple Silicon/Intel, and Linux x64 application for the same sessions, workspaces, models, and settings as the Web UI. It loads the GUI from local files and connects to its private Host process without opening a local HTTP port.
 
 ## Prerequisites
 
-- Windows 10 or Windows 11 on x64
+- Windows 10/11 x64, macOS on Apple Silicon or Intel, or Ubuntu 24.04 x64 with a desktop session
 - A DeepSeek-compatible API endpoint and credential
 - A workspace directory you want the agent to use
 
-The first release is unsigned. Windows SmartScreen can show an unknown-publisher warning for internal installation artifacts.
+These packages have no publisher certificate. Windows SmartScreen can show an unknown-publisher warning. macOS uses ad-hoc signing without Apple notarization; if Gatekeeper blocks the downloaded app, allow that specific app through **System Settings → Privacy & Security**.
 
 ## Install or use the portable build
 
-Use one of the two release artifacts:
+Choose a version and the file for your system and CPU from [GitHub Releases](https://github.com/addy777-coder/deepseek-harness/releases). Latest identifies the newest stable release; alpha, beta, and rc versions are marked Pre-release. Each release includes SHA256SUMS for checking downloads.
 
 - Run `DSH-Desktop-<version>-win-x64.exe` for a current-user installation. The installer registers `dsh://` links and can later enable launch at sign-in.
 - Extract `DSH-Desktop-<version>-win-x64.zip` for the portable build. It does not register `dsh://` and cannot enable launch at sign-in.
 
-Both variants leave `%USERPROFILE%\.dsh` in place when the application is removed. That directory holds your shared model settings, credentials, profiles, workspaces, and sessions.
+- On macOS, open `DSH-Desktop-<version>-mac-<arch>.dmg` and copy DSH Desktop into Applications; select `arm64` for Apple Silicon or `x64` for Intel. The matching ZIP contains the same app.
+- On Linux, make `DSH-Desktop-<version>-linux-x64.AppImage` executable and launch it, or install the matching DEB with the system package manager. AppImage needs FUSE support and zenity or kdialog for directory selection; DEB declares zenity as a dependency. Desktop integration uses X11 or XWayland.
+
+On Ubuntu 24.04, DEB installation configures the AppArmor permission needed by Chromium’s sandbox. AppImage requires an administrator to authorize user namespaces for its fixed installation path; without that permission it refuses to start. Use a fixed filename without a version, such as `dsh-desktop.AppImage`, so updates retain that path. Do not use `--no-sandbox` to bypass the requirement.
+
+Removing the application retains the Harness home: `%USERPROFILE%\.dsh` on Windows and `~/.dsh` on macOS/Linux. It stores shared model settings, credentials, profiles, workspaces, and sessions.
 
 ## Start a task
 
@@ -31,7 +36,7 @@ The main window keeps workspace and Session navigation. Select **Open current se
 
 Open **Settings → General → Desktop integration** to change or disable the default `Ctrl+Shift+Space` shortcut. The shortcut focuses the main window and opens the new-task view. A conflict is shown in Settings and does not prevent the application from running.
 
-An installed build can enable launch after Windows sign-in. The tray menu can show the main window, open a new task, or exit. A completion or failure notification appears only when no focused DSH Desktop window shows that Session; selecting the notification opens its task window.
+An installed Windows or macOS build with registered protocol handling can enable launch at sign-in; Linux does not offer that setting. The tray menu can show the main window, open a new task, or exit. A completion or failure notification appears only when no focused DSH Desktop window shows that Session; selecting the notification opens its task window.
 
 Supported links are deliberately narrow:
 
@@ -41,6 +46,12 @@ dsh://session/<base64url-session-id>
 ```
 
 DSH Desktop rejects query strings, fragments, prompts, disk paths, and every other route.
+
+## Update DSH Desktop
+
+Windows and supported Linux packages update from the GitHub Releases feed. macOS packages require manual download and replacement from the releases page. Open **Settings → About & updates**, select **Check for updates**, then **Download update** and **Install and restart** after the download settles. Installation starts after a native confirmation, closes DSH Desktop, and reopens it with the new version.
+
+A Windows portable ZIP build has no installation target of its own and instead installs the current-user application when the flow runs. The About page also opens the releases page for a manual download.
 
 ## Recover the Host
 
@@ -58,8 +69,8 @@ Applying requires a native confirmation because runtime plugin code has the same
 
 ## Current limits
 
-- Windows x64 only; macOS, Linux, and remote Hosts are not included.
-- No account login, code signing, automatic update, or plugin marketplace search.
+- Windows/Linux ARM64, Linux RPM packages, and remote Hosts are not included.
+- No account login, publisher signing, Apple notarization, or plugin marketplace search.
 - Plugins that require installation scripts cannot be installed in the first release.
 - Task windows are not restored after an application restart.
 

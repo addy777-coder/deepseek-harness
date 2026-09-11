@@ -1,5 +1,5 @@
 ---
-description: "Windows x64 用户态 OpenVPN 辅助进程：构建、经过认证的模型传输、生命周期、限制和源码分发。"
+description: "Windows、macOS 和 Linux 用户态 OpenVPN 辅助进程：构建、经过认证的模型传输、生命周期、限制和源码分发。"
 ---
 
 # 原生 VPN 辅助进程
@@ -8,7 +8,7 @@ description: "Windows x64 用户态 OpenVPN 辅助进程：构建、经过认证
 
 ## 摘要
 
-辅助进程通过 OpenVPN 隧道承载指定的模型请求，不创建 Windows 网卡，也不修改系统路由或 DNS。OpenVPN3 Core 与内存中的 lwIP IPv4 协议栈交换加密隧道数据包。经过认证的本机回环 CONNECT 代理只开放父进程选定的目标。
+辅助进程通过 OpenVPN 隧道承载指定的模型请求，不创建网卡，也不修改系统路由或 DNS。OpenVPN3 Core 与内存中的 lwIP IPv4 协议栈交换加密隧道数据包。经过认证的本机回环 CONNECT 代理只开放父进程选定的目标。它以应用用户身份运行，不需要管理员权限、root、驱动或系统 VPN 扩展。
 
 ## 目录
 
@@ -22,15 +22,17 @@ description: "Windows x64 用户态 OpenVPN 辅助进程：构建、经过认证
 <a id="build-and-distribute"></a>
 ## 构建与分发
 
-在 Windows x64 上构建，需要 PowerShell 7、Git、Node.js，以及包含 Windows SDK、CMake、Ninja 和 vcpkg 的 Visual Studio 2022 C++ Build Tools。脚本通过 `vswhere` 查找 Visual Studio；`-VsDevCmdPath` 可指定安装实例。在仓库根目录运行以下命令：
+在匹配的 Windows x64、macOS arm64/x64 或 Linux x64 主机上构建，需要 PowerShell 7、Git、Node.js、CMake 和 Ninja。Windows 需要包含 Windows SDK 和 vcpkg 的 Visual Studio 2022 C++ Build Tools；`-VsDevCmdPath` 可指定安装实例，代替 `vswhere` 自动查找。macOS 需要 Xcode 命令行工具；Linux 需要 C/C++ 编译器、开发工具和 `iproute2`。POSIX 依赖构建还需要 curl、zip/unzip、tar、Perl、pkg-config 及该平台的 make/autotools。在仓库根目录运行以下命令：
 
 ```powershell
 pwsh -File native/vpn/scripts/build.ps1
 ```
 
-构建会获取[依赖版本固定清单](deps/pins.json)指定的修订，检查源码检出未被修改，并将静态库与静态 Microsoft C/C++ 运行库编译链接。下载内容和中间产物保存在辅助进程目录内被忽略的 `.cache/` 和 `build/` 树中。[自定义 triplet](deps/triplets/x64-windows-dsh-vpn.cmake)定义链接方式；[构建脚本](scripts/build.ps1)在打包前运行 CTest 和离线进程测试，打包后验证源码恢复。测试使用合成数据包和测试独占的本机回环监听器，不会向公司服务器发起认证。
+构建会获取[依赖版本固定清单](deps/pins.json)指定的修订，检查源码检出未被修改，并静态链接第三方库。Windows 还会静态链接 Microsoft C/C++ 运行库。下载内容和中间产物保存在辅助进程目录内被忽略的 `.cache/` 和 `build/<target>/` 树中。[目标 triplet](deps/triplets/)定义链接方式；[共享构建脚本](scripts/build.ps1)在打包前运行 CTest 和离线进程测试，打包后验证源码恢复。测试使用合成数据包和测试独占的本机回环监听器，不会向公司服务器发起认证。
 
-输出目录为 `dist/windows-x64/`，包含可执行文件、SHA-256 文件、资源清单、许可证、已编译 OpenVPN 源码审计结果和对应源码 ZIP。清单列出其他每个资源的相对路径、SHA-256 和大小。分发方保留完整目录，并在将其放入桌面资源前校验清单。打包会拒绝预期之外的非系统 DLL 导入。`-SkipPackage` 仅构建和测试，不生成分发产物；`-LocalDependenciesPath` 可复用来源记录匹配的依赖安装目录。
+输出目录为 `dist/<target>/`，其中 target 为 `windows-x64`、`darwin-arm64`、`darwin-x64` 或 `linux-x64`。目录包含 Windows 上的 `dsh-vpn.exe` 或 POSIX 上的 `dsh-vpn`、对应 SHA-256 文件、资源清单、许可证、已编译 OpenVPN 源码审计结果和对应源码 ZIP。清单列出其他每个资源的相对路径、SHA-256 和大小。分发方保留完整目录，并在将其放入桌面资源前校验清单。打包会拒绝预期之外的非系统库导入。`-Target` 要求匹配的原生主机；`-SkipPackage` 不生成分发产物，`-Fresh` 重置目标 CMake 缓存，`-LocalDependenciesPath` 可复用来源记录匹配的依赖安装目录。
+
+macOS 打包先为辅助进程添加 ad-hoc 签名，再计算 SHA-256 和资源清单。该签名不等同于 Developer ID 签名或公证。桌面打包必须保留辅助进程字节和 POSIX 可执行权限；最终安装包验证检查相同摘要。原生发布矩阵负责 macOS/Linux 构建和打包后进程验证。真实 VPN 兼容性需要在各目标上使用已保存的公司凭据显式执行[真实连接验收](tests/README.zh.md)。
 
 源码 ZIP 包含辅助进程、精确的上游源码归档、库源码归档，以及所有选定的 vcpkg port 补丁。要使用随附源码，将 ZIP 解压到新目录后运行：
 
@@ -44,7 +46,7 @@ pwsh -File scripts/build.ps1
 <a id="process-protocol"></a>
 ## 进程协议
 
-父进程以管道连接 stdin/stdout 来启动 `dsh-vpn.exe`，不在参数或环境变量中传递凭据。父进程发送一行 UTF-8 JSON，然后保持 stdin 打开。EOF 或后续任意 stdin 字节都会请求关闭。辅助进程在处理连接期间每 100 毫秒检查一次管道。父进程等待其退出后才能启动替代进程。
+父进程以管道连接 stdin/stdout 来启动辅助进程，不在参数或环境变量中传递凭据。父进程发送一行 UTF-8 JSON，然后保持 stdin 打开。EOF 或后续任意 stdin 字节都会请求关闭。POSIX 接受 FIFO 和 socketpair 标准输入，拒绝普通文件和终端。辅助进程在处理连接期间每 100 毫秒检查一次管道。父进程等待其退出后才能启动替代进程。
 
 启动消息必须包含 `profileContent`、`username`、`password`、`proxyToken`、`targets` 和下表中的运行参数。`profileContent` 是完整的内联配置：父进程在启动前解析导入的 CA、证书和密钥引用。原生辅助进程不会读取配置中的文件路径。代理令牌是每次启动生成的秘密值，长度为 32–256 字节，不能包含 CR/LF；父进程仅为经过认证的代理请求保留该令牌。
 
@@ -68,18 +70,18 @@ stdout 输出包含 `event` 和 `error` 字段的 JSONL 事件。OpenVPN 事件�
 <a id="network-constraints"></a>
 ## 网络限制
 
-数据通道支持每进程一个 IPv4 隧道、TCP 模型请求，以及通过最多四个 VPN 下发的 IPv4 DNS 服务器进行的 53 端口普通 UDP DNS 查询。请求客户端与模型端点之间的 HTTPS 加密保持完整，包括客户端正常执行的证书验证。流量控制限制排队字节数，并传递取消和对端关闭。Windows 网络仅负责连接 VPN 服务器。
+数据通道支持每进程一个 IPv4 隧道、TCP 模型请求，以及通过最多四个 VPN 下发的 IPv4 DNS 服务器进行的 53 端口普通 UDP DNS 查询。请求客户端与模型端点之间的 HTTPS 加密保持完整，包括客户端正常执行的证书验证。流量控制限制排队字节数，并传递取消和对端关闭。主机网络仅负责连接 VPN 服务器。
 
 不支持 IPv6 隧道、TAP/以太网模式、加密 DNS 传输、强制 DNSSEC、外部 PKI、挑战式认证或加密私钥口令提示。缺少 VPN DNS 时无法请求主机名目标，但仍可使用 IPv4 地址。辅助进程不会回退到系统 DNS 解析器或直接连接模型。服务器下发的网络更新及重连会终止当前辅助进程，让父进程启动新的 lwIP 进程。认证错误会停止连接；父进程负责重试策略。
 
-普通本机应用没有本次启动的代理令牌就无法使用隧道。辅助进程不隔离同一 Windows 用户下互不信任的进程对该用户进程内存的访问。父进程负责凭据存储、配置导入策略和目标白名单。
+普通本机应用没有本次启动的代理令牌就无法使用隧道。辅助进程不隔离同一操作系统用户下互不信任的进程对该用户进程内存的访问。父进程负责凭据存储、配置导入策略和目标白名单。
 
 <a id="licenses-and-corresponding-source"></a>
 ## 许可证与对应源码
 
-组合可执行文件和辅助进程原创代码使用 [GPL-3.0-only](LICENSE)。实际编译的 OpenVPN 文件包括两个 GPL-3.0-only 头文件；双许可 OpenVPN 文件选择 MPL-2.0，Unicode 转换文件保留自身声明。[打包脚本](scripts/package.ps1)审计实际编译的 OpenVPN 包含文件列表，并拒绝未知的许可声明。[第三方声明](THIRD-PARTY-NOTICES.txt)列出其余依赖。
+组合可执行文件和辅助进程原创代码使用 [GPL-3.0-only](LICENSE)。实际编译的 OpenVPN 文件包括两个 GPL-3.0-only 头文件；双许可 OpenVPN 文件选择 MPL-2.0，Windows Unicode 转换文件保留自身声明。[打包脚本](scripts/package.ps1)审计目标实际编译的 OpenVPN 包含文件列表，并拒绝缺失的必需文件或未知的许可声明。[第三方声明](THIRD-PARTY-NOTICES.txt)列出其余依赖。
 
-每份可执行文件分发都在资源清单中包含对应源码 ZIP 和许可证资源。ZIP 包含已链接库的源码及构建材料，包括 OpenVPN 的 Asio 补丁，不含私有配置、凭据或构建工具二进制文件。tap-windows6 依赖仅提供 MIT 许可的公共头文件；不会安装、使用或分发 TAP 驱动。
+每份可执行文件分发都在资源清单中包含对应源码 ZIP 和许可证资源。ZIP 包含已链接库的源码及构建材料，包括 OpenVPN 的 Asio 补丁，不含私有配置、凭据或构建工具二进制文件。Windows 上的 tap-windows6 依赖仅提供 MIT 许可的公共头文件；不会安装、使用或分发 TAP 驱动。
 
 <a id="further-exploration"></a>
 ## 延伸阅读

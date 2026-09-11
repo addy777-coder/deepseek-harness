@@ -1,5 +1,5 @@
 ---
-description: "共享 GUI 之上的 Windows Desktop 载体层，添加 Electron IPC、原生目录选择、内置 VPN 与 Desktop Client 集成。"
+description: "共享 GUI 之上的 Desktop 载体层，添加 Electron IPC、原生目录选择、内置 VPN 与 Desktop Client 集成。"
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`dsh-desktop-app` 把共享 GUI 组合变成 Windows 上 DSH Desktop 使用的 Host。随附 `desktop` profile 把它放在 `dsh-base` 与 `dsh-gui-app` 之后，并在启动时一次性应用用户 patch。本层添加 Electron MessagePort 传输、原生目录选择、内置 VPN 设置，以及 Desktop 标题栏、通知、偏好与插件管理呈现。Electron 应用拥有窗口、系统注册、进程关闭与打包资源。
+`dsh-desktop-app` 把共享 GUI 组合变成 Windows、macOS 和 Linux 上 DSH Desktop 使用的 Host。随附 `desktop` profile 把它放在 `dsh-base` 与 `dsh-gui-app` 之后，并在启动时一次性应用用户 patch。本层添加 Electron MessagePort 传输、原生目录选择、内置 VPN 设置，以及 Desktop 标题栏、通知、偏好与插件管理呈现。Electron 应用拥有窗口、系统注册、进程关闭与打包资源。
 
 ## 目录
 
@@ -38,7 +38,7 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-desktop-app
 
 ### 获得的能力
 
-本载体不会打开 HTTP listener。每个 Renderer 都会获得专用 MessagePort，原生目录选择器的 Host 与 Client 配置项则保留 Windows chooser 及其取消行为。Desktop UI 配置项添加 shell 集成，但不会复制共享对话、设置、Session、审批、附件或终端实现。
+本载体不会打开 HTTP listener。每个 Renderer 都会获得专用 MessagePort，目录选择器的 Host 与 Client 配置项打开平台原生选择器。Desktop UI 配置项添加 shell 集成，但不会复制共享对话、设置、Session、审批、附件或终端实现。
 
 [VPN 设置](../../client/ui-vpn/README.zh.md)允许用户导入 OpenVPN 配置并保存账号，供应用自有连接使用。[网络提供方](../../network/network-openvpn/README.zh.md)仅传送已配置使用 VPN 的模型提供方请求；它拥有需要认证的回环代理，保持操作系统路由与 DNS 不变。Electron 应用提供经过验证的原生分发资源与可执行文件校验和。
 
@@ -88,12 +88,12 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-desktop-app
 
 <a id="known-limitations-and-deferred-work"></a>
 
-这些约束与首个仅 Windows 应用版本一致。
+本载体要求本地交互式桌面会话。
 
 - **本 bundle 要求 Electron Utility Process**——在普通 Node 中启动 `dsh --profile desktop` 会在服务客户端之前失败。
 - **profile 仅在启动时应用 patch**——用户 patch 与插件变化需要通过 Desktop 拥有的 Host 重启路径生效。
 - **不支持远端 Host**——载体只接受本地 Electron 主进程转交的端口。
-- **原生目录选择假定本地交互式 Windows 会话**——无人值守与远端部署应使用其他载体和选择器。
+- **原生目录选择要求交互式会话**——Linux 还需要 zenity 或 kdialog。
 
 <a id="dev-note"></a>
 ### 开发备注

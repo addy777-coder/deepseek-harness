@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-desktop` 在不替换对话界面的前提下，让共享 GUI 适配 Electron。它添加 DSH Desktop 标题栏与品牌，保留主窗口导航，为专注任务窗口提供仅对话布局，并把 Session 状态连接到原生通知。主窗口还会获得全局快捷键、登录后启动和事务式插件管理设置。本包要求 `apps/desktop` 提供固定 preload API，在该外壳之外会失败。
+`dsh-client-ui-desktop` 在不替换对话界面的前提下，让共享 GUI 适配 Electron。它添加 DSH Desktop 标题栏与品牌，保留主窗口导航，为专注任务窗口提供仅对话布局，并把 Session 状态连接到原生通知。主窗口还会获得全局快捷键、登录后启动、事务式插件管理设置，以及驱动应用内更新生命周期的关于页面。本包要求 `apps/desktop` 提供固定 preload API，在该外壳之外会失败。
 
 ## 目录
 
@@ -43,6 +43,8 @@ Desktop 载体 bundle 会挂载两侧，并在 Client Loader 启动前提供 Ele
 
 主窗口保留侧栏与设置。任务窗口隐藏两者，并把初始选择绑定到一个 Session；标题栏操作可返回主窗口。完成状态转换只由主窗口发起，因此多个窗口观察同一 Session 时不会生成重复原生通知。
 
+关于页面在下载期间保持取消操作可用，取消完成后允许再次下载。更新失败会显示主进程的诊断；preload 请求失败也会显示在页面上。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -51,7 +53,7 @@ Desktop 载体 bundle 会挂载两侧，并在 Client Loader 启动前提供 Ele
 <details>
 <summary>实现细节——点击展开</summary>
 
-node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享 layout、侧栏品牌、常规设置与插件设置 slot。它订阅已有 Session 列表，而不拥有第二份缓存：选择变化会更新主进程，running 到 settled 的边沿会请求通知。preload bridge 拥有所有操作系统修改，只暴露固定操作。
+node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享 layout、侧栏品牌、常规设置、插件设置与关于设置 slot。它订阅已有 Session 列表，而不拥有第二份缓存：选择变化会更新主进程，running 到 settled 的边沿会请求通知。preload bridge 拥有所有操作系统修改，只暴露固定操作。
 
 | 文件 | 职责 |
 |---|---|
@@ -59,6 +61,7 @@ node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享
 | [`src/client/TitleBar.tsx`](src/client/TitleBar.tsx) | 融合 caption 内容与任务窗口导航 |
 | [`src/client/DesktopPreferences.tsx`](src/client/DesktopPreferences.tsx) | 快捷键与登录后启动设置 |
 | [`src/client/PluginManager.tsx`](src/client/PluginManager.tsx) | 解析、审阅、应用与取消插件 transaction |
+| [`src/client/AboutSection.tsx`](src/client/AboutSection.tsx) | 已安装版本、更新检查／下载／安装与发行版链接 |
 | [`src/client/locales.ts`](src/client/locales.ts) | 英文与简体中文产品文案 |
 | — | 不发布运行时不变式伴生入口；本插件贡献 UI slot，并从现有 Session 与 preload owner 派生全部状态。 |
 

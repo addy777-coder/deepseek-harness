@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在桌面应用中打开**设置 → VPN**。此页面需要 [VPN 控制器](../../api/vpn-controller/README.zh.md)、语言服务和设置渲染器。不支持的主机会显示 Windows x64 要求并禁用配置操作。
+在桌面应用中打开**设置 → VPN**。此页面需要 [VPN 控制器](../../api/vpn-controller/README.zh.md)、语言服务和设置渲染器。不支持的主机会显示受支持的操作系统与 CPU 架构并禁用配置操作。
 
 ### 配置连接
 
@@ -81,7 +81,7 @@ kind: "package-reference"
 
 此页面管理一份已保存的 VPN 配置：
 
-- 桌面 VPN 实现要求 Windows x64 和兼容的公司配置。
+- 桌面 VPN 实现要求 Windows/Linux x64 或 macOS x64/arm64，以及兼容的公司配置。
 - 页面不能接管外部 OpenVPN 客户端的活动连接，也不能恢复其密码。
 - 关闭页面会丢弃未保存的草稿；已持久化的连接资源仍由网络提供者管理。
 - 配置验证、凭据存储、启动恢复和模型路由由 Host 提供。

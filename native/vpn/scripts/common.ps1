@@ -5,7 +5,34 @@ function Get-VpnRoot {
   [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
 
+function Get-VpnTarget([string]$Name) {
+  $platform = if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'darwin' } elseif ($IsLinux) { 'linux' } else { throw 'Unsupported native VPN host.' }
+  $arch = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+  $hostTarget = "$platform-$arch"
+  if (-not $Name) { $Name = $hostTarget }
+  if ($Name -notin @('windows-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64')) { throw "Unsupported native VPN target: $Name" }
+  if ($Name -ne $hostTarget) { throw "Build $Name on a matching native host; this process runs on $hostTarget." }
+  $system = if ($platform -eq 'darwin') { 'osx' } else { $platform }
+  [pscustomobject]@{
+    Name = $Name; Platform = $platform; Arch = $arch; Triplet = "$arch-$system-dsh-vpn"; HostTriplet = "$arch-$system"
+    Binary = if ($IsWindows) { 'dsh-vpn.exe' } else { 'dsh-vpn' }
+    Crt = if ($IsWindows) { 'static' } else { 'system' }
+  }
+}
+
 function Get-VpnToolchain([string]$VsDevCmdPath) {
+  if (-not $IsWindows) {
+    if ($VsDevCmdPath) { throw 'VsDevCmdPath is supported only on Windows.' }
+    $root = Get-VpnRoot
+    $pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
+    return [pscustomobject]@{
+      VsDevCmd = $null
+      CMake = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
+      CTest = (Get-Command ctest -CommandType Application -ErrorAction Stop).Source
+      Ninja = (Get-Command ninja -CommandType Application -ErrorAction Stop).Source
+      Vcpkg = Join-Path $root ('.cache/tools/vcpkg-' + $pins.vcpkg.revision + '/vcpkg')
+    }
+  }
   if (-not $VsDevCmdPath) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
@@ -20,9 +47,25 @@ function Get-VpnToolchain([string]$VsDevCmdPath) {
   [pscustomobject]@{
     VsDevCmd = $resolved
     CMake = Join-Path $vsRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+    CTest = Join-Path $vsRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe'
     Ninja = Join-Path $vsRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
     Vcpkg = Join-Path $vsRoot 'VC/vcpkg/vcpkg.exe'
   }
+}
+
+function Initialize-VpnToolchain($Toolchain) {
+  if (Test-Path -LiteralPath $Toolchain.Vcpkg -PathType Leaf) { return }
+  if ($IsWindows) { throw 'Install the Visual Studio vcpkg component.' }
+  $root = Get-VpnRoot
+  $source = Join-Path $root '.cache/sources/vcpkg'
+  $tools = Split-Path $Toolchain.Vcpkg -Parent
+  New-Item -ItemType Directory -Force -Path $tools | Out-Null
+  # Bootstrap writes its executable and downloads outside the verified source tree.
+  foreach ($name in @('.vcpkg-root', 'bootstrap-vcpkg.sh', 'scripts')) {
+    Copy-Item -LiteralPath (Join-Path $source $name) -Destination $tools -Recurse -Force
+  }
+  & sh (Join-Path $tools 'bootstrap-vcpkg.sh') -disableMetrics
+  if ($LASTEXITCODE -ne 0) { throw 'The pinned vcpkg tool did not bootstrap.' }
 }
 
 function Assert-VpnCommandPath([string]$Path) {

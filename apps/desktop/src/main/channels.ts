@@ -16,4 +16,11 @@ export const channels = {
   preferencesSet: 'dsh-desktop/preferences-set',
   reportSelection: 'dsh-desktop/report-selection',
   restartHost: 'dsh-desktop/restart-host',
+  updateGet: 'dsh-desktop/update-get',
+  updateCheck: 'dsh-desktop/update-check',
+  updateDownload: 'dsh-desktop/update-download',
+  updateInstall: 'dsh-desktop/update-install',
+  updateCancel: 'dsh-desktop/update-cancel',
+  updateOpenReleases: 'dsh-desktop/update-open-releases',
+  updateState: 'dsh-desktop/update-state',
 } as const

@@ -1,10 +1,13 @@
 /** Experimental-package publication and dependency constraints. */
 
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
+  checkWorkspaceManifest,
   expectedDshPackageFiles,
+  type PackageManifest,
   type WorkspaceManifest,
 } from './check-workspace-constraints.ts'
 
@@ -77,6 +80,28 @@ describe('experimental workspace constraints', () => {
 })
 
 describe('package payload constraints', () => {
+  it('publishes the independent POSIX inspector and rejects a missing or undeclared runtime', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../packages/subprocess/subprocess-local/package.json', import.meta.url), 'utf8')) as PackageManifest
+    const runtime = 'lib/posix-process-inspector.js'
+    const files = ['lib/index.js', runtime, 'scripts/ensure-spawn-helper.mjs', 'lib/types/**/*.d.ts']
+    const workspace = { dir: 'packages/subprocess/subprocess-local', manifest: { ...manifest, files } }
+
+    expect(expectedDshPackageFiles(manifest)).toEqual(files)
+    expect(checkWorkspaceManifest(workspace)).toEqual([])
+    expect(checkWorkspaceManifest({
+      ...workspace,
+      manifest: { ...manifest, files: files.filter(file => file !== runtime) },
+    })).toEqual([expect.stringContaining('package.json files must be')])
+    expect(checkWorkspaceManifest({
+      ...workspace,
+      manifest: {
+        ...manifest,
+        files,
+        exports: { ...manifest.exports, './posix-process-inspector': undefined },
+      },
+    })).toEqual([expect.stringContaining('package.json files must be')])
+  })
+
   it('includes a declared profile patch without a package-name allowlist', () => {
     expect(expectedDshPackageFiles({
       name: '@deepseek-ai/dsh-private-profile',

@@ -9,6 +9,7 @@
   "include": ["src/main", "src/shared"],
   "references": [
     { "path": "../../packages/boot/app-boot" },
-    { "path": "../../packages/desktop/transport" }
+    { "path": "../../packages/desktop/transport" },
+    { "path": "../../packages/subprocess/subprocess-local" }
   ]
 }

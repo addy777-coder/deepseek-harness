@@ -52,6 +52,8 @@ kind: "package-reference"
 
 正常 dispose 会终止每棵仍在运行的进程树与终端并等待其退出。在 JavaScript 可观察的宿主退出期间——直接 `process.exit()`、默认未捕获异常、默认未处理 rejection——同步最终清理会强制终止所有仍归本包所有的对象（对进程组发送 SIGKILL，Windows 上运行 `taskkill /T /F`），且不创建任何 Promise 或定时器。未处理的 `SIGTERM`/`SIGINT`/`SIGHUP`、`SIGKILL`、fatal OOM、native crash 与断电则需要外部 supervisor。
 
+POSIX 监督进程可以从 `@deepseek-ai/dsh-subprocess-local/posix-process-inspector` 导入 `createPosixProcessInspector`，无需加载原生扩展。它跨进程组观察后代身份，在向单个进程发送信号前检查 PID 是否复用，并将僵尸或死亡进程视为静止。调用方在后代重新指定父进程后保留已观察的身份，并在发送信号后等待静止；仅有进程表快照不能证明终止。
+
 ### 可能出错的地方
 
 无法解析的可执行文件会以稳定的错误快速失败；从未启动成功的 spawn 会让 `done` reject。越过保留尾部的读取是 `lossy` 的，并在 spill 文件存在时指向它。脱离进程树或终端会话的 daemon 化后代可能比清理更长寿——见下文限制。
@@ -77,7 +79,8 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | 服务接线：存活句柄集合、dispose、宿主退出最终清理、可执行文件查找 |
 | [`src/spawn.ts`](src/spawn.ts) | 进程管道：detached spawn、保尾收集、spill 文件、升级、进程树退出观察器 |
 | [`src/terminal.ts`](src/terminal.ts) | `node-pty` 终端句柄：前台检查、会话清理、Windows 拆卸 |
-| [`src/process-inspector.ts`](src/process-inspector.ts) | POSIX 进程树与会话检查 |
+| [`src/process-inspector.ts`](src/process-inspector.ts) | 选择平台检查器 |
+| [`src/posix-process-inspector.ts`](src/posix-process-inspector.ts) | 无需原生扩展的 POSIX 进程树与会话检查 |
 | [`src/windows-inspector.ts`](src/windows-inspector.ts) | 经 koffi 的 Windows Toolhelp32 进程表检查 |
 | — | 不发布运行时不变式伴生入口；约定归 seam 所有。 |
 

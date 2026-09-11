@@ -6,7 +6,7 @@ description: "Offline native VPN checks and an explicit live company-model accep
 
 English | [中文](README.zh.md)
 
-The [helper build](../scripts/build.ps1) runs native packet/CONNECT tests, offline process checks and source-package restoration. These checks need no company credentials. The separate live fixture verifies the saved company provider through the production credential, network and pi-ai services.
+The [helper build](../scripts/build.ps1) runs native packet/CONNECT tests, offline process checks and source-package restoration on each supported target. These checks need no company credentials. The separate live fixture verifies the saved company provider through the production credential, network and pi-ai services. The native CI matrix verifies macOS/Linux binaries; a maintainer with saved company credentials owns real VPN acceptance on each target.
 
 ## Live run
 
@@ -20,7 +20,7 @@ From the repository root, run the outer acceptance script with PowerShell 7:
 & native/vpn/tests/run-live-acceptance.ps1
 ```
 
-The script records Windows routes, DNS and adapters before starting any Harness plugin, refuses active external OpenVPN processes or existing helpers, and launches `node --import tsx/esm apps/cli/src/bin.ts --profile headless --patch native/vpn/tests/live-acceptance.patch.yml`. Its child inherits the selected Harness home. `-ReportPath` selects a new host report file; `-RunTimeoutSeconds` bounds the whole run (default 1800), and `-ShutdownGraceMs` bounds launcher termination (default 10000). The script terminates only its own launcher process tree when the run exceeds that deadline.
+The script records system routes, DNS and interfaces before starting any Harness plugin, refuses active external OpenVPN processes or existing helpers, and launches `node --import tsx/esm apps/cli/src/bin.ts --profile headless --patch native/vpn/tests/live-acceptance.patch.yml`. Its child inherits the selected Harness home and selects the current platform's helper. PowerShell 7 must be on `PATH`; Linux snapshots require `iproute2`. `-ReportPath` selects a new host report file; `-RunTimeoutSeconds` bounds the whole run (default 1800), and `-ShutdownGraceMs` bounds launcher termination (default 10000). The script terminates only its own launcher process tree when the run exceeds that deadline.
 
 The fixture disables the ordinary headless task parser and runner, waits for `appReady`, connects the native provider, and performs text streaming, tool-call replay, long output, cancellation, a subsequent request, and model discovery. Set `checkDiscovery: false` only when the company endpoint does not implement model listing; the report marks that check as not requested.
 

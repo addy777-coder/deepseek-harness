@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 Native source and public packages maintained with DeepSeek Harness. The [`landlock-run/` workspace](landlock-run/README.md) owns the Landlock self-restrict-then-exec launcher consumed by the harness, including its architecture, three-package npm family, platform support, development workflow, and [release procedure](landlock-run/docs/release.md).
 
-The [`vpn/` helper](vpn/README.md) carries selected model traffic through an application-owned OpenVPN tunnel on Windows x64. Its documentation owns native builds, protocol restrictions, licenses, and corresponding-source distribution; the [network packages](../packages/network/README.md) own configuration and HTTP consumers.
+The [`vpn/` helper](vpn/README.md) carries selected model traffic through an application-owned OpenVPN tunnel on Windows x64, macOS x64/arm64, and Linux x64. Its documentation owns native builds, protocol restrictions, licenses, and corresponding-source distribution; the [network packages](../packages/network/README.md) own configuration and HTTP consumers.
 
 ## Workspace and release boundary
 

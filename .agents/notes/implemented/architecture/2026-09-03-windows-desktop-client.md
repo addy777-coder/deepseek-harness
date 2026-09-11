@@ -10,7 +10,7 @@ The interactive GUI originally assumed an HTTP server, browser navigation, cooki
 
 ## Decision
 
-DSH Desktop is a Windows x64 Electron application under `apps/desktop`. Electron 44.1.1 supplies Node 24.19, electron-builder 26.15.3 produces a current-user NSIS installer and portable zip, and the packaged application carries pnpm 11.7.0 for profile plugin transactions. The application uses the independent DSH Desktop name and letter mark.
+DSH Desktop is an Electron application under `apps/desktop`. Electron 44.1.1 supplies Node 24.19, and the packaged application carries pnpm 11.7.0 for profile plugin transactions. The [native release decision](2026-09-11-cross-platform-desktop-releases.md) owns Windows, macOS, and Linux distributions. The application uses the independent DSH Desktop name and letter mark.
 
 The [packaging filters](../../../../apps/desktop/electron-builder.yml) exclude type declarations, source maps, compiler state, debug symbols, and test/example/benchmark/GitHub workflow directories from the runtime closure and pnpm. Runtime JavaScript, native dependencies, package metadata, and licenses remain ordinary files. This reduces per-file extraction and deletion work in the Windows installer without moving subprocess executables or profile dependency targets into an archive.
 
@@ -28,13 +28,15 @@ The version-1 Desktop protocol validates exact frame fields and bounded branded 
 
 Renderer navigation and popup creation are denied. HTTP and HTTPS targets open in the system browser. The Client Loader still requires CSP `unsafe-eval` to materialize dynamically delivered Cordis plugin factories; no network connection is permitted by the Desktop page policy.
 
-### Windows lifecycle
+### Desktop lifecycle
 
 One main window retains navigation and Settings. A Session owns at most one focused task window, which hides the sidebar and Settings; closing it leaves the Host task running. Host startup has a 120-second readiness budget that includes cold profile reconciliation and Loader settlement; timeout diagnostics name the last reported phase and include the bounded Host stderr tail. Closing the main window or selecting tray Exit destroys every window, asks the Host to stop, waits up to five seconds, and then terminates the remaining process tree. An unexpected Host exit keeps windows open on a diagnostic page until the user requests a restart; work is never replayed automatically.
 
-The main window restores visible bounds and the shared Client selection. Task windows do not persist. `dsh://new` and `dsh://session/<base64url-session-id>` accept no query, fragment, prompt, or path data. The installed build can own protocol and launch-at-sign-in registration; the portable build cannot. Completion notifications are suppressed while any focused window shows the affected Session.
+The main window restores visible bounds and the shared Client selection. Task windows do not persist. `dsh://new` and `dsh://session/<base64url-session-id>` accept no query, fragment, prompt, or path data. Installed builds register the protocol where their package format supports desktop integration. Windows and macOS support launch at sign-in; Linux disables that preference, and portable Windows builds cannot register the protocol. Completion notifications are suppressed while any focused window shows the affected Session.
 
 Electron Utility Processes report `electron.exe` as `process.execPath`. Internal Windows ACL and native-dialog Node helpers therefore receive `ELECTRON_RUN_AS_NODE=1` only in their runner environment. The ACL runner removes it before starting the user's command, so Electron's Node mode never leaks into the agent shell environment.
+
+POSIX shutdown records descendants before the graceful request so detached command groups remain owned after reparenting. Forced termination checks each PID and start identity and waits for quiescence before Host replacement; timeout diagnostics identify survivors.
 
 ### Profile plugin transactions
 
@@ -62,4 +64,4 @@ Unit coverage owns frame validation, correlation, abort, stream backpressure, de
 
 ## Consequences
 
-The application shares user data and GUI behavior with Web while keeping its Renderer sandboxed and its main process out of model traffic. Carrier-neutral registries make future local carriers possible without another API or UI fork. The costs are a large Windows-only Electron artifact, startup-only Desktop patches, structured-cloned binary bodies, a dynamic-loader CSP exception, and rejection of plugins that depend on install scripts. Code signing, automatic updates, remote Hosts, account login, and non-Windows packages remain outside the first release.
+The application shares user data and GUI behavior with Web while keeping its Renderer sandboxed and its main process out of model traffic. Carrier-neutral registries make future local carriers possible without another API or UI fork. The costs are large native Electron artifacts, startup-only Desktop patches, structured-cloned binary bodies, a dynamic-loader CSP exception, and rejection of plugins that depend on install scripts. Publisher certificates, remote Hosts, and account login remain outside the first release; in-app updates ship through the [Desktop in-app update note](../feature/2026-09-09-desktop-in-app-update.md).

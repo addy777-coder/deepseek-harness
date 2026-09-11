@@ -1,6 +1,7 @@
 /** Desktop-only Client plugin: title bar, window intents, and completion notifications. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions, SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -21,6 +22,11 @@ import {
   type DesktopPluginStage,
   type PluginManagerInjected,
 } from './PluginManager.tsx'
+import {
+  AboutSection,
+  type AboutSectionInjected,
+  type DesktopUpdateState,
+} from './AboutSection.tsx'
 import { en, zh, type DesktopKey } from './locales.ts'
 
 interface DesktopApi {
@@ -35,12 +41,19 @@ interface DesktopApi {
   cancelPlugin(token: string): Promise<void>
   getPreferences(): Promise<DesktopPreferencesValue>
   setPreference(request: Parameters<DesktopPreferencesInjected['write']>[0]): Promise<DesktopPreferencesValue>
+  getUpdateState(): Promise<DesktopUpdateState>
+  checkForUpdate(): Promise<DesktopUpdateState>
+  downloadUpdate(): Promise<DesktopUpdateState>
+  installUpdate(): Promise<DesktopUpdateState>
+  cancelUpdate(): Promise<DesktopUpdateState>
+  openReleases(): Promise<void>
   onIntent(listener: (intent: { readonly type: 'new-task' }) => void): () => void
+  onUpdateState(listener: (state: DesktopUpdateState) => void): () => void
 }
 
 interface DesktopGlobal {
   dshDesktop?: DesktopApi
-  __DSH_DESKTOP__?: { readonly kind?: unknown }
+  __DSH_DESKTOP__?: { readonly kind?: unknown; readonly version?: unknown }
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -116,6 +129,40 @@ export function apply(ctx: Context): void {
       locale: NS,
       inject: pluginManager,
     }, PluginManager))
+    const desktopVersion = typeof globals.__DSH_DESKTOP__?.version === 'string'
+      ? globals.__DSH_DESKTOP__.version : 'unknown'
+    const updateSource = createSnapshotStore<DesktopUpdateState>({
+      phase: 'idle',
+      currentVersion: desktopVersion,
+      latestVersion: null,
+      releaseName: null,
+      releaseNotes: null,
+      progress: null,
+      message: null,
+    })
+    ctx.effect(() => {
+      const stopUpdates = desktop.onUpdateState((next) => { updateSource.set(next) })
+      void desktop.getUpdateState().then((next) => { updateSource.set(next) }, () => {
+        // The main process holds the authoritative state; the first push corrects this.
+      })
+      return stopUpdates
+    }, 'ui-desktop: update state bridge')
+    const aboutSection = (): AboutSectionInjected => ({
+      hooks: { update: updateSource },
+      checkForUpdate: () => desktop.checkForUpdate(),
+      downloadUpdate: () => desktop.downloadUpdate(),
+      installUpdate: () => desktop.installUpdate(),
+      cancelUpdate: () => desktop.cancelUpdate(),
+      openReleases: () => desktop.openReleases(),
+    })
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'about',
+      order: 50,
+      label: () => t('about.nav'),
+      locale: NS,
+      inject: aboutSection,
+    }, AboutSection))
   }
 
   let previous = sessions.list.getSnapshot()

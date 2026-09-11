@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-DSH Desktop 是位于 `apps/desktop` 的 Windows x64 Electron 应用。Electron 44.1.1 提供 Node 24.19，electron-builder 26.15.3 生成当前用户 NSIS 安装器与 portable zip，打包应用携带 pnpm 11.7.0 来执行 profile 插件 transaction。应用使用独立 DSH Desktop 名称与字母标记。
+DSH Desktop 是位于 `apps/desktop` 的 Electron 应用。Electron 44.1.1 提供 Node 24.19，打包应用携带 pnpm 11.7.0 来执行 profile 插件 transaction。[原生发布决策](2026-09-11-cross-platform-desktop-releases.zh.md)负责 Windows、macOS 与 Linux 分发。应用使用独立 DSH Desktop 名称与字母标记。
 
 [打包过滤规则](../../../../apps/desktop/electron-builder.yml) 从 runtime closure 与 pnpm 中排除类型声明、源映射、编译器状态、调试符号，以及测试／示例／基准测试／GitHub 工作流目录。运行 JavaScript、原生依赖、包元数据和许可证保留为普通文件。这减少了 Windows 安装器逐文件解压与删除的工作量，同时不把子进程可执行文件或 profile 依赖目标移入归档。
 
@@ -28,13 +28,15 @@ Electron 主进程拥有窗口、托盘、快捷键、协议路由、通知、�
 
 Renderer 导航与弹窗创建都会被拒绝。HTTP 与 HTTPS 目标交给系统浏览器打开。Client Loader 仍需要 CSP `unsafe-eval` 来物化动态投递的 Cordis 插件 factory；Desktop 页面策略不允许网络连接。
 
-### Windows 生命周期
+### Desktop 生命周期
 
 一个主窗口保留导航与设置。一个 Session 最多拥有一个专注任务窗口，后者隐藏侧栏与设置；关闭它会让 Host 任务继续运行。Host 启动有 120 秒 ready 预算，其中包含冷 profile reconciliation 与 Loader 完全加载；超时诊断会指出最后上报的阶段，并包含有界 Host stderr 尾部。关闭主窗口或选择托盘退出会销毁全部窗口、请求 Host 停止、等待最多五秒，再终止剩余进程树。Host 意外退出时，窗口会保留诊断页，直到用户请求重启；工作绝不会自动重放。
 
-主窗口会恢复可见 bounds 与共享 Client 选择。任务窗口不持久化。`dsh://new` 与 `dsh://session/<base64url-session-id>` 不接受 query、fragment、提示词或路径数据。已安装构建可以拥有协议与登录后启动注册；portable 构建不能。任一聚焦窗口显示受影响 Session 时，完成通知会被抑制。
+主窗口会恢复可见 bounds 与共享 Client 选择。任务窗口不持久化。`dsh://new` 与 `dsh://session/<base64url-session-id>` 不接受 query、fragment、提示词或路径数据。已安装构建在包格式支持桌面集成时注册协议。Windows 和 macOS 支持登录后启动；Linux 禁用该偏好，Windows 便携版不能注册协议。任一聚焦窗口显示受影响 Session 时，完成通知会被抑制。
 
 Electron Utility Process 的 `process.execPath` 指向 `electron.exe`。内部 Windows ACL 与原生对话框 Node helper 因此只在其 runner 环境中接收 `ELECTRON_RUN_AS_NODE=1`。ACL runner 会在启动用户命令前删除它，所以 Electron Node mode 绝不会泄漏进 agent shell 环境。
+
+POSIX 关闭会在正常退出请求前记录后代，使独立命令组在父进程变化后仍受生命周期管理。强制终止会校验每个 PID 与启动身份，并等待静止后再替换 Host；超时诊断会指出幸存进程。
 
 ### Profile 插件 transaction
 
@@ -62,4 +64,4 @@ Electron Utility Process 的 `process.execPath` 指向 `electron.exe`。内部 W
 
 ## 后果
 
-应用与 Web 共享用户数据和 GUI 行为，同时让 Renderer 保持沙箱化，并让主进程远离模型流量。与载体无关的 registry 使未来本地载体无需再次分叉 API 或 UI。代价是大型且仅 Windows 的 Electron 产物、仅启动时应用的 Desktop patch、结构化克隆二进制 body、动态 loader 的 CSP 例外，以及拒绝依赖安装脚本的插件。代码签名、自动更新、远端 Host、账号登录与非 Windows 包仍不属于首版。
+应用与 Web 共享用户数据和 GUI 行为，同时让 Renderer 保持沙箱化，并让主进程远离模型流量。与载体无关的 registry 使未来本地载体无需再次分叉 API 或 UI。代价是大型原生 Electron 产物、仅启动时应用的 Desktop patch、结构化克隆二进制 body、动态 loader 的 CSP 例外，以及拒绝依赖安装脚本的插件。发布者证书、远端 Host 与账号登录仍不属于首版；应用内更新经 [Desktop 应用内更新 note](../feature/2026-09-09-desktop-in-app-update.zh.md) 提供。

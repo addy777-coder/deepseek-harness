@@ -43,7 +43,7 @@ function main(): void {
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
   runScript('build:lib', buildEnvironment)
   runScript('build:web', buildEnvironment)
-  if (process.platform === 'win32') runScript('build:desktop', buildEnvironment)
+  if (['win32', 'darwin', 'linux'].includes(process.platform)) runScript('build:desktop', buildEnvironment)
   const record = writeClientBuildRecord(root, clientEnvironment)
   console.log(
     `build: recorded ${String(record.artifacts.fileCount)} client artifact(s) with ${String(Object.keys(record.environment).length)} public value(s)`,

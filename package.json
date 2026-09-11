@@ -26,6 +26,8 @@
     "build:desktop": "pnpm --filter @deepseek-ai/dsh-desktop run build",
     "build:desktop:icon": "tsx scripts/build-desktop-icon.ts",
     "package:desktop:win": "pnpm --filter @deepseek-ai/dsh-desktop run dist:win",
+    "package:desktop:mac": "pnpm --filter @deepseek-ai/dsh-desktop run dist:mac",
+    "package:desktop:linux": "pnpm --filter @deepseek-ai/dsh-desktop run dist:linux",
     "test:desktop": "pnpm --filter @deepseek-ai/dsh-desktop run test:e2e",
     "clean": "tsx scripts/clean.ts",
     "change-scope": "tsx scripts/change-scope.ts",

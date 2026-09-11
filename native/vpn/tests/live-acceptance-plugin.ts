@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-cmdline'
@@ -17,7 +18,7 @@ export const inject = ['network', 'llm', 'settings', 'credentials', 'subprocess'
 export interface Config extends Omit<LiveAcceptanceOptions, 'signal'> {
   /** Maximum time to wait for the production helper to connect. */
   connectionTimeoutMs: number
-  /** Maximum time for one read-only Windows network snapshot. */
+  /** Maximum time for one read-only system network snapshot. */
   snapshotTimeoutMs: number
   /** Grace period for snapshot subprocess teardown. */
   shutdownGraceMs: number
@@ -51,19 +52,12 @@ interface Report {
   checks?: LiveAcceptanceReport
 }
 
-const snapshotScript = String.raw`
-$ErrorActionPreference = 'Stop'
-$routes = @(Get-NetRoute | Select-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric | Sort-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric)
-$dns = @(Get-DnsClientServerAddress | Select-Object InterfaceIndex, AddressFamily, ServerAddresses | Sort-Object InterfaceIndex, AddressFamily)
-$interfaces = @(Get-NetAdapter -IncludeHidden | Select-Object InterfaceIndex, InterfaceGuid, InterfaceDescription | Sort-Object InterfaceIndex)
-$network = [ordered]@{routes = $routes; dns = $dns; interfaces = $interfaces} | ConvertTo-Json -Depth 6 -Compress
-[ordered]@{network = $network; externalOpenvpnActive = [bool](Get-Process -Name openvpn -ErrorAction SilentlyContinue); helperCount = @(Get-Process -Name dsh-vpn -ErrorAction SilentlyContinue).Count} | ConvertTo-Json -Compress
-`
+const snapshotScript = fileURLToPath(new URL('./network-snapshot.ps1', import.meta.url))
 
 async function snapshot(ctx: Context, config: Config, signal: AbortSignal): Promise<NetworkSnapshot> {
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(config.snapshotTimeoutMs)])
   deadline.throwIfAborted()
-  const child = ctx.subprocess.spawn({ argv: ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', snapshotScript],
+  const child = ctx.subprocess.spawn({ argv: ['pwsh', '-NoProfile', '-NonInteractive', '-File', snapshotScript, '-AsJson'],
     cwd: process.cwd(), stdio: { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }, graceMs: config.shutdownGraceMs })
   const abort = (): void => { child.terminate() }
   deadline.addEventListener('abort', abort, { once: true })

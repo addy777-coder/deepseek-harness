@@ -1539,7 +1539,7 @@ Requires: `credentials` · `settings` · `subprocess`
 ```ts config-catalog
 /** Deployment configuration for the local native network provider. */
 export interface Config {
-  /** Absolute helper path; defaults to the desktop-bundled VPN asset. */
+  /** Absolute helper path; defaults to this checkout’s native/vpn distribution for the host OS and CPU. */
   readonly executablePath?: string
   /** Expected helper digest; omitted reads its adjacent .sha256 file. */
   readonly executableSha256?: string

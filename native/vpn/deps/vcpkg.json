@@ -1,5 +1,5 @@
 {
   "name": "dsh-vpn-dependencies",
   "version-string": "0.0.0",
-  "dependencies": ["asio", "fmt", "jsoncpp", "lz4", "openssl", "xxhash", "tap-windows6"]
+  "dependencies": ["asio", "fmt", "jsoncpp", "lz4", "openssl", "xxhash", { "name": "tap-windows6", "platform": "windows" }]
 }

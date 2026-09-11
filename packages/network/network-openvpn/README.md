@@ -1,5 +1,5 @@
 ---
-description: "Use a native OpenVPN tunnel for selected private model endpoints without changing Windows routes, DNS, or network adapters."
+description: "Use a native OpenVPN tunnel for selected private model endpoints without changing system routes, DNS, or network adapters."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this provider to reach private model endpoints through an application-owned OpenVPN connection on Windows x64. Import the VPN profile and its referenced certificates, save the account, and choose VPN for the model provider. The tunnel leaves Windows adapters, routes, and DNS unchanged. Requests stop when the tunnel is unavailable.
+Use this provider to reach private model endpoints through an application-owned OpenVPN connection on Windows x64, macOS x64/arm64, and Linux x64. Import the VPN profile and its referenced certificates, save the account, and choose VPN for the model provider. The tunnel leaves system adapters, routes, and DNS unchanged. Requests stop when the tunnel is unavailable.
 
 ## Table of Contents
 
@@ -104,7 +104,7 @@ None. The tunnel preserves model request contents and does not add session conte
 
 These limits define the supported deployment.
 
-- **Windows x64 only.** Other platforms report unsupported; no system VPN or direct-network fallback is provided.
+- **Windows/Linux x64 and macOS x64/arm64 only.** Other platforms report unsupported; no system VPN or direct-network fallback is provided.
 - **One saved VPN account.** Challenge authentication, password-protected private keys, and external PKI are unsupported.
 - **Selected model HTTP traffic only.** The provider is not a system proxy; the native helper's IP and transport limits apply.
 - **Anthropic Messages is the shipped model integration.** Other provider APIs and WebSocket transports require separate consumer support.

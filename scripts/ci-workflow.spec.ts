@@ -118,6 +118,9 @@ describe('CI workflow', () => {
       isRecord(step) && typeof step.run === 'string'
     ))
     expect(buildCommands.map(step => step.run)).toContain('pnpm run check:ci:windows-blocking')
+    const nativeSmoke = buildCommands.find(step => step.name === 'Verify packaged Desktop native dependencies')
+    expect(nativeSmoke).toMatchObject({ env: { EXPECTED_NATIVE: 'win32-x64' } })
+    expect(nativeSmoke?.run).toContain('| Out-Host')
 
     // The four native Windows installs branch on the workspace filesystem:
     // clone (ReFS block clone) only on ReFS, plain install elsewhere. This
@@ -682,6 +685,96 @@ describe('Issue lifecycle workflow', () => {
     // issue-policy owns PR validation; it is read-only and a real gate.
     const policyPullRequest = workflowEvent(policy, 'pull_request')
     expect(policyPullRequest.types).toContain('ready_for_review')
+  })
+})
+
+describe('Desktop installer publication', () => {
+  it('gates master version pushes and defaults manual runs to verification', () => {
+    const workflow = loadWorkflow('.github/workflows/desktop-publish.yml')
+    expect(workflowEvent(workflow, 'push')).toEqual({ branches: ['master'] })
+    expect(workflowEvent(workflow, 'workflow_dispatch')).toMatchObject({ inputs: { publish: { type: 'boolean', default: false } } })
+    expect(workflow.permissions).toEqual({ contents: 'read' })
+    const prepare = workflowJob(workflow, 'prepare')
+    expect(JSON.stringify(prepare)).toContain('scripts/release/desktop.ts prepare')
+    expect(prepare).toMatchObject({ outputs: { build: '${{ steps.release.outputs.build }}' } })
+    expect(workflowJob(workflow, 'build').if).toBe("needs.prepare.outputs.build == 'true'")
+  })
+
+  it('isolates pending slots by commit and publication mode without a global publish queue', () => {
+    const workflow = loadWorkflow('.github/workflows/desktop-publish.yml')
+    expect(workflow.concurrency).toEqual({
+      group: "desktop-release-${{ github.sha }}-${{ github.event_name == 'push' || inputs.publish }}",
+      'cancel-in-progress': false,
+    })
+    if (!isRecord(workflow.jobs)) throw new Error('Desktop release must define jobs')
+    for (const job of Object.values(workflow.jobs)) {
+      if (!isRecord(job)) throw new Error('Desktop release job must be an object')
+      expect(job.concurrency).toBeUndefined()
+    }
+  })
+
+  it('requires four native builds and packaged runtime checks before aggregation', () => {
+    const workflow = loadWorkflow('.github/workflows/desktop-publish.yml')
+    const build = workflowJob(workflow, 'build')
+    if (!isRecord(build.strategy) || !isRecord(build.strategy.matrix) || !Array.isArray(build.steps)) {
+      throw new Error('Desktop build must define a native matrix and verification steps')
+    }
+    expect(build.strategy.matrix.include).toMatchObject([
+      { target: 'win-x64', runner: 'windows-2025', native: 'win32-x64', vpn: 'windows-x64', formats: ['exe', 'zip'] },
+      { target: 'mac-arm64', runner: 'macos-15', native: 'darwin-arm64', vpn: 'darwin-arm64', formats: ['dmg', 'zip'] },
+      { target: 'mac-x64', runner: 'macos-15-intel', native: 'darwin-x64', vpn: 'darwin-x64', formats: ['dmg', 'zip'] },
+      { target: 'linux-x64', runner: 'ubuntu-24.04', native: 'linux-x64', vpn: 'linux-x64', formats: ['AppImage', 'deb'] },
+    ])
+    const steps = build.steps.filter(isRecord)
+    const commands = JSON.stringify(steps)
+    expect(commands).toContain('pnpm run build:official')
+    expect(commands).toContain('native/vpn/scripts/build.ps1 -Target ${{ matrix.vpn }}')
+    expect(commands).toContain('native/landlock-run run build:native')
+    expect(commands).toContain('scripts/verify-desktop-package.ts')
+    const extractionIndex = steps.findIndex(step => step.name === 'Verify extracted installers and native runtime')
+    const uploadIndex = steps.findIndex(step => step.name === 'Upload native installers and updater metadata')
+    expect(extractionIndex).toBeGreaterThan(-1)
+    expect(extractionIndex).toBeLessThan(uploadIndex)
+    expect(steps[extractionIndex]?.run).toContain('scripts/verify-desktop-installers.ts')
+    expect(steps[extractionIndex]?.run).toContain('${{ matrix.formats[0] }}')
+    expect(steps[extractionIndex]?.run).toContain('${{ matrix.formats[1] }}')
+    expect(commands).toContain('native-runtime.smoke.cjs')
+    expect(commands).toContain('xvfb-run')
+    expect(commands).toContain('--publish never')
+    expect(build.env).toHaveProperty('DSH_DESKTOP_EXECUTABLE')
+    const sandboxIndex = steps.findIndex(step => step.name === 'Prepare Linux Desktop AppArmor profile')
+    const guiIndex = steps.findIndex(step => step.name === 'Exercise packaged Desktop on Linux')
+    const sandboxCleanupIndex = steps.findIndex(step => step.name === 'Remove Linux Desktop AppArmor profile')
+    expect(sandboxIndex).toBeGreaterThan(-1)
+    expect(sandboxIndex).toBeLessThan(guiIndex)
+    expect(sandboxCleanupIndex).toBeGreaterThan(guiIndex)
+    expect(steps[sandboxIndex]).toMatchObject({ if: "runner.os == 'Linux'", run: 'pnpm exec tsx scripts/desktop-ci-sandbox.ts prepare' })
+    expect(steps[sandboxCleanupIndex]).toMatchObject({ if: "always() && runner.os == 'Linux' && steps.desktop_sandbox.outcome != 'skipped'" })
+    expect(commands).not.toContain('--no-sandbox')
+    expect(commands).not.toContain('apparmor_restrict_unprivileged_userns=0')
+    const verify = workflowJob(workflow, 'verify')
+    expect(verify.needs).toEqual(['prepare', 'build'])
+    expect(JSON.stringify(verify)).toContain('scripts/release/desktop.ts assemble')
+  })
+
+  it('grants write access only to verified publication and never uses npm or PyPI publish', () => {
+    const workflow = loadWorkflow('.github/workflows/desktop-publish.yml')
+    if (!isRecord(workflow.jobs)) throw new Error('Desktop release must define jobs')
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      if (!isRecord(job)) throw new Error(`invalid Desktop release job: ${name}`)
+      if (name !== 'publish') expect(job.permissions).toBeUndefined()
+      expect(JSON.stringify(job)).not.toContain('--clobber')
+      expect(JSON.stringify(job)).not.toContain('npm publish')
+      expect(JSON.stringify(job)).not.toContain('pypi-publish')
+    }
+    const publish = workflowJob(workflow, 'publish')
+    expect(publish).toMatchObject({
+      needs: ['prepare', 'verify'],
+      if: "github.event_name == 'push' || inputs.publish",
+      permissions: { contents: 'write' },
+    })
+    expect(JSON.stringify(publish)).toContain('scripts/release/desktop.ts publish --input desktop-release')
+    expect(JSON.stringify(publish)).toContain('${{ github.token }}')
   })
 })
 

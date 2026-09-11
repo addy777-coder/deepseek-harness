@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-[网络能力](../../../../packages/network/README.zh.md)拥有已配置的 HTTP 目标与连接状态。[OpenVPN 提供方](../../../../packages/network/network-openvpn/README.zh.md)运行独立原生辅助进程，将 OpenVPN3 Core 与内存中的 lwIP 协议栈组合。Windows 网络负责到达 VPN 服务器；辅助进程在隧道内传输模型 TCP 连接与 VPN 提供的 DNS。它不创建操作系统适配器，也不修改系统路由或 DNS 设置。
+[网络能力](../../../../packages/network/README.zh.md)拥有已配置的 HTTP 目标与连接状态。[OpenVPN 提供方](../../../../packages/network/network-openvpn/README.zh.md)运行独立原生辅助进程，将 OpenVPN3 Core 与内存中的 lwIP 协议栈组合。操作系统网络负责到达 VPN 服务器；辅助进程在隧道内传输模型 TCP 连接与 VPN 提供的 DNS。它不创建操作系统适配器，也不修改系统路由或 DNS 设置。
 
 辅助进程提供使用临时端口的回环 CONNECT 代理。每次启动都具有随机认证令牌和明确的主机/端口允许列表。每个消费方拥有带品牌类型的目标注册及其清理函数。Host 进一步将 HTTP 请求限制在已注册的源与 API 路径前缀内，拒绝重定向，并在目标撤回时取消请求。原始端点 URL 保持不变，保留端点 TLS 验证与协议标头。隧道断开或网络服务缺失时，指定请求失败，不回退到直连。
 
@@ -36,7 +36,7 @@ Desktop [运行时暂存](../../../../scripts/stage-desktop-runtime.ts)先通过
 
 ## Consequences
 
-公司模型请求可以使用应用自有连接，普通网络流量保留原有路由。该功能增加原生构建、凭据所有方和独立管理的辅助进程生命周期。受支持部署限定为 Windows x64、IPv4、TCP、VPN 提供的普通 UDP DNS 与 Anthropic Messages；原生和提供方 README 负责详细限制。
+公司模型请求可以使用应用自有连接，普通网络流量保留原有路由。该功能增加原生构建、凭据所有方和独立管理的辅助进程生命周期。[原生发布决策](2026-09-11-cross-platform-desktop-releases.zh.md)负责 Windows x64、macOS x64/arm64 与 Linux x64 部署。网络支持 IPv4、TCP、VPN 提供的普通 UDP DNS 与 Anthropic Messages；原生和提供方 README 负责详细限制。
 
 VPN 配置与连接状态不增加模型输入、会话事件或请求前缀。现有模型消息仍可通过普通会话记录重建，因此传输选择不需要修改 agent-loop 或 SDK 转录。
 

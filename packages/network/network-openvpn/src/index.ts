@@ -48,14 +48,16 @@ export function resolveSpec(config: Config): ResolvedSpec {
   const resolved = OpenVpnNetwork.Config(config) as Paths & Required<Omit<Config, keyof Paths>>
   const { executablePath, executableSha256, dshHome, ...limits } = resolved
   if (limits.reconnectMaxDelayMs < limits.reconnectDelayMs) throw new NetworkError('VPN_SETTINGS_INVALID')
+  const platform = process.platform === 'win32' ? 'windows' : process.platform
+  const binary = process.platform === 'win32' ? 'dsh-vpn.exe' : 'dsh-vpn'
   return { ...limits,
-    executablePath: resolve(executablePath ?? fileURLToPath(new URL('../../../../native/vpn/dist/windows-x64/dsh-vpn.exe', import.meta.url))),
+    executablePath: resolve(executablePath ?? fileURLToPath(new URL(`../../../../native/vpn/dist/${platform}-${process.arch}/${binary}`, import.meta.url))),
     ...executableSha256 === undefined ? {} : { executableSha256 },
     cwd: resolveDshHome(dshHome),
   }
 }
 
-/** Credential-backed, single-profile OpenVPN provider for Windows x64. */
+/** Credential-backed, single-profile OpenVPN provider for the distributed native targets. */
 export class OpenVpnNetwork extends NetworkService {
   static inject = ['credentials', 'settings', 'subprocess']
   static Config: Schema<Config> = Schema.object({
@@ -101,7 +103,10 @@ export class OpenVpnNetwork extends NetworkService {
   }
 
   /** @returns whether the current Host can execute the bundled native helper. */
-  protected supportsHost(): boolean { return process.platform === 'win32' && process.arch === 'x64' }
+  protected supportsHost(): boolean {
+    return (process.arch === 'x64' && ['win32', 'darwin', 'linux'].includes(process.platform))
+      || (process.platform === 'darwin' && process.arch === 'arm64')
+  }
 
   /** Initialize credential references before publishing the injectable service. */
   async* [Service.init](): AsyncGenerator<() => Promise<void> | void, void, void> {

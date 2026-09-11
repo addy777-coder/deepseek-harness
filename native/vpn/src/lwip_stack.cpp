@@ -10,19 +10,7 @@
 #include <thread>
 #include <utility>
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <bcrypt.h>
-#pragma comment(lib, "bcrypt.lib")
-#else
-#include <random>
-#endif
+#include <openssl/rand.h>
 
 extern "C" {
 #include "lwip/dns.h"
@@ -40,21 +28,9 @@ u32_t sys_now(void) {
 }
 
 uint32_t dsh_lwip_rand(void) {
-#ifdef _WIN32
     uint32_t value = 0;
-    if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&value), sizeof(value),
-                       BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
-        std::abort();
-    }
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(&value), sizeof(value)) != 1) std::abort();
     return value;
-#else
-    try {
-        static std::random_device source;
-        return source();
-    } catch (...) {
-        std::abort();
-    }
-#endif
 }
 
 void dsh_lwip_assert(void) {

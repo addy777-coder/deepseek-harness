@@ -9,6 +9,11 @@ files:
   - dist/**
   - assets/**
   - package.json
+publish:
+  provider: github
+  owner: addy777-coder
+  repo: deepseek-harness
+  updaterCacheDirName: dsh-desktop-updater
 extraResources:
   - from: vpn
     to: vpn
@@ -52,4 +57,35 @@ nsis:
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
   deleteAppDataOnUninstall: false
+mac:
+  icon: assets/icon.png
+  category: public.app-category.developer-tools
+  identity: '-'
+  hardenedRuntime: false
+  signIgnore:
+    - '[\\/]vpn[\\/]dsh-vpn$'
+  target:
+    - dmg
+    - zip
+  artifactName: DSH-Desktop-${version}-mac-${arch}.${ext}
+linux:
+  icon: assets/icon.png
+  executableName: dsh-desktop
+  extraFiles:
+    - from: assets/linux/AppRun
+      to: AppRun
+  category: Development
+  maintainer: DSH Desktop contributors
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  artifactName: DSH-Desktop-${version}-linux-${arch}.${ext}
+appImage:
+  executableArgs: []
+deb:
+  fpm:
+    - --depends
+    - zenity
 npmRebuild: false

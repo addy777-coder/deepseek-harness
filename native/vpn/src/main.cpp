@@ -5,7 +5,14 @@
 #include <openvpn/tun/builder/capture.hpp>
 #include <json/json.h>
 #include "lwip_stack.hpp"
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <cerrno>
+#include <poll.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include <array>
 #include <deque>
 #include <set>
@@ -480,6 +487,7 @@ public:
         request.errorText = "External PKI is not supported by this helper";
     }
     void clock_tick() override {
+#ifdef _WIN32
         DWORD available = 0;
         const auto input = GetStdHandle(STD_INPUT_HANDLE);
         if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) {
@@ -490,6 +498,12 @@ public:
             // Any subsequent input is a shutdown request; bootstrap is the only configuration message.
             stop();
         }
+#else
+        pollfd input{STDIN_FILENO, POLLIN, 0};
+        int result;
+        do { result = ::poll(&input, 1, 0); } while (result < 0 && errno == EINTR);
+        if (result < 0 || (result > 0 && input.revents != 0)) stop();
+#endif
     }
 private:
     RuntimeConfig runtime_;
@@ -497,12 +511,27 @@ private:
 };
 
 Json::Value read_bootstrap() {
+#ifdef _WIN32
     const auto input_pipe = GetStdHandle(STD_INPUT_HANDLE);
     if (GetFileType(input_pipe) != FILE_TYPE_PIPE) throw Failure("BOOTSTRAP_REQUIRES_PARENT_PIPE");
+#else
+    struct stat input_stat {};
+    // libuv can back child stdio with a socketpair instead of a FIFO on POSIX.
+    if (::fstat(STDIN_FILENO, &input_stat) != 0
+        || (!S_ISFIFO(input_stat.st_mode) && !S_ISSOCK(input_stat.st_mode)))
+        throw Failure("BOOTSTRAP_REQUIRES_PARENT_PIPE");
+#endif
     std::string line;
     char ch;
+#ifdef _WIN32
     DWORD count = 0;
     while (ReadFile(input_pipe, &ch, 1, &count, nullptr) && count == 1) {
+#else
+    while (true) {
+        ssize_t count;
+        do { count = ::read(STDIN_FILENO, &ch, 1); } while (count < 0 && errno == EINTR);
+        if (count != 1) break;
+#endif
         if (ch == '\n') break;
         if (line.size() >= 1048576) throw Failure("BOOTSTRAP_TOO_LARGE");
         line.push_back(ch);

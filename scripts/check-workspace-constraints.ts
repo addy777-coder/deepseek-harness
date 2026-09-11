@@ -220,6 +220,10 @@ export function expectedDshPackageFiles(manifest: PackageManifest): readonly str
     ...exportDefault(manifest, './profile-plugins') === './lib/profile-plugins.js'
       ? ['lib/profile-plugins.js']
       : [],
+    // POSIX supervisors import process inspection independently of the native provider.
+    ...exportDefault(manifest, './posix-process-inspector') === './lib/posix-process-inspector.js'
+      ? ['lib/posix-process-inspector.js']
+      : [],
     ...extras,
     // Subpaths whose runtime default is the tsc-emitted tree (lib/types/*.js —
     // browser-safe source channels rehomed off src so plain Node can import

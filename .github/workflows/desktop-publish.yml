@@ -1,0 +1,247 @@
+name: Desktop installer publish
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish or resume this version after all native builds pass
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.sha }}-${{ github.event_name == 'push' || inputs.publish }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+
+jobs:
+  prepare:
+    name: Validate version and release state
+    if: github.repository == 'addy777-coder/deepseek-harness'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+      build: ${{ steps.release.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Plan Desktop release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm exec tsx scripts/release/desktop.ts prepare
+      - name: Verify release policy
+        run: pnpm exec vitest run scripts/release/desktop-release.spec.ts scripts/release/desktop-artifacts.spec.ts scripts/desktop-ci-sandbox.spec.ts scripts/desktop-linux-launcher.spec.ts scripts/ci-workflow.spec.ts
+
+  build:
+    name: Build ${{ matrix.target }} installers
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win-x64
+            runner: windows-2025
+            native: win32-x64
+            vpn: windows-x64
+            formats: [exe, zip]
+            builder: --win nsis zip --x64
+            unpacked: win-unpacked
+            executable: win-unpacked/DSH Desktop.exe
+            resources: win-unpacked/resources
+          - target: mac-arm64
+            runner: macos-15
+            native: darwin-arm64
+            vpn: darwin-arm64
+            formats: [dmg, zip]
+            builder: --mac dmg zip --arm64
+            unpacked: mac-arm64/DSH Desktop.app
+            executable: mac-arm64/DSH Desktop.app/Contents/MacOS/DSH Desktop
+            resources: mac-arm64/DSH Desktop.app/Contents/Resources
+          - target: mac-x64
+            runner: macos-15-intel
+            native: darwin-x64
+            vpn: darwin-x64
+            formats: [dmg, zip]
+            builder: --mac dmg zip --x64
+            unpacked: mac/DSH Desktop.app
+            executable: mac/DSH Desktop.app/Contents/MacOS/DSH Desktop
+            resources: mac/DSH Desktop.app/Contents/Resources
+          - target: linux-x64
+            runner: ubuntu-24.04
+            native: linux-x64
+            vpn: linux-x64
+            formats: [AppImage, deb]
+            builder: --linux AppImage deb --x64
+            unpacked: linux-unpacked
+            executable: linux-unpacked/dsh-desktop
+            resources: linux-unpacked/resources
+    env:
+      EXPECTED_NATIVE: ${{ matrix.native }}
+      DSH_DESKTOP_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist-electron/${{ matrix.executable }}
+      DSH_DESKTOP_RUNTIME_DIR: ${{ github.workspace }}/apps/desktop/dist-electron/${{ matrix.resources }}/runtime
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - name: Enable Windows symlinks
+        if: runner.os == 'Windows'
+        run: reg add 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+      - name: Install Linux build and desktop dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool nasm zip unzip musl-tools iproute2 lsof xvfb openbox zenity libfuse2t64 libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libxss1
+      - name: Install macOS native build dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja nasm
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ matrix.target }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+      - name: Require a native runner
+        run: node -e 'if (process.platform + "-" + process.arch !== process.env.EXPECTED_NATIVE) throw new Error("Desktop target requires its native runner")'
+      - run: pnpm install --frozen-lockfile
+      - name: Build Linux Landlock runtime
+        if: runner.os == 'Linux'
+        run: pnpm --dir native/landlock-run run build:native
+      - name: Build official application and runtime
+        run: pnpm run build:official
+      - name: Build and verify native VPN distribution
+        run: pwsh -File native/vpn/scripts/build.ps1 -Target ${{ matrix.vpn }}
+      - name: Stage Desktop runtime
+        run: pnpm --filter @deepseek-ai/dsh-desktop run stage:runtime
+      - name: Stage Desktop application
+        run: pnpm --filter @deepseek-ai/dsh-desktop run stage:app
+      - name: Package installers
+        run: node apps/desktop/node_modules/electron-builder/out/cli/cli.js --projectDir .dsh-build/desktop-app --publish never ${{ matrix.builder }}
+      - name: Verify packaged native resources
+        run: pnpm exec tsx scripts/verify-desktop-package.ts 'apps/desktop/dist-electron/${{ matrix.unpacked }}'
+      - name: Verify extracted installers and native runtime
+        run: >-
+          pnpm exec tsx scripts/verify-desktop-installers.ts
+          'apps/desktop/dist-electron/DSH-Desktop-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.formats[0] }}'
+          'apps/desktop/dist-electron/DSH-Desktop-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.formats[1] }}'
+      - name: Exercise packaged native runtime and PTY
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: |
+          & $env:DSH_DESKTOP_EXECUTABLE apps/desktop/tests/native-runtime.smoke.cjs | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged native runtime smoke failed' }
+      - name: Exercise packaged Desktop
+        if: runner.os != 'Linux'
+        run: pnpm run test:desktop
+      - name: Prepare Linux Desktop AppArmor profile
+        id: desktop_sandbox
+        if: runner.os == 'Linux'
+        run: pnpm exec tsx scripts/desktop-ci-sandbox.ts prepare
+      - name: Exercise packaged Desktop on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: xvfb-run --auto-servernum bash -c 'openbox >"$RUNNER_TEMP/desktop-openbox.log" 2>&1 & pnpm run test:desktop'
+      - name: Remove Linux Desktop AppArmor profile
+        if: always() && runner.os == 'Linux' && steps.desktop_sandbox.outcome != 'skipped'
+        run: node --import tsx/esm scripts/desktop-ci-sandbox.ts cleanup
+      - name: Upload native installers and updater metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            apps/desktop/dist-electron/DSH-Desktop-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.*
+            apps/desktop/dist-electron/latest*.yml
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload Desktop failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-failure-${{ matrix.target }}
+          path: |
+            apps/desktop/test-results
+            apps/desktop/dist-electron/builder-debug.yml
+          if-no-files-found: ignore
+
+  verify:
+    name: Assemble and verify complete Release assets
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '{win-x64,mac-arm64,mac-x64,linux-x64}'
+          path: desktop-builds
+      - name: Verify all platforms and merge macOS updater feed
+        run: pnpm exec tsx scripts/release/desktop.ts assemble --input desktop-builds --output desktop-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release
+          path: desktop-release/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    name: Publish verified Desktop Release
+    needs: [prepare, verify]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-release
+          path: desktop-release
+      - name: Publish draft after verifying downloaded asset bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm exec tsx scripts/release/desktop.ts publish --input desktop-release

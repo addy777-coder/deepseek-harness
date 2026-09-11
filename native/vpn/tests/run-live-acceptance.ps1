@@ -7,22 +7,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'network-snapshot.ps1')
 
 function Get-VpnLiveHostSnapshot {
-  $routes = @(Get-NetRoute | Select-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric | Sort-Object InterfaceIndex, AddressFamily, DestinationPrefix, NextHop, RouteMetric)
-  $dns = @(Get-DnsClientServerAddress | Select-Object InterfaceIndex, AddressFamily, ServerAddresses | Sort-Object InterfaceIndex, AddressFamily)
-  $adapters = @(Get-NetAdapter -IncludeHidden | Select-Object InterfaceIndex, InterfaceGuid, InterfaceDescription | Sort-Object InterfaceIndex)
-  $json = [ordered]@{ routes = $routes; dns = $dns; interfaces = $adapters } | ConvertTo-Json -Depth 6 -Compress
+  $snapshot = Get-VpnNetworkSnapshot
+  $json = $snapshot.network
   $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($json))).ToLowerInvariant()
   [pscustomobject]@{
     digest = $digest
-    externalOpenvpnActive = [bool](Get-Process -Name openvpn -ErrorAction SilentlyContinue)
-    helperCount = @(Get-Process -Name dsh-vpn -ErrorAction SilentlyContinue).Count
+    externalOpenvpnActive = $snapshot.externalOpenvpnActive
+    helperCount = $snapshot.helperCount
   }
 }
 
 function Start-VpnLiveFixture([string]$RepositoryPath, [string]$FixtureReportPath, [int]$TimeoutSeconds, [int]$GraceMs) {
-  $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+  $node = (Get-Command node -CommandType Application -ErrorAction Stop).Source
   $start = [Diagnostics.ProcessStartInfo]::new()
   $start.FileName = $node
   $start.WorkingDirectory = $RepositoryPath

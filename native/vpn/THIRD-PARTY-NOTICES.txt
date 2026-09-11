@@ -20,10 +20,10 @@ JsonCpp: public domain or MIT; see jsoncpp.txt.
 LZ4: BSD-2-Clause library; see lz4.txt.
 OpenSSL 3.6: Apache-2.0; see openssl.txt.
 xxHash: BSD-2-Clause library; see xxhash.txt.
-tap-windows6 public header: MIT; see tap-windows6.txt.
-Only the tap-windows6 header is compiled. No TAP driver is distributed or used.
+Windows tap-windows6 public header: MIT; see tap-windows6.txt on Windows.
+Only the Windows header is compiled. No TAP driver is distributed or used.
 
-The Microsoft C/C++ runtime is statically linked under the Visual Studio
-redistribution terms. The executable imports only Windows system libraries.
-Build tools and the Windows SDK are separately supplied prerequisites.
+Windows links the Microsoft C/C++ runtime statically under the Visual Studio
+redistribution terms. Each executable imports only its operating system libraries.
+Build tools and platform SDKs are separately supplied prerequisites.
 The pinned vcpkg source and its MIT notice are included in the source archive.

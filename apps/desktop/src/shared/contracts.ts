@@ -6,6 +6,7 @@ export interface DesktopWindowBootstrap {
   readonly kind: 'main' | 'task'
   readonly sessionId?: string
   readonly installed: boolean
+  readonly version: string
   readonly hostError?: string
 }
 
@@ -24,8 +25,15 @@ export interface DesktopShellApi {
   cancelPlugin(token: string): Promise<void>
   getPreferences(): Promise<DesktopPreferences>
   setPreference(request: DesktopPreferenceMutation): Promise<DesktopPreferences>
+  getUpdateState(): Promise<DesktopUpdateState>
+  checkForUpdate(): Promise<DesktopUpdateState>
+  downloadUpdate(): Promise<DesktopUpdateState>
+  installUpdate(): Promise<DesktopUpdateState>
+  cancelUpdate(): Promise<DesktopUpdateState>
+  openReleases(): Promise<void>
   onIntent(listener: (intent: { readonly type: 'new-task' }) => void): () => void
   onHostFailure(listener: (message: string) => void): () => void
+  onUpdateState(listener: (state: DesktopUpdateState) => void): () => void
 }
 
 /** Desktop-main preferences and current shortcut availability. */
@@ -61,6 +69,36 @@ export interface DesktopPluginStage {
   readonly token: string
   readonly action: DesktopPluginRequest['action']
   readonly packages: readonly DesktopPluginInfo[]
+}
+
+/** Update lifecycle phases of the Desktop in-app updater. */
+export type DesktopUpdatePhase =
+  | 'unsupported'
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'up-to-date'
+  | 'downloading'
+  | 'downloaded'
+  | 'installing'
+  | 'error'
+
+/** One byte-level progress sample of an update download. */
+export interface DesktopUpdateProgress {
+  readonly percent: number
+  readonly transferred: number
+  readonly total: number
+}
+
+/** Snapshot of the Desktop update state machine, mirrored into the renderer. */
+export interface DesktopUpdateState {
+  readonly phase: DesktopUpdatePhase
+  readonly currentVersion: string
+  readonly latestVersion: string | null
+  readonly releaseName: string | null
+  readonly releaseNotes: string | null
+  readonly progress: DesktopUpdateProgress | null
+  readonly message: string | null
 }
 
 declare global {

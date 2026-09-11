@@ -109,14 +109,22 @@ describe('VPN provider configuration and lifetime', () => {
     expect(resolveSpec({})).toMatchObject({ connectTimeoutSeconds: 60, maxConnections: 16 })
   })
 
-  it('supports only Windows x64 native hosts', () => {
+  it('selects the distributed helper for each supported host and rejects other targets', () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
     const arch = Object.getOwnPropertyDescriptor(process, 'arch')!
     try {
-      for (const [hostPlatform, hostArch, supported] of [['win32', 'x64', true], ['win32', 'arm64', false], ['linux', 'x64', false]] as const) {
+      for (const [hostPlatform, hostArch, supported] of [
+        ['win32', 'x64', true], ['darwin', 'x64', true], ['darwin', 'arm64', true], ['linux', 'x64', true],
+        ['win32', 'arm64', false], ['linux', 'arm64', false], ['freebsd', 'x64', false], ['linux', 'ia32', false],
+      ] as const) {
         Object.defineProperty(process, 'platform', { value: hostPlatform })
         Object.defineProperty(process, 'arch', { value: hostArch })
         expect(HostProbe.supported()).toBe(supported)
+        if (supported) {
+          const directory = `${hostPlatform === 'win32' ? 'windows' : hostPlatform}-${hostArch}`
+          const binary = hostPlatform === 'win32' ? 'dsh-vpn.exe' : 'dsh-vpn'
+          expect(resolveSpec({}).executablePath.replaceAll('\\', '/')).toContain(`/native/vpn/dist/${directory}/${binary}`)
+        }
       }
     } finally { Object.defineProperty(process, 'platform', platform); Object.defineProperty(process, 'arch', arch) }
   })

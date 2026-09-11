@@ -10,7 +10,7 @@ A company model endpoint can require OpenVPN access even though other model prov
 
 ## Decision
 
-The [network capability](../../../../packages/network/README.md) owns configured HTTP destinations and connection state. Its [OpenVPN provider](../../../../packages/network/network-openvpn/README.md) runs a separate native helper combining OpenVPN3 Core with an in-memory lwIP stack. Windows networking reaches the VPN server; the helper carries model TCP connections and VPN-provided DNS inside the tunnel. It creates no operating-system adapter and changes no system route or DNS setting.
+The [network capability](../../../../packages/network/README.md) owns configured HTTP destinations and connection state. Its [OpenVPN provider](../../../../packages/network/network-openvpn/README.md) runs a separate native helper combining OpenVPN3 Core with an in-memory lwIP stack. Operating-system networking reaches the VPN server; the helper carries model TCP connections and VPN-provided DNS inside the tunnel. It creates no operating-system adapter and changes no system route or DNS setting.
 
 The helper exposes an ephemeral loopback CONNECT proxy. Every launch has a random authentication token and an explicit host/port allowlist. Each consumer owns a branded target registration and its disposer. The Host additionally confines HTTP requests to the registered origin and API path prefix, rejects redirects, and aborts requests when their target is withdrawn. The original endpoint URL remains intact, preserving endpoint TLS verification and protocol headers. A disconnected tunnel or missing network service fails the selected request without direct fallback.
 
@@ -36,7 +36,7 @@ Desktop [runtime staging](../../../../scripts/stage-desktop-runtime.ts) first va
 
 ## Consequences
 
-Company model requests can use application-owned connectivity while ordinary network traffic retains its existing route. The feature adds a native build, a credential owner, and a separately managed helper lifecycle. Windows x64, IPv4, TCP, VPN-provided plain UDP DNS, and Anthropic Messages define the supported deployment; the native and provider READMEs own detailed restrictions.
+Company model requests can use application-owned connectivity while ordinary network traffic retains its existing route. The feature adds a native build, a credential owner, and a separately managed helper lifecycle. The [native release decision](2026-09-11-cross-platform-desktop-releases.md) owns Windows x64, macOS x64/arm64, and Linux x64 deployment. Networking supports IPv4, TCP, VPN-provided plain UDP DNS, and Anthropic Messages; the native and provider READMEs own detailed restrictions.
 
 VPN configuration and connection state add no model input, session event, or request prefix. Existing model messages remain reconstructable through their normal session records. The transport choice therefore needs no agent-loop or SDK transcript change.
 

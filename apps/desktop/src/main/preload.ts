@@ -1,6 +1,8 @@
 /** Context-isolated bridge for fixed desktop shell operations and Host port delivery. */
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopShellApi, DesktopWindowBootstrap } from '../shared/contracts.ts'
+import type {
+  DesktopShellApi, DesktopUpdateState, DesktopWindowBootstrap,
+} from '../shared/contracts.ts'
 import { channels } from './channels.ts'
 
 ipcRenderer.on(channels.hostPort, (event, payload: { readonly windowId: string }) => {
@@ -27,6 +29,16 @@ function subscribeHostFailure(listener: Parameters<DesktopShellApi['onHostFailur
   return () => { ipcRenderer.off(channels.hostFailure, wrapped) }
 }
 
+function subscribeUpdateState(listener: Parameters<DesktopShellApi['onUpdateState']>[0]): () => void {
+  const wrapped = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+    if (typeof value === 'object' && value !== null && typeof Reflect.get(value, 'phase') === 'string') {
+      listener(value as DesktopUpdateState)
+    }
+  }
+  ipcRenderer.on(channels.updateState, wrapped)
+  return () => { ipcRenderer.off(channels.updateState, wrapped) }
+}
+
 const api: DesktopShellApi = {
   bootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<DesktopWindowBootstrap>,
   openSession: sessionId => ipcRenderer.invoke(channels.openSession, sessionId) as Promise<void>,
@@ -41,8 +53,15 @@ const api: DesktopShellApi = {
   cancelPlugin: token => ipcRenderer.invoke(channels.pluginCancel, token) as Promise<void>,
   getPreferences: () => ipcRenderer.invoke(channels.preferencesGet) as ReturnType<DesktopShellApi['getPreferences']>,
   setPreference: request => ipcRenderer.invoke(channels.preferencesSet, request) as ReturnType<DesktopShellApi['setPreference']>,
+  getUpdateState: () => ipcRenderer.invoke(channels.updateGet) as ReturnType<DesktopShellApi['getUpdateState']>,
+  checkForUpdate: () => ipcRenderer.invoke(channels.updateCheck) as ReturnType<DesktopShellApi['checkForUpdate']>,
+  downloadUpdate: () => ipcRenderer.invoke(channels.updateDownload) as ReturnType<DesktopShellApi['downloadUpdate']>,
+  installUpdate: () => ipcRenderer.invoke(channels.updateInstall) as ReturnType<DesktopShellApi['installUpdate']>,
+  cancelUpdate: () => ipcRenderer.invoke(channels.updateCancel) as ReturnType<DesktopShellApi['cancelUpdate']>,
+  openReleases: () => ipcRenderer.invoke(channels.updateOpenReleases) as Promise<void>,
   onIntent: listener => subscribeIntent(listener),
   onHostFailure: listener => subscribeHostFailure(listener),
+  onUpdateState: listener => subscribeUpdateState(listener),
 }
 
 contextBridge.exposeInMainWorld('dshDesktop', api)

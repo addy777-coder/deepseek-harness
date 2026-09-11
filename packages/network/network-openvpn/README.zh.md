@@ -1,5 +1,5 @@
 ---
-description: "通过原生 OpenVPN 隧道访问选定的私有模型端点，不更改 Windows 路由、DNS 或网络适配器。"
+description: "通过原生 OpenVPN 隧道访问选定的私有模型端点，不更改系统路由、DNS 或网络适配器。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本提供方让 Windows x64 上的应用通过自有 OpenVPN 连接访问私有模型端点。导入 VPN 配置及其引用证书，保存账户，再为模型提供方选择 VPN。隧道保持 Windows 适配器、路由和 DNS 不变。隧道不可用时，请求停止。
+本提供方让 Windows x64、macOS x64/arm64 和 Linux x64 上的应用通过自有 OpenVPN 连接访问私有模型端点。导入 VPN 配置及其引用证书，保存账户，再为模型提供方选择 VPN。隧道保持系统适配器、路由和 DNS 不变。隧道不可用时，请求停止。
 
 ## 目录
 
@@ -104,7 +104,7 @@ kind: "package-reference"
 
 以下限制定义受支持的部署。
 
-- **仅支持 Windows x64。** 其他平台报告不支持；不提供系统 VPN 或直连网络回退。
+- **仅支持 Windows/Linux x64 和 macOS x64/arm64。** 其他平台报告不支持；不提供系统 VPN 或直连网络回退。
 - **一个已保存 VPN 账户。** 不支持挑战认证、受密码保护的私钥和外部 PKI。
 - **只处理选定模型的 HTTP 流量。** 提供方不是系统代理；受原生辅助程序的 IP 与传输限制约束。
 - **内置模型集成是 Anthropic Messages。** 其他提供方 API 与 WebSocket 传输需要独立的消费方支持。
