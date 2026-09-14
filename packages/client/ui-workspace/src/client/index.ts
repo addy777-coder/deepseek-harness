@@ -96,6 +96,12 @@ export function apply(ctx: Context): void {
   }
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
+    createSection: request => workspaces.createSection(request),
+    renameSection: request => workspaces.renameSection(request),
+    deleteSection: request => workspaces.deleteSection(request),
+    insertSectionBefore: request => workspaces.insertSectionBefore(request),
+    moveWorkspaceToSection: request => workspaces.moveWorkspaceToSection(request),
+    moveSessionToSection: request => workspaces.moveSessionToSection(request),
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },

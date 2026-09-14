@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
-  WorkspaceId, WorkspaceSnapshot, WorkspaceView,
+  SidebarSection, SidebarSectionId, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionPendingInteractionSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -43,7 +43,7 @@ const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView 
 const workspaceState = (
   items: readonly WorkspaceView[],
   archivedSessionIds: readonly SessionId[] = [],
-): WorkspaceSnapshot => ({ items, archivedSessionIds, state: 'idle', phase: 'ready', error: null })
+): WorkspaceSnapshot => ({ items, layout: { revision: 0, workspaceIds: items.map(item => item.workspaceId), sections: [] }, archivedSessionIds, state: 'idle', phase: 'ready', error: null })
 const noPendingInteraction: SessionPendingInteractionSnapshot = new Map()
 function hook<T>(snapshot: T) {
   return function select<S>(selector: (state: T) => S): S { return selector(snapshot) }
@@ -82,6 +82,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     archiveSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
     insertSessionBefore: vi.fn(async () => {}),
+    createSection: vi.fn(), renameSection: vi.fn(), deleteSection: vi.fn(), insertSectionBefore: vi.fn(),
+    moveWorkspaceToSection: vi.fn(), moveSessionToSection: vi.fn(),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
@@ -321,7 +323,7 @@ describe('WorkspaceBrowser', () => {
       x: 0, y: 200, toJSON: () => ({}),
     })
     fireEvent.dragStart(blankRow, { dataTransfer: dragData() })
-    fireDrag(session6, 'drop', 230)
+    await act(async () => { fireDrag(session6, 'drop', 230) })
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha)
       .toEqual(['session-1', 'session-2', 'session-3', 'session-4', 'session-5', 'session-6', 'blank'])
 
@@ -334,12 +336,12 @@ describe('WorkspaceBrowser', () => {
     })
     const session5 = screen.getByText('session-5').closest('[role="treeitem"]') as HTMLElement
     fireEvent.dragStart(session5, { dataTransfer: dragData() })
-    fireDrag(collapsedBlank, 'drop', 205)
+    await act(async () => { fireDrag(collapsedBlank, 'drop', 205) })
     expect(insertSessionBefore).not.toHaveBeenCalled()
 
     const session4 = screen.getByText('session-4').closest('[role="treeitem"]') as HTMLElement
     fireEvent.dragStart(session4, { dataTransfer: dragData() })
-    fireDrag(collapsedBlank, 'drop', 205)
+    await act(async () => { fireDrag(collapsedBlank, 'drop', 205) })
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha)
       .toEqual(['session-1', 'session-2', 'session-3', 'session-5', 'session-4', 'session-6', 'blank'])
     expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('session-4'), sid('session-6'))
@@ -592,7 +594,7 @@ describe('WorkspaceBrowser', () => {
       top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
     })
     fireEvent.dragStart(blank, { dataTransfer: dragData() })
-    fireDrag(mid, 'drop', 180)
+    await act(async () => { fireDrag(mid, 'drop', 180) })
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['old', 'mid', 'blank'])
     expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('blank'), undefined)
 
@@ -923,9 +925,7 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByText('beta'))
     const source = screen.getByText('tail').closest('[role="treeitem"]') as HTMLElement
     let targetSection = screen.getByText('beta').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (targetSection.parentElement?.getAttribute('role') !== 'tree') {
-      targetSection = targetSection.parentElement as HTMLElement
-    }
+    targetSection = targetSection.closest('[data-workspace-id]') as HTMLElement
     targetSection.getBoundingClientRect = () => ({
       top: 100, bottom: 300, left: 0, right: 200, width: 200, height: 200, x: 0, y: 100, toJSON: () => ({}),
     })
@@ -945,20 +945,18 @@ describe('WorkspaceBrowser', () => {
     })
     const source = screen.getByText('beta').closest('[role="treeitem"]') as HTMLElement
     let firstSection = screen.getByText('alpha').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (firstSection.parentElement?.getAttribute('role') !== 'tree') {
-      firstSection = firstSection.parentElement as HTMLElement
-    }
+    firstSection = firstSection.closest('[data-workspace-id]') as HTMLElement
     firstSection.getBoundingClientRect = () => ({
       top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
     })
     fireEvent.dragStart(source, { dataTransfer: dragData() })
     fireDrag(firstSection, 'dragOver', 105)
     expect(firstSection.parentElement?.className).toContain('listTopDropActive')
-    const marker = firstSection.parentElement?.previousElementSibling
+    const marker = firstSection.parentElement?.querySelector('[class*="listTopDropIndicator"]')
     expect(marker?.className).toContain('listTopDropIndicator')
   })
 
-  it('accepts a document-level drop and commits the last Workspace marker on drag end', () => {
+  it('cancels a Workspace drag released outside the list', () => {
     const insertWorkspaceBefore = vi.fn(async () => {})
     mount({
       useWorkspaces: hook(workspaceState([
@@ -970,9 +968,7 @@ describe('WorkspaceBrowser', () => {
     })
     const source = screen.getByText('tail').closest('[role="treeitem"]') as HTMLElement
     let target = screen.getByText('beta').closest('[role="treeitem"]')?.parentElement as HTMLElement
-    while (target.parentElement?.getAttribute('role') !== 'tree') {
-      target = target.parentElement as HTMLElement
-    }
+    target = target.closest('[data-workspace-id]') as HTMLElement
     target.getBoundingClientRect = () => ({
       top: 100, bottom: 134, left: 0, right: 200, width: 200, height: 34, x: 0, y: 100, toJSON: () => ({}),
     })
@@ -981,9 +977,9 @@ describe('WorkspaceBrowser', () => {
     const outsideDrop = createEvent.drop(document.body)
     Object.defineProperty(outsideDrop, 'dataTransfer', { value: dragData() })
     fireEvent(document.body, outsideDrop)
-    expect(outsideDrop.defaultPrevented).toBe(true)
+    expect(outsideDrop.defaultPrevented).toBe(false)
     fireEvent.dragEnd(source)
-    expect(insertWorkspaceBefore).toHaveBeenCalledWith(wid('tail'), wid('beta'))
+    expect(insertWorkspaceBefore).not.toHaveBeenCalled()
   })
 
   it('drag reorder reports the anchor to insertSessionBefore and skips no-op drops', () => {
@@ -1119,7 +1115,7 @@ describe('WorkspaceBrowser', () => {
     expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('one'), undefined)
   })
 
-  it('accepts a document-level drop and commits the last Session marker on drag end', () => {
+  it('cancels a Session drag released outside the list', () => {
     const insertSessionBefore = vi.fn(async () => {})
     mount({
       useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
@@ -1136,12 +1132,12 @@ describe('WorkspaceBrowser', () => {
     const outsideDrop = createEvent.drop(document.body)
     Object.defineProperty(outsideDrop, 'dataTransfer', { value: dragData() })
     fireEvent(document.body, outsideDrop)
-    expect(outsideDrop.defaultPrevented).toBe(true)
+    expect(outsideDrop.defaultPrevented).toBe(false)
     fireEvent.dragEnd(one)
-    expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('one'), undefined)
+    expect(insertSessionBefore).not.toHaveBeenCalled()
   })
 
-  it('logs and keeps the order when the reorder call rejects', async () => {
+  it('shows a retry action and preserves the order when a reorder rejects', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const insertSessionBefore = vi.fn(async () => { throw new Error('stale anchor') })
@@ -1159,7 +1155,9 @@ describe('WorkspaceBrowser', () => {
       const dataTransfer = dragData()
       fireEvent.dragStart(one, { dataTransfer })
       fireDrag(two, 'drop', 180)
-      await waitFor(() => { expect(warn).toHaveBeenCalledWith('session reorder rejected:', expect.any(Error)) })
+      await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('stale anchor') })
+      expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+      expect(warn).not.toHaveBeenCalled()
     } finally {
       warn.mockRestore()
     }
@@ -1314,5 +1312,146 @@ describe('WorkspaceBrowser', () => {
     fireEvent.change(screen.getByPlaceholderText('搜索会话…'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
     expect(row.hasAttribute('draggable')).toBe(false)
+  })
+})
+
+const section = (id: string, workspaceIds: string[] = [], sessionIds: string[] = []): SidebarSection => ({
+  id: id as SidebarSectionId, title: id, workspaceIds: workspaceIds.map(wid), sessionIds: sessionIds.map(sid),
+})
+function sectioned(items: readonly WorkspaceView[], sections: readonly SidebarSection[]): WorkspaceSnapshot {
+  return { ...workspaceState(items), layout: { revision: 1, workspaceIds: items.map(item => item.workspaceId), sections } }
+}
+
+describe('WorkspaceBrowser custom sections', () => {
+  it('creates a trimmed unique section without a directory picker and expands it after acceptance', async () => {
+    const existing = section('Existing')
+    const created = section('Created')
+    let accept!: (value: Awaited<ReturnType<WorkspaceBrowserProps['createSection']>>) => void
+    const createSection = vi.fn<WorkspaceBrowserProps['createSection']>(() => new Promise((resolve) => { accept = resolve }))
+    const b = mount({ useWorkspaces: hook(sectioned([], [existing])), createSection, useDirectoryFlow: hook(false) })
+    fireEvent.click(screen.getByRole('button', { name: '新建分区' }))
+    const dialog = screen.getByRole('dialog', { name: '新建分区' })
+    const field = within(dialog).getByLabelText('分区名称')
+    const submit = within(dialog).getByRole<HTMLButtonElement>('button', { name: '新建分区' })
+    expect(submit.disabled).toBe(true)
+    fireEvent.change(field, { target: { value: ' Existing ' } })
+    expect(within(dialog).getByRole('alert').textContent).toContain('Existing')
+    expect(submit.disabled).toBe(true)
+    fireEvent.change(field, { target: { value: ' Created ' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(createSection).toHaveBeenCalledWith({ title: 'Created' })
+    expect(submit.disabled).toBe(true)
+    await act(async () => {
+      accept({ sectionId: created.id, layout: sectioned([], [existing, created]).layout })
+      rerender(b, { useWorkspaces: hook(sectioned([], [existing, created])) })
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Created' }).getAttribute('aria-expanded')).toBe('true')
+    expect(b.store.getSnapshot().sectionExpansion[created.id]).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Created' }))
+    rerender(b, {})
+    expect(screen.getByRole('button', { name: 'Created' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('moves a project into a folded section and restores it through the default drop area', async () => {
+    const alpha = workspace('alpha', [])
+    const work = section('Work')
+    const moveWorkspaceToSection = vi.fn<WorkspaceBrowserProps['moveWorkspaceToSection']>(async () => sectioned([alpha], [work]).layout)
+    const b = mount({ useWorkspaces: hook(sectioned([alpha], [work])), moveWorkspaceToSection })
+    const heading = screen.getByRole('button', { name: 'Work' })
+    fireEvent.click(heading)
+    const source = screen.getByText('alpha').closest('[role="treeitem"]') as HTMLElement
+    fireEvent.dragStart(source, { dataTransfer: dragData() })
+    await act(async () => { fireDrag(heading.parentElement as HTMLElement, 'drop', 0) })
+    expect(moveWorkspaceToSection).toHaveBeenCalledWith({ workspaceId: wid('alpha'), sectionId: work.id })
+    rerender(b, { useWorkspaces: hook(sectioned([alpha], [section('Work', ['alpha'])])) })
+    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+    const moved = screen.getByText('alpha').closest('[role="treeitem"]') as HTMLElement
+    fireEvent.dragStart(moved, { dataTransfer: dragData() })
+    await act(async () => { fireDrag(screen.getByRole('button', { name: '未分区' }).parentElement as HTMLElement, 'drop', 0) })
+    expect(moveWorkspaceToSection).toHaveBeenLastCalledWith({ workspaceId: wid('alpha'), sectionId: null })
+  })
+
+  it('shows projects before independent sessions, preserves manual order, and keeps flat/search rows unique', async () => {
+    const alpha = workspace('alpha', ['one', 'two'])
+    const beta = workspace('beta', [])
+    const work = section('Work', ['beta'], ['two', 'one'])
+    const b = mount({
+      useWorkspaces: hook(sectioned([alpha, beta], [work])),
+      useSessions: hook(sessionState([summary('one', 3), summary('two', 2)])),
+    })
+    const region = screen.getByRole('group', { name: 'Work' })
+    expect(within(region).getAllByRole('treeitem').map(row => row.textContent)).toEqual([
+      expect.stringContaining('beta'), expect.stringContaining('two'), expect.stringContaining('one'),
+    ])
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.getAllByText('one')).toHaveLength(1)
+    expect(screen.getAllByText('two')).toHaveLength(1)
+    rerender(b, { useSessions: hook(sessionState([summary('one', 999), summary('two', 2)])) })
+    expect(within(region).getAllByRole('treeitem')[1]?.textContent).toContain('two')
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
+    expect(screen.getAllByRole('treeitem')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'one' } })
+    expect(screen.getAllByRole('treeitem')).toHaveLength(1)
+    expect(screen.getByRole('treeitem').textContent).toContain('one')
+  })
+
+  it('cancels invalid and Escape drops before moving a project session into a section', async () => {
+    const alpha = workspace('alpha', ['one'])
+    const beta = workspace('beta', [])
+    const work = section('Work')
+    const moveSessionToSection = vi.fn<WorkspaceBrowserProps['moveSessionToSection']>(async () => sectioned([alpha, beta], [work]).layout)
+    mount({ useWorkspaces: hook(sectioned([alpha, beta], [work])),
+      useSessions: hook(sessionState([summary('one', 1)])), moveSessionToSection })
+    fireEvent.click(screen.getByText('alpha'))
+    const source = screen.getByText('one').closest('[role="treeitem"]') as HTMLElement
+    const destination = screen.getByRole('button', { name: 'Work' }).parentElement as HTMLElement
+    fireEvent.dragStart(source, { dataTransfer: dragData() })
+    fireDrag(screen.getByText('beta').closest('[data-workspace-id]') as HTMLElement, 'drop', 0)
+    expect(moveSessionToSection).not.toHaveBeenCalled()
+    fireEvent.dragStart(source, { dataTransfer: dragData() })
+    fireDrag(destination, 'dragOver', 0)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireDrag(destination, 'drop', 0)
+    fireEvent.dragEnd(source)
+    expect(moveSessionToSection).not.toHaveBeenCalled()
+    fireEvent.dragStart(source, { dataTransfer: dragData() })
+    await act(async () => { fireDrag(destination, 'drop', 0) })
+    expect(moveSessionToSection).toHaveBeenCalledWith({ sessionId: sid('one'), sectionId: work.id })
+    expect(alpha.sessionIds).toEqual(['one'])
+  })
+
+  it('reorders sections through drag and menu, renames with retry, and confirms deletion', async () => {
+    const first = section('First')
+    const second = section('Second')
+    const state = sectioned([], [first, second])
+    const insertSectionBefore = vi.fn<WorkspaceBrowserProps['insertSectionBefore']>(async () => state.layout)
+    const renameSection = vi.fn<WorkspaceBrowserProps['renameSection']>()
+      .mockRejectedValueOnce(new Error('write failed')).mockResolvedValue(state.layout)
+    const deleteSection = vi.fn<WorkspaceBrowserProps['deleteSection']>(async () => state.layout)
+    mount({ useWorkspaces: hook(state), insertSectionBefore, renameSection, deleteSection })
+    fireEvent.dragStart(screen.getByRole('button', { name: 'Second' }).parentElement as HTMLElement, { dataTransfer: dragData() })
+    fireDrag(screen.getByRole('button', { name: 'First' }).parentElement as HTMLElement, 'dragOver', -1)
+    fireDrag(screen.getByRole('button', { name: 'First' }).parentElement as HTMLElement, 'dragOver', 1)
+    expect(insertSectionBefore).not.toHaveBeenCalled()
+    await act(async () => { fireDrag(screen.getByRole('button', { name: 'First' }).parentElement as HTMLElement, 'drop', -1) })
+    expect(insertSectionBefore).toHaveBeenCalledWith({ sectionId: second.id, beforeSectionId: first.id })
+    fireEvent.click(screen.getByRole('button', { name: '分区“Second”的操作' }))
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: '上移' })) })
+    expect(insertSectionBefore).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: '分区“First”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名分区' }))
+    fireEvent.change(screen.getByLabelText('分区名称'), { target: { value: 'Renamed' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '保存' })) })
+    expect(screen.getByRole('alert').textContent).toContain('write failed')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '保存' })) })
+    expect(renameSection).toHaveBeenLastCalledWith({ sectionId: first.id, title: 'Renamed' })
+    fireEvent.click(screen.getByRole('button', { name: '分区“First”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除分区' }))
+    expect(screen.getByRole('dialog').textContent).toContain('文件和会话记录会保留')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除分区' })) })
+    expect(deleteSection).toHaveBeenCalledWith({ sectionId: first.id })
   })
 })

@@ -3,8 +3,12 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
-import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
-import type { WorkspaceView } from '../types.ts'
+import type { WorkspaceLayout, WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type {
+  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
+  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
+  SessionSectionMoveRequest, WorkspaceView,
+} from '../types.ts'
 import type { ClientWorkspaceModel, WorkspaceSnapshot } from './model.ts'
 
 /** Structured create failure for callers that distinguish Host business errors. */
@@ -31,6 +35,42 @@ export interface WorkspaceSource {
 
 /** Workspace Controller's Client service face. */
 export interface IWorkspaces {
+  /**
+   * Append a custom sidebar section after validating its title.
+   * @param request - section mutation fields.
+   * @returns the committed layout and created identity.
+   */
+  createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue>
+  /**
+   * Rename a custom sidebar section.
+   * @param request - section mutation fields.
+   * @returns the committed layout.
+   */
+  renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout>
+  /**
+   * Remove a section and restore its entries to their default placement.
+   * @param request - section mutation fields.
+   * @returns the committed layout.
+   */
+  deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout>
+  /**
+   * Reorder custom sections without changing their entries.
+   * @param request - section mutation fields.
+   * @returns the committed layout.
+   */
+  insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout>
+  /**
+   * Move a project into a section or back into the default project area.
+   * @param request - section mutation fields.
+   * @returns the committed layout.
+   */
+  moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout>
+  /**
+   * Move an independent Session entry while preserving its working directory.
+   * @param request - section mutation fields.
+   * @returns the committed layout.
+   */
+  moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout>
   /** Host-authoritative Workspace rows, order, archive set, and follow lifecycle. */
   readonly list: WorkspaceSource
   /**
@@ -78,6 +118,41 @@ export interface IWorkspaces {
 
 /** Owns the bare Workspace snapshot and Workspace-only commands. */
 export class WorkspaceController extends Service implements IWorkspaces {
+  async createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue> {
+    const result = await this.model.createSection(request)
+    if (!result.ok) throw commandError('createSection', result.error)
+    return result.value
+  }
+
+  async renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout> {
+    const result = await this.model.renameSection(request)
+    if (!result.ok) throw commandError('renameSection', result.error)
+    return result.value
+  }
+
+  async deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout> {
+    const result = await this.model.deleteSection(request)
+    if (!result.ok) throw commandError('deleteSection', result.error)
+    return result.value
+  }
+
+  async insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout> {
+    const result = await this.model.insertSectionBefore(request)
+    if (!result.ok) throw commandError('insertSectionBefore', result.error)
+    return result.value
+  }
+
+  async moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout> {
+    const result = await this.model.moveWorkspaceToSection(request)
+    if (!result.ok) throw commandError('moveWorkspaceToSection', result.error)
+    return result.value
+  }
+
+  async moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout> {
+    const result = await this.model.moveSessionToSection(request)
+    if (!result.ok) throw commandError('moveSessionToSection', result.error)
+    return result.value
+  }
   readonly list: WorkspaceSource
 
   /**

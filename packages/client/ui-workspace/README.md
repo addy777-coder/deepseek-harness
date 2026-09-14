@@ -31,6 +31,12 @@ Use the sidebar to browse Workspaces and their Sessions, reorder them, and start
 
 View options combine grouping with one browser-persisted Session order per account: **Manual** and **Last updated** apply in either presentation. Entering Last updated performs a complete recency sort and later user prompts or steers promote their Session once; entering Manual preserves every current position and disables later promotion. Dragging edits the current order in either mode; Manual-mode drags for real Workspaces also update the Host Session account, while Ungrouped and flat-list orders remain browser-local. In a collapsed group, drag boundaries follow rendered rows and place the source before intervening hidden rows, so a drag cannot hide its source. Workspace drag order is Host-durable in either Session order mode.
 
+### Custom sections
+
+**New section** creates a named, collapsible sidebar section. Sections can be renamed, deleted, and reordered; their project rows precede their independent Session rows, and each category has a manual drag order. Row menus provide section placement, default placement, and up/down actions. Only a valid grouped-view drop commits a move; Escape or releasing outside a target cancels it. A failed save leaves the committed layout visible and offers Retry.
+
+Moving a Session directly into a section hides its row under the original Workspace while preserving its working directory and Workspace account. Restoring default placement returns it to that Workspace or Ungrouped. Deleting a section appends its projects to the default area in section order and restores its independent Sessions. The Host persists and broadcasts names, placement, and order; folding remains browser-local. Flat browsing and search display each Session once, independently of sections.
+
 ### Search
 
 Collapsed search is one header action beside the view and add actions: activating it expands the field across the header. A non-blank query replaces either browsing mode with one flat result list — case-insensitive title and Workspace substring matches appear immediately, while a 250 ms debounced Host request adds ranked current-conversation content matches and snippets. Each new query aborts the preceding request; a failed content search leaves metadata matches visible with a warning. The list is capped at 20 and opens the selected Session without clearing the query.

@@ -2904,6 +2904,42 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting archive set.',
       },
       {
+        signature: '@Remote(\'createSection\') createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue>',
+        description: 'Append a custom sidebar section after validating its title.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout and created section identity.',
+      },
+      {
+        signature: '@Remote(\'renameSection\') renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout>',
+        description: 'Rename a custom sidebar section.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: '@Remote(\'deleteSection\') deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout>',
+        description: 'Remove a section and restore its entries to their default placement.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: '@Remote(\'insertSectionBefore\') insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout>',
+        description: 'Reorder custom sections without changing their entries.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: '@Remote(\'moveWorkspaceToSection\') moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout>',
+        description: 'Move a project into a section or back into the default project area.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: '@Remote(\'moveSessionToSection\') moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout>',
+        description: 'Move an independent Session entry while preserving its working directory.',
+        parameters: [{ name: 'request', description: 'section identity, title, or destination and optional insertion anchor.' }],
+        returns: 'the committed layout.',
+      },
+      {
         signature: '@Remote({ mode: \'stream\' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>',
         description: 'Stream a complete Workspace baseline followed by ordered increments.',
         parameters: [{ name: 'signal', description: 'generation cancellation.' }],
@@ -2945,6 +2981,42 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Move one workspace within the durable display order, DOM-insertBefore-like. With an anchor it lands before that workspace; without one it appends.',
         parameters: [{ name: 'id', description: 'Workspace to move.' }, { name: 'beforeId', description: 'Workspace anchor; omitted appends.' }],
         returns: 'the complete committed workspace order.',
+      },
+      {
+        signature: 'createSection(title: string): Promise<{ sectionId: SidebarSectionId; layout: WorkspaceLayout }>',
+        description: 'Append an empty custom section with a unique non-blank title.',
+        parameters: [{ name: 'title', description: 'proposed section title.' }],
+        returns: 'the created identity and committed layout.',
+      },
+      {
+        signature: 'renameSection(sectionId: SidebarSectionId, title: string): Promise<WorkspaceLayout>',
+        description: 'Rename one section without changing its placement.',
+        parameters: [{ name: 'sectionId', description: 'section identity.' }, { name: 'title', description: 'proposed unique title.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: 'deleteSection(sectionId: SidebarSectionId): Promise<WorkspaceLayout>',
+        description: 'Remove a section, appending its projects to the default area and restoring Session placement.',
+        parameters: [{ name: 'sectionId', description: 'section identity.' }],
+        returns: 'the committed layout; files and Session accounting remain intact.',
+      },
+      {
+        signature: 'insertSectionBefore(sectionId: SidebarSectionId, beforeSectionId?: SidebarSectionId): Promise<WorkspaceLayout>',
+        description: 'Move a section before another section, or append it.',
+        parameters: [{ name: 'sectionId', description: 'section to move.' }, { name: 'beforeSectionId', description: 'destination anchor; omitted appends.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: 'moveWorkspaceToSection( workspaceId: WorkspaceId, sectionId: SidebarSectionId | null, beforeWorkspaceId?: WorkspaceId, ): Promise<WorkspaceLayout>',
+        description: 'Move a project between sections or within one project\'s section account.',
+        parameters: [{ name: 'workspaceId', description: 'registered project.' }, { name: 'sectionId', description: 'destination; null restores the default area.' }, { name: 'beforeWorkspaceId', description: 'project in the destination; omitted appends.' }],
+        returns: 'the committed layout.',
+      },
+      {
+        signature: 'moveSessionToSection( sessionId: SessionId, sectionId: SidebarSectionId | null, beforeSessionId?: SessionId, ): Promise<WorkspaceLayout>',
+        description: 'Place a Session directly in a section without changing its working directory or account.',
+        parameters: [{ name: 'sessionId', description: 'existing ordinary Session.' }, { name: 'sectionId', description: 'destination; null restores the Workspace or Ungrouped position.' }, { name: 'beforeSessionId', description: 'independent Session in the destination; omitted appends.' }],
+        returns: 'the committed layout.',
       },
       {
         signature: 'archiveSession(sessionId: SessionId): Promise<void>',
@@ -5281,6 +5353,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionSearchValue {\n    readonly items: readonly SessionSearchItem[];\n    readonly hasMore: boolean;\n}',
   },
   {
+    name: 'SessionSectionMoveRequest',
+    declaration: 'export interface SessionSectionMoveRequest {\n    readonly sessionId: SessionId;\n    readonly sectionId: SidebarSectionId | null;\n    readonly beforeSessionId?: SessionId;\n}',
+  },
+  {
     name: 'SessionSelectModelRequest',
     declaration: 'export interface SessionSelectModelRequest extends ModelSelection {\n    readonly sessionId: SessionId;\n}',
   },
@@ -5471,6 +5547,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ShellSandboxInfo',
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
+  },
+  {
+    name: 'SidebarSection',
+    declaration: 'export interface SidebarSection {\n    readonly id: SidebarSectionId;\n    readonly title: string;\n    readonly workspaceIds: readonly WorkspaceId[];\n    readonly sessionIds: readonly SessionId[];\n}',
+  },
+  {
+    name: 'SidebarSectionCreateRequest',
+    declaration: 'export interface SidebarSectionCreateRequest {\n    readonly title: string;\n}',
+  },
+  {
+    name: 'SidebarSectionCreateValue',
+    declaration: 'export interface SidebarSectionCreateValue {\n    readonly sectionId: SidebarSectionId;\n    readonly layout: WorkspaceLayout;\n}',
+  },
+  {
+    name: 'SidebarSectionId',
+    declaration: 'export type SidebarSectionId = Branded<\'SidebarSectionId\'>;',
+  },
+  {
+    name: 'SidebarSectionInsertBeforeRequest',
+    declaration: 'export interface SidebarSectionInsertBeforeRequest extends SidebarSectionRequest {\n    readonly beforeSectionId?: SidebarSectionId;\n}',
+  },
+  {
+    name: 'SidebarSectionRenameRequest',
+    declaration: 'export interface SidebarSectionRenameRequest extends SidebarSectionRequest {\n    readonly title: string;\n}',
+  },
+  {
+    name: 'SidebarSectionRequest',
+    declaration: 'export interface SidebarSectionRequest {\n    readonly sectionId: SidebarSectionId;\n}',
   },
   {
     name: 'SkillCandidate',
@@ -6322,7 +6426,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceBaseline',
-    declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n}',
+    declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n    readonly layout: WorkspaceLayout;\n}',
   },
   {
     name: 'WorkspaceCreateRequest',
@@ -6330,7 +6434,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceCreateValue',
-    declaration: 'export interface WorkspaceCreateValue {\n    readonly workspace: WorkspaceView;\n    readonly created: boolean;\n}',
+    declaration: 'export interface WorkspaceCreateValue {\n    readonly workspace: WorkspaceView;\n    readonly created: boolean;\n    readonly layout: WorkspaceLayout;\n}',
   },
   {
     name: 'WorkspaceDeleteRequest',
@@ -6338,7 +6442,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceDeleteValue',
-    declaration: 'export interface WorkspaceDeleteValue {\n    readonly deleted: true;\n}',
+    declaration: 'export interface WorkspaceDeleteValue {\n    readonly deleted: true;\n    readonly layout: WorkspaceLayout;\n}',
   },
   {
     name: 'WorkspaceFollowFrame',
@@ -6346,7 +6450,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceFollowIncrement',
-    declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'order\';\n    readonly workspaceIds: readonly WorkspaceId[];\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n};',
+    declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'layout\';\n    readonly layout: WorkspaceLayout;\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n};',
   },
   {
     name: 'WorkspaceInsertBeforeRequest',
@@ -6357,12 +6461,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceInsertSessionBeforeRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sessionId: SessionId;\n    readonly beforeSessionId?: SessionId;\n}',
   },
   {
+    name: 'WorkspaceLayout',
+    declaration: 'export interface WorkspaceLayout {\n    readonly revision: number;\n    readonly workspaceIds: readonly WorkspaceId[];\n    readonly sections: readonly SidebarSection[];\n}',
+  },
+  {
     name: 'WorkspaceOrderValue',
-    declaration: 'export interface WorkspaceOrderValue {\n    readonly workspaceIds: readonly WorkspaceId[];\n}',
+    declaration: 'export type WorkspaceOrderValue = WorkspaceLayout;',
   },
   {
     name: 'WorkspaceRenameRequest',
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'WorkspaceSectionMoveRequest',
+    declaration: 'export interface WorkspaceSectionMoveRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sectionId: SidebarSectionId | null;\n    readonly beforeWorkspaceId?: WorkspaceId;\n}',
   },
   {
     name: 'WorkspaceValue',

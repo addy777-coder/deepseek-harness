@@ -9,10 +9,18 @@ import { z } from 'zod'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import type { WorkspaceId } from './types.ts'
+import type { SidebarSectionId, WorkspaceId } from './types.ts'
 
 /** Workspace id schema at the durable boundary; branding has no runtime representation. */
 const workspaceId = z.string().transform(value => value as WorkspaceId)
+
+/** Persisted section entries keep project and independent Session order separately. */
+const sidebarSection = z.object({
+  id: z.string().transform(value => brandString<SidebarSectionId>(value)),
+  title: z.string().min(1),
+  workspaceIds: z.array(workspaceId),
+  sessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))),
+})
 
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
@@ -47,12 +55,14 @@ const workspacePendingMutation = z.discriminatedUnion('operation', [
  * the registry-global archive set layered over workspace accounting: an
  * archived session keeps its `sessionIds` slot (unarchiving must restore the
  * position), so the set never participates in the one-owner accounting
- * invariant. Defaulted so records written before the field parse unchanged.
+ * invariant. Sections override navigation placement without changing Session accounting.
  */
 export const workspaceDomainState = z.object({
   initialized: z.boolean(),
   workspaceIds: z.array(workspaceId),
-  archivedSessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))).default([]),
+  archivedSessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))),
+  sections: z.array(sidebarSection),
+  layoutRevision: z.number().int().nonnegative(),
   pendingMutation: workspacePendingMutation.optional(),
 })
 
@@ -67,10 +77,10 @@ export type WorkspaceDomainState = z.infer<typeof workspaceDomainState>
  */
 export const workspaceDomainSpec = defineDomain({
   name: 'workspace',
-  version: 2,
+  version: 3,
   global: {
     schema: workspaceDomainState,
-    initial: { initialized: false, workspaceIds: [], archivedSessionIds: [] },
+    initial: { initialized: false, workspaceIds: [], archivedSessionIds: [], sections: [], layoutRevision: 0 },
   },
   tables: { workspaces: domainTable<WorkspaceId, WorkspaceRecord>(workspaceRecord) },
 })

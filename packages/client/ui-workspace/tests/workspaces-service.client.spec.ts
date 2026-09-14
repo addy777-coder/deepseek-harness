@@ -67,6 +67,7 @@ function workspaceState(
   phase: WorkspaceSnapshot['phase'] = 'ready',
 ): WorkspaceSnapshot {
   return {
+    layout: { revision: 0, workspaceIds: items.map(item => item.workspaceId), sections: [] },
     items,
     archivedSessionIds,
     phase,
@@ -123,6 +124,12 @@ class FakeSessions {
 }
 
 class FakeWorkspaces implements IWorkspaces {
+  createSection(_request: Parameters<IWorkspaces['createSection']>[0]): ReturnType<IWorkspaces['createSection']> { throw new Error('unused') }
+  renameSection(_request: Parameters<IWorkspaces['renameSection']>[0]): ReturnType<IWorkspaces['renameSection']> { throw new Error('unused') }
+  deleteSection(_request: Parameters<IWorkspaces['deleteSection']>[0]): ReturnType<IWorkspaces['deleteSection']> { throw new Error('unused') }
+  insertSectionBefore(_request: Parameters<IWorkspaces['insertSectionBefore']>[0]): ReturnType<IWorkspaces['insertSectionBefore']> { throw new Error('unused') }
+  moveWorkspaceToSection(_request: Parameters<IWorkspaces['moveWorkspaceToSection']>[0]): ReturnType<IWorkspaces['moveWorkspaceToSection']> { throw new Error('unused') }
+  moveSessionToSection(_request: Parameters<IWorkspaces['moveSessionToSection']>[0]): ReturnType<IWorkspaces['moveSessionToSection']> { throw new Error('unused') }
   readonly list: MutableSource<WorkspaceSnapshot>
   readonly archiveCalls: SessionId[] = []
   onArchive: IWorkspaces['archiveSession'] = async (sessionId) => {

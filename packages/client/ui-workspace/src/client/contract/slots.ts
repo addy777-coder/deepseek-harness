@@ -29,7 +29,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSearchResultItem } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
-import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { IWorkspaces, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
@@ -82,12 +82,14 @@ export type DirectoryPickingInjected = {
 /** Component-side view of the picking share: the bound occupancy selector hook. */
 export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']>
 
-/**
- * Browser-private injected share (arrives via the register inject factory).
- * Data reads use the global framework hooks; these are the Host actions the
- * browsing region drives.
- */
-export type WorkspaceBrowserInjected = {
+/** Plain section command callbacks supplied by the Workspace object layer. */
+export type SidebarActions = Pick<IWorkspaces,
+  'createSection' | 'renameSection' | 'deleteSection' | 'insertSectionBefore'
+  | 'moveWorkspaceToSection' | 'moveSessionToSection'
+>
+
+/** Browser actions and private reactive sources; data reads use the framework hooks. */
+export type WorkspaceBrowserInjected = SidebarActions & {
   hooks: DirectoryPickingInjected['hooks'] & {
     /**
      * Fixed Host facts, reached through a hook rather than injected as values:

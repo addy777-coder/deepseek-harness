@@ -115,6 +115,36 @@ interface Workspace {
 
 Ownership truth is the record's ordered `sessionIds`, never derived from session cwd — but membership requires both: an id on the account and a header whose canonical cwd equals the workspace path, so one session structurally belongs to at most one workspace. Failed writes reject (`insertSessionBefore` account errors as `WorkspaceMoveInvalidError`, storage failures as plain errors); every accepted mutation stamps `updatedAt` and durably prunes candidates that no longer pass the membership check.
 
+## Sidebar sections
+
+The version 3 Workspace domain also stores the sidebar layout. Projects and independently placed Sessions use separate ordered accounts in each section; the registry enforces unique placement and preserves Session working directories. Layout revisions order complete default-order/section snapshots across unary replies and the follow stream.
+
+```ts type-equiv
+/** Stable identity of a user-created sidebar section. */
+type SidebarSectionId = Branded<'SidebarSectionId'>
+```
+
+```ts type-equiv
+/** Ordered navigation entries; Session membership and working directories are independent. */
+interface SidebarSection {
+  readonly id: SidebarSectionId
+  readonly title: string
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sessionIds: readonly SessionId[]
+}
+```
+
+```ts type-equiv
+/** One committed sidebar layout. Revisions increase across every layout mutation and rollback. */
+interface WorkspaceLayout {
+  readonly revision: number
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sections: readonly SidebarSection[]
+}
+```
+
+Section creation uses `SidebarSectionCreateRequest` and returns `SidebarSectionCreateValue`; rename/delete/reorder use `SidebarSectionRenameRequest`, `SidebarSectionRequest`, and `SidebarSectionInsertBeforeRequest`. `WorkspaceSectionMoveRequest` and `SessionSectionMoveRequest` name a destination section or null for default placement, plus an optional same-category anchor. The [Controller request declarations](../../packages/api/workspace-controller/src/types.ts) own their fields.
+
 ## The registry: `ctx.workspaceRegistry`
 
 `WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already owned, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order (different canonical paths may share a display title). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
@@ -233,6 +263,48 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
+ * Append a custom sidebar section after validating its title.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout and created section identity.
+ */
+@Remote('createSection') createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue>
+
+/**
+ * Rename a custom sidebar section.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('renameSection') renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout>
+
+/**
+ * Remove a section and restore its entries to their default placement.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('deleteSection') deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout>
+
+/**
+ * Reorder custom sections without changing their entries.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('insertSectionBefore') insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout>
+
+/**
+ * Move a project into a section or back into the default project area.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('moveWorkspaceToSection') moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout>
+
+/**
+ * Move an independent Session entry while preserving its working directory.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('moveSessionToSection') moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout>
+
+/**
  * Stream a complete Workspace baseline followed by ordered increments.
  * @param signal - generation cancellation.
  * @returns baseline followed by ordered Workspace increments.
@@ -295,6 +367,54 @@ delete(id: WorkspaceId): Promise<boolean>
  * @returns the complete committed workspace order.
  */
 insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly WorkspaceId[]>
+
+/**
+ * Append an empty custom section with a unique non-blank title.
+ * @param title - proposed section title.
+ * @returns the created identity and committed layout.
+ */
+createSection(title: string): Promise<{ sectionId: SidebarSectionId; layout: WorkspaceLayout }>
+
+/**
+ * Rename one section without changing its placement.
+ * @param sectionId - section identity.
+ * @param title - proposed unique title.
+ * @returns the committed layout.
+ */
+renameSection(sectionId: SidebarSectionId, title: string): Promise<WorkspaceLayout>
+
+/**
+ * Remove a section, appending its projects to the default area and restoring Session placement.
+ * @param sectionId - section identity.
+ * @returns the committed layout; files and Session accounting remain intact.
+ */
+deleteSection(sectionId: SidebarSectionId): Promise<WorkspaceLayout>
+
+/**
+ * Move a section before another section, or append it.
+ * @param sectionId - section to move.
+ * @param beforeSectionId - destination anchor; omitted appends.
+ * @returns the committed layout.
+ */
+insertSectionBefore(sectionId: SidebarSectionId, beforeSectionId?: SidebarSectionId): Promise<WorkspaceLayout>
+
+/**
+ * Move a project between sections or within one project's section account.
+ * @param workspaceId - registered project.
+ * @param sectionId - destination; null restores the default area.
+ * @param beforeWorkspaceId - project in the destination; omitted appends.
+ * @returns the committed layout.
+ */
+moveWorkspaceToSection( workspaceId: WorkspaceId, sectionId: SidebarSectionId | null, beforeWorkspaceId?: WorkspaceId, ): Promise<WorkspaceLayout>
+
+/**
+ * Place a Session directly in a section without changing its working directory or account.
+ * @param sessionId - existing ordinary Session.
+ * @param sectionId - destination; null restores the Workspace or Ungrouped position.
+ * @param beforeSessionId - independent Session in the destination; omitted appends.
+ * @returns the committed layout.
+ */
+moveSessionToSection( sessionId: SessionId, sectionId: SidebarSectionId | null, beforeSessionId?: SessionId, ): Promise<WorkspaceLayout>
 
 /**
  * Archive one session durably. The session must exist (live or in session

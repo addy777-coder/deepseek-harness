@@ -1,3 +1,4 @@
+import type { FixtureSectionId, FixtureWorkspaceId, FixtureWorkspaceLayout } from '../src/client/fixture-sections.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   RpcRequest,
@@ -23,7 +24,7 @@ import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types
 import type { ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
 
 const sid = (id: string): SessionId => id as SessionId
-type WorkspaceId = string & { readonly __fixtureWorkspaceId: 'WorkspaceId' }
+type WorkspaceId = FixtureWorkspaceId
 const req = <P>(payload: P): RpcRequest<P> => ({ rpcId: RpcId(`t-${Math.abs(Math.sin(reqCount++)).toString(36).slice(2, 10)}`), payload })
 let reqCount = 0
 
@@ -191,6 +192,12 @@ interface FixtureWorkspaceView {
 }
 
 interface FixtureWorkspaceRequests {
+  createSection: { title: string }
+  renameSection: { sectionId: FixtureSectionId; title: string }
+  deleteSection: { sectionId: FixtureSectionId }
+  insertSectionBefore: { sectionId: FixtureSectionId; beforeSectionId?: FixtureSectionId }
+  moveWorkspaceToSection: { workspaceId: WorkspaceId; sectionId: FixtureSectionId | null; beforeWorkspaceId?: WorkspaceId }
+  moveSessionToSection: { sessionId: SessionId; sectionId: FixtureSectionId | null; beforeSessionId?: SessionId }
   create: { readonly path: string }
   rename: { readonly workspaceId: WorkspaceId; readonly title: string }
   delete: { readonly workspaceId: WorkspaceId }
@@ -204,10 +211,16 @@ interface FixtureWorkspaceRequests {
 }
 
 interface FixtureWorkspaceValues {
-  create: { readonly workspace: FixtureWorkspaceView; readonly created: boolean }
+  createSection: { sectionId: FixtureSectionId; layout: FixtureWorkspaceLayout }
+  renameSection: FixtureWorkspaceLayout
+  deleteSection: FixtureWorkspaceLayout
+  insertSectionBefore: FixtureWorkspaceLayout
+  moveWorkspaceToSection: FixtureWorkspaceLayout
+  moveSessionToSection: FixtureWorkspaceLayout
+  create: { readonly workspace: FixtureWorkspaceView; readonly created: boolean; readonly layout: FixtureWorkspaceLayout }
   rename: { readonly workspace: FixtureWorkspaceView }
-  delete: { readonly deleted: true }
-  insertBefore: { readonly workspaceIds: readonly WorkspaceId[] }
+  delete: { readonly deleted: true; readonly layout: FixtureWorkspaceLayout }
+  insertBefore: FixtureWorkspaceLayout
   insertSessionBefore: { readonly workspace: FixtureWorkspaceView }
   archiveSession: { readonly archivedSessionIds: readonly SessionId[] }
 }
@@ -232,11 +245,12 @@ type FixtureWorkspaceFrame =
     readonly value: {
       readonly items: readonly FixtureWorkspaceView[]
       readonly archivedSessionIds: readonly SessionId[]
+      readonly layout: FixtureWorkspaceLayout
     }
   }
   | { readonly type: 'upsert'; readonly workspace: FixtureWorkspaceView }
   | { readonly type: 'remove'; readonly workspaceId: WorkspaceId }
-  | { readonly type: 'order'; readonly workspaceIds: readonly WorkspaceId[] }
+  | { readonly type: 'layout'; readonly layout: FixtureWorkspaceLayout }
   | { readonly type: 'archived'; readonly archivedSessionIds: readonly SessionId[] }
 
 interface FixtureWorkspaceRemote {
@@ -472,6 +486,12 @@ function createWorkspaceApi(rpc: ClientConnectionRpc): FixtureWorkspaceApi {
     }
   }
   return {
+    createSection: (request, signal) => call('createSection', request, signal),
+    renameSection: (request, signal) => call('renameSection', request, signal),
+    deleteSection: (request, signal) => call('deleteSection', request, signal),
+    insertSectionBefore: (request, signal) => call('insertSectionBefore', request, signal),
+    moveWorkspaceToSection: (request, signal) => call('moveWorkspaceToSection', request, signal),
+    moveSessionToSection: (request, signal) => call('moveSessionToSection', request, signal),
     create: (request, signal) => call('create', request, signal),
     rename: (request, signal) => call('rename', request, signal),
     delete: (request, signal) => call('delete', request, signal),
@@ -484,6 +504,12 @@ function createWorkspaceApi(rpc: ClientConnectionRpc): FixtureWorkspaceApi {
 function createWorkspaceClient(rpc: ClientConnectionRpc): FixtureWorkspaceClient {
   const api = createWorkspaceApi(rpc)
   return {
+    createSection: (request, signal) => api.createSection(req(request), signal),
+    renameSection: (request, signal) => api.renameSection(req(request), signal),
+    deleteSection: (request, signal) => api.deleteSection(req(request), signal),
+    insertSectionBefore: (request, signal) => api.insertSectionBefore(req(request), signal),
+    moveWorkspaceToSection: (request, signal) => api.moveWorkspaceToSection(req(request), signal),
+    moveSessionToSection: (request, signal) => api.moveSessionToSection(req(request), signal),
     create: (request, signal) => api.create(req(request), signal),
     rename: (request, signal) => api.rename(req(request), signal),
     delete: (request, signal) => api.delete(req(request), signal),
@@ -605,6 +631,33 @@ async function readWorkspaceBaseline(
 }
 
 describe('createFixtureApi', () => {
+
+  describe('fixture section Remote routes', () => {
+    it('uses revisioned layouts for section commands and follow baselines', async () => {
+      const api = createFixtureApi()
+      const first = (await api.workspace.createSection(req({ title: 'First' }))).result
+      const second = (await api.workspace.createSection(req({ title: 'Second' }))).result
+      if (!first.ok || !second.ok) throw new Error('fixture section creation failed')
+      const sectionId = first.value.sectionId
+      await api.workspace.renameSection(req({ sectionId, title: 'Work' }))
+      await api.workspace.moveWorkspaceToSection(req({ workspaceId: 'fx-ws-fixture' as WorkspaceId, sectionId }))
+      await api.workspace.moveSessionToSection(req({ sessionId: sid('fx-alpha'), sectionId: second.value.sectionId }))
+      await api.workspace.insertSectionBefore(req({ sectionId: second.value.sectionId, beforeSectionId: sectionId }))
+      const baseline = await readWorkspaceBaseline(api.workspaceRemote)
+      expect(baseline.layout.sections.map(section => section.title)).toEqual(['Second', 'Work'])
+      expect(baseline.layout.sections[0]?.sessionIds).toEqual(['fx-alpha'])
+      expect(baseline.items[0]?.sessionIds).toContain('fx-alpha')
+      await api.workspace.moveSessionToSection(req({ sessionId: sid('fx-alpha'), sectionId: null }))
+      await api.workspace.deleteSection(req({ sectionId }))
+      const restored = await readWorkspaceBaseline(api.workspaceRemote)
+      expect(restored.layout.revision).toBeGreaterThan(baseline.layout.revision)
+      expect(restored.layout.sections).toHaveLength(1)
+      expect(restored.layout.sections[0]?.sessionIds).toEqual([])
+      await expect(api.workspace.createSection(req({ title: ' ' }))).resolves.toMatchObject({
+        result: { ok: false, error: { code: 'workspace/section-invalid' } },
+      })
+    })
+  })
   it('serves the session list sorted by updatedAt desc and echoes rpcIds on every unary', async () => {
     const api = createFixtureApi()
     const request = req({})
@@ -1279,7 +1332,7 @@ describe('createFixtureApi', () => {
     const missing = await api.workspace.delete(req({ workspaceId: 'fx-ws-void' as WorkspaceId }))
     expect(missing.result).toMatchObject({ ok: false, error: { code: 'workspace/not-found' } })
     const deleted = await api.workspace.delete(req({ workspaceId: 'fx-ws-fixture' as WorkspaceId }))
-    expect(deleted.result).toEqual({ ok: true, value: { deleted: true } })
+    expect(deleted.result).toMatchObject({ ok: true, value: { deleted: true, layout: { sections: [] } } })
     const frames = await consuming
     expect(frames.at(-1)).toEqual({ type: 'remove', workspaceId: 'fx-ws-fixture' })
     const baseline = await readWorkspaceBaseline(api.workspaceRemote)
@@ -1336,6 +1389,7 @@ describe('createFixtureApi', () => {
     expect(await readWorkspaceBaseline(api.workspaceRemote)).toEqual({
       items: [],
       archivedSessionIds: [],
+      layout: { revision: 0, workspaceIds: [], sections: [] },
     })
 
     const made = await api.workspace.create(req({ path: '/tmp/fixture-workspaces/nova' }))

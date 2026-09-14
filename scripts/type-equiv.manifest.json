@@ -1763,6 +1763,21 @@
     },
     {
       "doc": "docs/subsystems/workspace.md",
+      "symbol": "SidebarSectionId",
+      "source": "packages/workspace/workspace/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "SidebarSection",
+      "source": "packages/workspace/workspace/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "WorkspaceLayout",
+      "source": "packages/workspace/workspace/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
       "symbol": "Workspace",
       "source": "packages/workspace/workspace/src/types.ts"
     },

@@ -29,6 +29,10 @@ The Client calls logical channels through `ctx.connection.rpc`. The Web page use
 
 -----
 
+### Standalone browser fixture
+
+The browser-only development fixture mirrors Workspace layout baselines, revisioned updates, and section commands. Its project and Session placement is in memory and resets when the fixture is recreated; durable organization belongs to the Host Workspace registry.
+
 <a id="browser-authentication-and-request-trust"></a>
 ## Web authentication and request trust
 

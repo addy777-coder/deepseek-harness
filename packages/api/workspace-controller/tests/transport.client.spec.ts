@@ -19,6 +19,9 @@ import {
   type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
+  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
+  SessionSectionMoveRequest, WorkspaceLayout,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -72,10 +75,39 @@ const baseline = (id?: string): Extract<WorkspaceFollowFrame, { type: 'baseline'
       updatedAt: '2026-01-01T00:00:00.000Z',
     }],
     archivedSessionIds: [],
+    layout: { revision: 0, workspaceIds: id === undefined ? [] : [id as WorkspaceId], sections: [] },
   },
 })
 
 const wid = (id: string): WorkspaceId => id as WorkspaceId
+
+describe('WorkspaceController section command facade', () => {
+  it('returns every committed section receipt and reports each rejected operation', async () => {
+    const ctx = new Context()
+    const remote = new CommandWorkspaceRemote()
+    const controller = new WorkspaceController(ctx, new ClientWorkspaceModel(remote))
+    const sectionId = 'section' as SidebarSectionCreateValue['sectionId']
+    const calls = [
+      ['createSection', () => controller.createSection({ title: 'Section' })],
+      ['renameSection', () => controller.renameSection({ sectionId, title: 'Renamed' })],
+      ['deleteSection', () => controller.deleteSection({ sectionId })],
+      ['insertSectionBefore', () => controller.insertSectionBefore({ sectionId })],
+      ['moveWorkspaceToSection', () => controller.moveWorkspaceToSection({ workspaceId: wid('one'), sectionId })],
+      ['moveSessionToSection', () => controller.moveSessionToSection({ sessionId: sid('session'), sectionId })],
+    ] as const
+    for (const [name, invoke] of calls) {
+      await expect(invoke()).resolves.toBeDefined()
+      remote[name].mockResolvedValueOnce(remoteFailure(new RemoteError('workspace/section-invalid', 'rejected', { reason: 'rejected' })))
+      await expect(invoke()).rejects.toThrow(name)
+    }
+    await ctx.fiber.dispose()
+  })
+})
+
+function layout(workspaceIds: readonly WorkspaceId[] = [], revision = 0): WorkspaceLayout {
+  return { revision, workspaceIds, sections: [] }
+}
+
 const sid = (id: string): SessionId => SessionId(id)
 
 function workspace(id: string, overrides: Partial<WorkspaceView> = {}): WorkspaceView {
@@ -104,13 +136,20 @@ function accepts(overrides: Partial<WorkspaceFollowSink> = {}): WorkspaceFollowS
     replaceBaseline: ignore,
     upsertView: ignore,
     removeView: ignore,
-    replaceOrder: ignore,
+    replaceLayout: ignore,
     replaceArchived: ignore,
     ...overrides,
   }
 }
 
 class ScriptedWorkspaceRemote implements WorkspaceRemote {
+  createSection(_request: SidebarSectionCreateRequest): Promise<RemoteResult<SidebarSectionCreateValue>> { throw new Error('unused') }
+  renameSection(_request: SidebarSectionRenameRequest): Promise<RemoteResult<WorkspaceLayout>> { throw new Error('unused') }
+  deleteSection(_request: SidebarSectionRequest): Promise<RemoteResult<WorkspaceLayout>> { throw new Error('unused') }
+  insertSectionBefore(_request: SidebarSectionInsertBeforeRequest): Promise<RemoteResult<WorkspaceLayout>> { throw new Error('unused') }
+  moveWorkspaceToSection(_request: WorkspaceSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> { throw new Error('unused') }
+  moveSessionToSection(_request: SessionSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> { throw new Error('unused') }
+
   readonly signals: AbortSignal[] = []
   calls = 0
 
@@ -157,19 +196,27 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
 }
 
 class CommandWorkspaceRemote implements WorkspaceRemote {
+  readonly createSection = vi.fn<WorkspaceRemote['createSection']>(() => Promise.resolve(remoteOk({ sectionId: 'section' as SidebarSectionCreateValue['sectionId'], layout: layout([], 1) })))
+  readonly renameSection = vi.fn<WorkspaceRemote['renameSection']>(() => Promise.resolve(remoteOk(layout([], 1))))
+  readonly deleteSection = vi.fn<WorkspaceRemote['deleteSection']>(() => Promise.resolve(remoteOk(layout([], 1))))
+  readonly insertSectionBefore = vi.fn<WorkspaceRemote['insertSectionBefore']>(() => Promise.resolve(remoteOk(layout([], 1))))
+  readonly moveWorkspaceToSection = vi.fn<WorkspaceRemote['moveWorkspaceToSection']>(() => Promise.resolve(remoteOk(layout([], 1))))
+  readonly moveSessionToSection = vi.fn<WorkspaceRemote['moveSessionToSection']>(() => Promise.resolve(remoteOk(layout([], 1))))
+
   readonly create = vi.fn<WorkspaceRemote['create']>(request => Promise.resolve(remoteOk({
     workspace: workspace('created', { path: request.path }),
     created: true,
+    layout: layout([wid('created')], 1),
   })))
 
   readonly rename = vi.fn<WorkspaceRemote['rename']>(request => Promise.resolve(remoteOk({
     workspace: workspace(String(request.workspaceId), { title: request.title }),
   })))
 
-  readonly delete = vi.fn<WorkspaceRemote['delete']>(() => Promise.resolve(remoteOk({ deleted: true })))
+  readonly delete = vi.fn<WorkspaceRemote['delete']>(() => Promise.resolve(remoteOk({ deleted: true, layout: layout([], 2) })))
 
   readonly insertBefore = vi.fn<WorkspaceRemote['insertBefore']>(request => Promise.resolve(remoteOk({
-    workspaceIds: [request.workspaceId],
+    workspaceIds: [request.workspaceId], revision: 2, sections: [],
   })))
 
   readonly insertSessionBefore = vi.fn<WorkspaceRemote['insertSessionBefore']>(request => Promise.resolve(remoteOk({
@@ -292,7 +339,7 @@ describe('Workspace state stream', () => {
         opening,
         { type: 'upsert', workspace },
         { type: 'remove', workspaceId: workspace.workspaceId },
-        { type: 'order', workspaceIds: [workspace.workspaceId] },
+        { type: 'layout', layout: layout([workspace.workspaceId], 1) },
         { type: 'archived', archivedSessionIds: ['session-one' as never] },
       ],
       hold: true,
@@ -300,13 +347,13 @@ describe('Workspace state stream', () => {
     const replaceBaseline = vi.fn<WorkspaceFollowSink['replaceBaseline']>()
     const upsertView = vi.fn<WorkspaceFollowSink['upsertView']>()
     const removeView = vi.fn<WorkspaceFollowSink['removeView']>()
-    const replaceOrder = vi.fn<WorkspaceFollowSink['replaceOrder']>()
+    const replaceLayout = vi.fn<WorkspaceFollowSink['replaceLayout']>()
     const replaceArchived = vi.fn<WorkspaceFollowSink['replaceArchived']>()
     const accept = accepts({
       replaceBaseline,
       upsertView,
       removeView,
-      replaceOrder,
+      replaceLayout,
       replaceArchived,
     })
     const stream = createWorkspaceStateStream(workspaceClient(remote), {
@@ -321,7 +368,7 @@ describe('Workspace state stream', () => {
     expect(replaceBaseline).toHaveBeenCalledWith(opening.value)
     expect(upsertView).toHaveBeenCalledWith(workspace)
     expect(removeView).toHaveBeenCalledWith(workspace.workspaceId)
-    expect(replaceOrder).toHaveBeenCalledWith([workspace.workspaceId])
+    expect(replaceLayout).toHaveBeenCalledWith(layout([workspace.workspaceId], 1))
     expect(replaceArchived).toHaveBeenCalledWith(['session-one'])
     await stream.dispose()
     expect(remote.signals[0]?.aborted).toBe(true)
@@ -451,7 +498,7 @@ describe('WorkspaceController', () => {
   it('publishes the model source and exposes successful Workspace commands', async () => {
     const remote = new CommandWorkspaceRemote()
     const model = new ClientWorkspaceModel(remote)
-    model.replaceBaseline({ items: [workspace('one')], archivedSessionIds: [] })
+    model.replaceBaseline({ items: [workspace('one')], archivedSessionIds: [], layout: layout([wid('one')]) })
     const controller = new WorkspaceController(new Context(), model)
 
     expect(controller.list).toBe(model)

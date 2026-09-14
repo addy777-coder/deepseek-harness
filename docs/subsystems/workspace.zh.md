@@ -115,6 +115,36 @@ interface Workspace {
 
 所有权的真源是记录中有序的 `sessionIds`，绝不从会话 cwd 派生——但成员资格要求两者同时成立：账本上有其 id，且 header 的规范 cwd 等于工作区路径，因此一个会话在结构上至多属于一个工作区。失败的写入会拒绝（`insertSessionBefore` 的账本错误以 `WorkspaceMoveInvalidError` 拒绝，存储失败以普通错误拒绝）；每次被接受的变更都盖上 `updatedAt` 时间戳，并持久修剪不再通过成员资格检查的候选项。
 
+## 侧栏分区
+
+版本 3 的 Workspace 领域同时保存侧栏布局。每个分区分别持有项目和独立 Session 的有序记账；注册表保证归类唯一，并保留 Session 工作目录。布局版本决定一元响应与 follow 流中完整默认顺序和分区快照的先后关系。
+
+```ts type-equiv
+/** Stable identity of a user-created sidebar section. */
+type SidebarSectionId = Branded<'SidebarSectionId'>
+```
+
+```ts type-equiv
+/** Ordered navigation entries; Session membership and working directories are independent. */
+interface SidebarSection {
+  readonly id: SidebarSectionId
+  readonly title: string
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sessionIds: readonly SessionId[]
+}
+```
+
+```ts type-equiv
+/** One committed sidebar layout. Revisions increase across every layout mutation and rollback. */
+interface WorkspaceLayout {
+  readonly revision: number
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sections: readonly SidebarSection[]
+}
+```
+
+创建分区使用 `SidebarSectionCreateRequest` 并返回 `SidebarSectionCreateValue`；重命名、删除和排序分别使用 `SidebarSectionRenameRequest`、`SidebarSectionRequest` 和 `SidebarSectionInsertBeforeRequest`。`WorkspaceSectionMoveRequest` 与 `SessionSectionMoveRequest` 指定目标分区或表示默认位置的 null，以及可选的同类锚点。[控制器请求声明](../../packages/api/workspace-controller/src/types.ts)拥有其字段。
+
 ## 注册表：`ctx.workspaceRegistry`
 
 `WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中（不同规范路径可以共享同一显示标题）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
@@ -233,6 +263,48 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
+ * Append a custom sidebar section after validating its title.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout and created section identity.
+ */
+@Remote('createSection') createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue>
+
+/**
+ * Rename a custom sidebar section.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('renameSection') renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout>
+
+/**
+ * Remove a section and restore its entries to their default placement.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('deleteSection') deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout>
+
+/**
+ * Reorder custom sections without changing their entries.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('insertSectionBefore') insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout>
+
+/**
+ * Move a project into a section or back into the default project area.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('moveWorkspaceToSection') moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout>
+
+/**
+ * Move an independent Session entry while preserving its working directory.
+ * @param request - section identity, title, or destination and optional insertion anchor.
+ * @returns the committed layout.
+ */
+@Remote('moveSessionToSection') moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout>
+
+/**
  * Stream a complete Workspace baseline followed by ordered increments.
  * @param signal - generation cancellation.
  * @returns baseline followed by ordered Workspace increments.
@@ -295,6 +367,54 @@ delete(id: WorkspaceId): Promise<boolean>
  * @returns the complete committed workspace order.
  */
 insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly WorkspaceId[]>
+
+/**
+ * Append an empty custom section with a unique non-blank title.
+ * @param title - proposed section title.
+ * @returns the created identity and committed layout.
+ */
+createSection(title: string): Promise<{ sectionId: SidebarSectionId; layout: WorkspaceLayout }>
+
+/**
+ * Rename one section without changing its placement.
+ * @param sectionId - section identity.
+ * @param title - proposed unique title.
+ * @returns the committed layout.
+ */
+renameSection(sectionId: SidebarSectionId, title: string): Promise<WorkspaceLayout>
+
+/**
+ * Remove a section, appending its projects to the default area and restoring Session placement.
+ * @param sectionId - section identity.
+ * @returns the committed layout; files and Session accounting remain intact.
+ */
+deleteSection(sectionId: SidebarSectionId): Promise<WorkspaceLayout>
+
+/**
+ * Move a section before another section, or append it.
+ * @param sectionId - section to move.
+ * @param beforeSectionId - destination anchor; omitted appends.
+ * @returns the committed layout.
+ */
+insertSectionBefore(sectionId: SidebarSectionId, beforeSectionId?: SidebarSectionId): Promise<WorkspaceLayout>
+
+/**
+ * Move a project between sections or within one project's section account.
+ * @param workspaceId - registered project.
+ * @param sectionId - destination; null restores the default area.
+ * @param beforeWorkspaceId - project in the destination; omitted appends.
+ * @returns the committed layout.
+ */
+moveWorkspaceToSection( workspaceId: WorkspaceId, sectionId: SidebarSectionId | null, beforeWorkspaceId?: WorkspaceId, ): Promise<WorkspaceLayout>
+
+/**
+ * Place a Session directly in a section without changing its working directory or account.
+ * @param sessionId - existing ordinary Session.
+ * @param sectionId - destination; null restores the Workspace or Ungrouped position.
+ * @param beforeSessionId - independent Session in the destination; omitted appends.
+ * @returns the committed layout.
+ */
+moveSessionToSection( sessionId: SessionId, sectionId: SidebarSectionId | null, beforeSessionId?: SessionId, ): Promise<WorkspaceLayout>
 
 /**
  * Archive one session durably. The session must exist (live or in session

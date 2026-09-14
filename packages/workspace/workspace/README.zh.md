@@ -59,6 +59,10 @@ await project.setTitle('Renamed')
 ctx.workspaceRegistry.list() // shows the project, newest first
 ```
 
+### 自定义侧栏分区
+
+创建名称唯一的分区，把项目或独立 Session 移入其中，并分别排序。一个项目或独立 Session 最多归入一个自定义分区。删除分区会恢复其中条目的默认导航位置；删除项目会清理其分区条目，同时保留已独立归类的 Session。注册表将这些编辑与项目创建、删除和恢复串行执行，并只发布已持久化的变更。
+
 ### 将会话归入项目
 
 会话加入它运行目录所在的项目：在项目目录中创建会话，它就会出现在该项目下，新到旧排列。一个会话只能属于一个项目。目录无法校验的会话——没有记录目录，或目录被移动、删除——无法加入，保持 Ungrouped。
@@ -102,7 +106,7 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### 持久形态
 
-注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds` 与可选 `pendingMutation` 标记的全局状态。在 `archivedSessionIds` 存在之前写入的记录会通过 schema 默认值解析为空集合。
+注册表打开 `workspace` 领域（版本 3）：包含一张 `workspaces` 表，以及持有项目顺序、归档标识、自定义分区、单调布局版本和可选恢复标记的全局状态。每个分区分别保存有序项目标识和独立 Session 标识。归类不会改变 Session 工作目录或 Workspace 记账。较早的领域版本会被拒绝，不会被清空或迁移。
 
 ### 生命周期
 

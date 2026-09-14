@@ -143,7 +143,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
     useSessionPendingInteraction: bindSnapshotSelector(
       createSnapshotStore<SessionPendingInteractionSnapshot>(new Map()),
     ),
-    useWorkspaces: bindSnapshotSelector(createSnapshotStore({
+    useWorkspaces: bindSnapshotSelector(createSnapshotStore({ layout: { revision: 0, workspaceIds: [], sections: [] },
       items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
       baselinesReady: true, recentWorkspaceId: undefined,
     })),

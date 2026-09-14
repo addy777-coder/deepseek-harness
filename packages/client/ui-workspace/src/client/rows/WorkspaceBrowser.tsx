@@ -12,18 +12,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  Button, IconCloseFill14, IconPersonalizationOutline16,
+  Button, IconCloseFill14, IconPersonalizationOutline16, IconPlusOutline16,
   IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   SessionListState, SessionSearchResultItem,
 } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SidebarSection, SidebarSectionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { SidebarActions, WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from '../tree.ts'
 import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
+import type { PlacementActions } from './Rows.tsx'
+import { SectionModal, SidebarSectionHeader, type SectionDialog } from './Sections.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
@@ -224,6 +226,11 @@ interface WorkspaceDragState {
   over: { id: WorkspaceId; half: 'before' | 'after' } | null
 }
 
+type NavigationDrag =
+  | ({ kind: 'session' } & DragState)
+  | ({ kind: 'workspace' } & WorkspaceDragState)
+  | { kind: 'section'; sectionId: SidebarSectionId; over: { id: SidebarSectionId | null; half: 'before' | 'after' } | null }
+
 /** Resolve an insertion side from the full rendered workspace group. */
 function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' | 'after' {
   const rect = e.currentTarget.getBoundingClientRect()
@@ -235,6 +242,11 @@ type SessionTreeProps = Pick<
   'useSessions' | 'useSessionPendingInteraction' | 'startSession' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
 > & {
+  sections: readonly SidebarSection[]
+  sectionExpansion: Readonly<Record<string, boolean>>
+  setSectionExpanded: (key: string, expanded: boolean) => void
+  sectionActions: SidebarActions
+  onSectionDialog: (dialog: SectionDialog) => void
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
@@ -271,19 +283,45 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  sections, sectionExpansion, setSectionExpanded, sectionActions, onSectionDialog,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const pendingInteractions = useSessionPendingInteraction(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
   // Transient drag marker state; the selected mode owns the resulting order.
-  const [drag, setDrag] = useState<DragState | null>(null)
+  const [activeDrag, setActiveDrag] = useState<NavigationDrag | null>(null)
+  const drag = activeDrag?.kind === 'session' ? activeDrag : null
+  const workspaceDrag = activeDrag?.kind === 'workspace' ? activeDrag : null
+  const setDrag = (update: DragState | null | ((previous: DragState | null) => DragState | null)): void => {
+    setActiveDrag((previous) => {
+      const value = typeof update === 'function' ? update(previous?.kind === 'session' ? previous : null) : update
+      return value === null ? null : { ...value, kind: 'session' }
+    })
+  }
+  const setWorkspaceDrag = (
+    update: WorkspaceDragState | null | ((previous: WorkspaceDragState | null) => WorkspaceDragState | null),
+  ): void => {
+    setActiveDrag((previous) => {
+      const value = typeof update === 'function' ? update(previous?.kind === 'workspace' ? previous : null) : update
+      return value === null ? null : { ...value, kind: 'workspace' }
+    })
+  }
   const sessionDropCommitted = useRef(false)
-  const [workspaceDrag, setWorkspaceDrag] = useState<WorkspaceDragState | null>(null)
   const workspaceDropCommitted = useRef(false)
   const previousOrderBy = useRef(orderBy)
-  const nativeDragActive = drag !== null || workspaceDrag !== null
-  useNativeDragAcceptance(nativeDragActive)
+  const [sectionTarget, setSectionTarget] = useState<SidebarSectionId | null | undefined>(undefined)
+  const [layoutPending, setLayoutPending] = useState(false)
+  const [layoutError, setLayoutError] = useState<{ message: string; retry: () => Promise<unknown> } | null>(null)
+  useEffect(() => {
+    if (activeDrag === null) return
+    const cancel = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') { setActiveDrag(null); setSectionTarget(undefined) }
+    }
+    document.addEventListener('keydown', cancel)
+    return () => { document.removeEventListener('keydown', cancel) }
+  }, [activeDrag !== null])
+  const independentSessionIds = useMemo(() => sections.flatMap(section => section.sessionIds), [sections])
   const currentGroup = current === undefined
     ? undefined
     : (workspaces.find(w => w.sessionIds.includes(current))?.workspaceId as string | undefined)
@@ -341,11 +379,12 @@ function SessionTree({
   const groups = useMemo(
     () => deriveGroups(list, orderedWorkspaces, archivedSessionIds, pendingInteractions, {
       expandedGroups,
+      independentSessionIds,
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
     }),
-    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount],
+    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, independentSessionIds, sessionOrderByAccount],
   )
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
@@ -395,195 +434,305 @@ function SessionTree({
       })
       if (!collapsedSessionRows(nextGroup).rows.some(node => node.id === activeDrag.sessionId)) return
     }
-    setSessionOrder(activeDrag.accountKey, nextOrder.map(id => id as string))
-    if (orderBy === 'updated' || activeDrag.accountKey === UNGROUPED_KEY) return
-    insertSessionBefore(activeDrag.accountKey as WorkspaceId, activeDrag.sessionId, anchor).catch((reason: unknown) => {
-      console.warn('session reorder rejected:', reason)
+    if (orderBy === 'updated' || activeDrag.accountKey === UNGROUPED_KEY) {
+      setSessionOrder(activeDrag.accountKey, nextOrder.map(id => id as string))
+      return
+    }
+    execute(async () => {
+      await insertSessionBefore(activeDrag.accountKey as WorkspaceId, activeDrag.sessionId, anchor)
+      setSessionOrder(activeDrag.accountKey, nextOrder.map(id => id as string))
     })
   }
-  const commitWorkspaceDrag = (
-    activeDrag: WorkspaceDragState,
-    over: NonNullable<WorkspaceDragState['over']>,
-  ): void => {
-    if (workspaceDropCommitted.current) return
-    workspaceDropCommitted.current = true
-    setWorkspaceDrag(null)
-    const rowIndex = workspaces.findIndex(workspace => workspace.workspaceId === over.id)
-    if (rowIndex === -1) return
-    const anchor = over.half === 'before' ? over.id : workspaces[rowIndex + 1]?.workspaceId
-    if (anchor === activeDrag.workspaceId) return
-    const sourceIndex = workspaces.findIndex(workspace => workspace.workspaceId === activeDrag.workspaceId)
-    const anchorIndex = anchor === undefined
-      ? workspaces.length
-      : workspaces.findIndex(workspace => workspace.workspaceId === anchor)
-    if (sourceIndex !== -1 && (anchorIndex === sourceIndex || anchorIndex === sourceIndex + 1)) return
-    insertWorkspaceBefore(activeDrag.workspaceId, anchor).catch((reason: unknown) => {
-      console.warn('workspace reorder rejected:', reason)
-    })
-  }
-  const workspaceDropAtListStart = groups[0]?.workspaceId !== undefined
-    && workspaceDrag?.over?.id === groups[0].workspaceId
-    && workspaceDrag.over.half === 'before'
 
-  return (
-    <div className={clsx(css.treeBody, css.wide)}>
-      {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
-      <div
-        className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
-        role="tree"
-        aria-label={t('section.sessions')}
-      >
-        {groups.length === 0 && (
-          <div className={css.empty}>{t('empty.none')}</div>
-        )}
-        {groups.map((group) => {
-          const workspaceId = group.workspaceId
-          const collapsed = collapsedSessionRows(group.sessions)
-          const sessionsExpanded = expandedSessionGroups.includes(group.key)
-          const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
-            ? workspaceDrag.over.half
-            : null
-          const workspaceDragProps = workspaceId === undefined ? undefined : {
+  const execute = (operation: () => Promise<unknown>): void => {
+    if (layoutPending) return
+    setActiveDrag(null)
+    setSectionTarget(undefined)
+    setLayoutPending(true)
+    setLayoutError(null)
+    operation().catch((reason: unknown) => {
+      setLayoutError({ message: reason instanceof Error ? reason.message : String(reason), retry: operation })
+    }).finally(() => { setLayoutPending(false) })
+  }
+  const endDrag = (): void => { setActiveDrag(null); setSectionTarget(undefined) }
+  const workspaceSections = new Map(sections.flatMap(section => section.workspaceIds.map(id => [id, section.id] as const)))
+  const sessionSections = new Map(sections.flatMap(section => section.sessionIds.map(id => [id, section] as const)))
+  const defaultWorkspaceIds = workspaces.filter(workspace => !workspaceSections.has(workspace.workspaceId))
+    .map(workspace => workspace.workspaceId)
+  const nodes = new Map(deriveFlat(list, archivedSessionIds, pendingInteractions).map(node => [node.id, node]))
+  const workspaceAccount = (sectionId: SidebarSectionId | null): readonly WorkspaceId[] =>
+    sectionId === null ? defaultWorkspaceIds : (sections.find(section => section.id === sectionId) as SidebarSection).workspaceIds
+  const moveWorkspace = (workspaceId: WorkspaceId, sectionId: SidebarSectionId | null, beforeWorkspaceId?: WorkspaceId): void => {
+    execute(() => sections.length === 0
+      ? insertWorkspaceBefore(workspaceId, beforeWorkspaceId)
+      : sectionActions.moveWorkspaceToSection({ workspaceId, sectionId,
+        ...(beforeWorkspaceId === undefined ? {} : { beforeWorkspaceId }) }))
+  }
+  const commitWorkspaceDrag = (source: WorkspaceDragState, over: NonNullable<WorkspaceDragState['over']>): void => {
+    if (workspaceDropCommitted.current || source.workspaceId === over.id) return
+    workspaceDropCommitted.current = true
+    const sectionId = workspaceSections.get(over.id) ?? null
+    const ids = workspaceAccount(sectionId).filter(id => id !== source.workspaceId)
+    const at = ids.indexOf(over.id)
+    if (at === -1) return
+    moveWorkspace(source.workspaceId, sectionId, over.half === 'before' ? over.id : ids[at + 1])
+  }
+  const restoreSession = (sessionId: SessionId): void => {
+    execute(() => sectionActions.moveSessionToSection({ sessionId, sectionId: null }))
+  }
+  const workspacePlacement = (workspaceId: WorkspaceId): PlacementActions => {
+    const currentSection = workspaceSections.get(workspaceId) ?? null
+    const ids = workspaceAccount(currentSection)
+    const index = ids.indexOf(workspaceId)
+    return {
+      sections, current: currentSection,
+      move: (sectionId) => { moveWorkspace(workspaceId, sectionId) },
+      up: index > 0 ? () => { moveWorkspace(workspaceId, currentSection, ids[index - 1]) } : undefined,
+      down: index < ids.length - 1 ? () => { moveWorkspace(workspaceId, currentSection, ids[index + 2]) } : undefined,
+    }
+  }
+  const sessionPlacement = (sessionId: SessionId, group?: (typeof groups)[number]): PlacementActions => {
+    const section = sessionSections.get(sessionId)
+    const groupRows = group === undefined ? []
+      : expandedSessionGroups.includes(group.key) ? group.sessions : collapsedSessionRows(group.sessions).rows
+    const ids = section === undefined
+      ? groupRows.map(node => node.id)
+      : section.sessionIds.filter(id => nodes.has(id))
+    const index = ids.indexOf(sessionId)
+    const reorder = (target: SessionId, half: 'before' | 'after'): void => {
+      if (section !== undefined) {
+        const without = ids.filter(id => id !== sessionId)
+        const before = half === 'before' ? target : without[without.indexOf(target) + 1]
+        execute(() => sectionActions.moveSessionToSection({ sessionId, sectionId: section.id,
+          ...(before === undefined ? {} : { beforeSessionId: before }) }))
+      } else if (group !== undefined) {
+        sessionDropCommitted.current = false
+        commitSessionDrag({ sessionId, accountKey: group.key, over: null }, { id: target, half })
+      }
+    }
+    return {
+      sections, current: section?.id ?? null,
+      move: (sectionId) => { execute(() => sectionActions.moveSessionToSection({ sessionId, sectionId })) },
+      up: index > 0 ? () => { reorder(ids[index - 1] as SessionId, 'before') } : undefined,
+      down: index >= 0 && index < ids.length - 1 ? () => { reorder(ids[index + 1] as SessionId, 'after') } : undefined,
+    }
+  }
+  const dropInSection = (sectionId: SidebarSectionId | null, half: 'before' | 'after'): void => {
+    if (activeDrag === null) return
+    switch (activeDrag.kind) {
+      case 'workspace':
+        moveWorkspace(activeDrag.workspaceId, sectionId)
+        return
+      case 'session': {
+        const sessionId = activeDrag.sessionId
+        execute(() => sectionActions.moveSessionToSection({ sessionId, sectionId }))
+        return
+      }
+      case 'section': {
+        const source = activeDrag.sectionId
+        if (source === sectionId) { endDrag(); return }
+        const without = sections.filter(section => section.id !== source)
+        const anchor = sectionId === null ? undefined
+          : half === 'before' ? sectionId : without[without.findIndex(section => section.id === sectionId) + 1]?.id
+        execute(() => sectionActions.insertSectionBefore({ sectionId: source,
+          ...(anchor === undefined ? {} : { beforeSectionId: anchor }) }))
+        return
+      }
+      default: return assertNever(activeDrag)
+    }
+  }
+  const renderGroup = (group: (typeof groups)[number]) => {
+    const workspaceId = group.workspaceId
+    const collapsed = collapsedSessionRows(group.sessions)
+    const sessionsExpanded = expandedSessionGroups.includes(group.key)
+    const marker = workspaceDrag?.over?.id === workspaceId ? workspaceDrag?.over?.half : null
+    const canRestore = drag !== null && sessionSections.has(drag.sessionId)
+      && workspaceId !== undefined && workspaces.some(workspace =>
+      workspace.workspaceId === workspaceId && workspace.sessionIds.includes(drag.sessionId))
+    return (
+      <div key={group.key} data-workspace-id={group.key} className={clsx(css.groupSection,
+        marker === 'before' && css.workspaceDropBefore, marker === 'after' && css.workspaceDropAfter,
+        canRestore && css.sectionDropActive)}
+      onDragOver={(event) => {
+        event.stopPropagation()
+        setSectionTarget(undefined)
+        if (workspaceDrag !== null && workspaceId !== undefined) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'move'
+          setWorkspaceDrag({ ...workspaceDrag, over: { id: workspaceId, half: workspaceGroupHalf(event) } })
+        } else if (canRestore) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'move'
+        } else event.dataTransfer.dropEffect = 'none'
+      }}
+      onDrop={(event) => {
+        event.stopPropagation()
+        if (workspaceDrag !== null && workspaceId !== undefined) {
+          event.preventDefault()
+          commitWorkspaceDrag(workspaceDrag, { id: workspaceId, half: workspaceGroupHalf(event) })
+        } else if (canRestore) {
+          event.preventDefault()
+          restoreSession(drag.sessionId)
+        } else endDrag()
+      }}>
+        <ProjectRowItem group={group} home={home} t={t}
+          onToggle={() => {
+            if (group.expanded) setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
+            setGroupExpanded(group.key, !group.expanded)
+          }}
+          onCreate={() => {
+            if (workspaceId !== undefined) { setGroupExpanded(group.key, true); startSession(workspaceId) }
+          }}
+          drag={workspaceId === undefined || layoutPending ? undefined : {
             start: () => {
               workspaceDropCommitted.current = false
+              setSectionTarget(undefined)
               setWorkspaceDrag({ workspaceId, over: null })
             },
-            end: () => {
-              if (workspaceDrag?.over !== null && workspaceDrag?.over !== undefined) {
-                commitWorkspaceDrag(workspaceDrag, workspaceDrag.over)
-              } else {
-                setWorkspaceDrag(null)
-              }
-              workspaceDropCommitted.current = false
-            },
-          }
-          const hoverWorkspace = workspaceId === undefined
-            ? undefined
-            : (half: 'before' | 'after') => {
-              setWorkspaceDrag(active => active === null
-                ? active
-                : { ...active, over: { id: workspaceId, half } })
-            }
-          const dropWorkspace = workspaceId === undefined
-            ? undefined
-            : (half: 'before' | 'after') => {
-              if (workspaceDrag === null) return
-              commitWorkspaceDrag(workspaceDrag, { id: workspaceId, half })
-            }
+            end: endDrag,
+          }}
+          placement={workspaceId === undefined ? undefined : workspacePlacement(workspaceId)}
+          actions={workspaceId === undefined ? undefined : {
+            rename: () => { onRenameRequest(workspaceId, group.label) },
+            delete: () => { onDeleteRequest(workspaceId, group.label) },
+          }} />
+        {(sessionsExpanded ? group.sessions : collapsed.rows).map((node) => {
+          const sameGroup = drag !== null && drag.accountKey === group.key
           return (
-          // Group section: header row + expanded top-level session rows. The
-          // inter-group breathing room is the section's own margin
-          // (WorkspaceBrowser.module.css).
-            <div
-              key={group.key}
-              className={clsx(
-                css.groupSection,
-                workspaceMarker === 'before' && css.workspaceDropBefore,
-                workspaceMarker === 'after' && css.workspaceDropAfter,
-              )}
-              onDragOver={workspaceDrag === null || hoverWorkspace === undefined
-                ? undefined
-                : (e) => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  hoverWorkspace(workspaceGroupHalf(e))
-                }}
-              onDrop={workspaceDrag === null || dropWorkspace === undefined
-                ? undefined
-                : (e) => {
-                  e.preventDefault()
-                  dropWorkspace(workspaceGroupHalf(e))
-                }}
-            >
-              <ProjectRowItem
-                group={group}
-                home={home}
-                t={t}
-                onToggle={() => {
-                  if (group.expanded) {
-                    setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
-                  }
-                  setGroupExpanded(group.key, !group.expanded)
-                }}
-                onCreate={() => {
-                  if (group.workspaceId !== undefined) {
-                    setGroupExpanded(group.key, true)
-                    startSession(group.workspaceId)
-                  }
-                }}
-                drag={workspaceDragProps}
-                actions={group.workspaceId === undefined
-                  ? undefined
-                  : {
-                    rename: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                      if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
-                    },
-                    delete: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
-                      if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
-                    },
-                  }}
-              />
-              {(sessionsExpanded
-                ? group.sessions
-                : collapsed.rows
-              ).map((node) => {
-              // Session drag never leaves its group. Ungrouped writes only the
-              // browser-local account; real Workspaces may also write Host order.
-                const sameGroupDrag = drag !== null && drag.accountKey === group.key
-                const dragProps = {
-                  start: () => {
-                    sessionDropCommitted.current = false
-                    setDrag({ accountKey: group.key, sessionId: node.id, over: null })
-                  },
-                  active: sameGroupDrag,
-                  marker: sameGroupDrag && drag.over?.id === node.id ? drag.over.half : null,
-                  hover: (half: 'before' | 'after') => {
-                  /* v8 ignore next -- narrowing guard: Rows gates hover on `active`, which is false while the drag state is null. */
-                    setDrag(d => (d === null ? d : { ...d, over: { id: node.id, half } }))
-                  },
-                  drop: (half: 'before' | 'after') => {
-                  /* v8 ignore next -- narrowing guard: Rows gates drop on `active`, which is false while the drag state is null. */
-                    if (drag === null) return
-                    commitSessionDrag(drag, { id: node.id, half })
-                  },
-                  end: () => {
-                    if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
-                    else setDrag(null)
-                    sessionDropCommitted.current = false
-                  },
-                }
-                return (
-                  <SessionNodeItem
-                    key={node.id}
-                    node={node}
-                    currentId={current}
-                    now={now}
-                    onOpen={open}
-                    onRename={onSessionRename}
-                    onFork={forkSession}
-                    onArchive={onSessionArchive}
-                    drag={dragProps}
-                    t={t}
-                  />
-                )
-              })}
-              {collapsed.hiddenCount > 0 && (
-                <button
-                  type="button"
-                  className={css.sessionOverflowButton}
-                  aria-expanded={sessionsExpanded}
-                  onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}
-                >
-                  {sessionsExpanded
-                    ? t('sessions.collapse')
-                    : t('sessions.expand', { n: collapsed.hiddenCount })}
-                </button>
-              )}
-            </div>
+            <SessionNodeItem key={node.id} node={node} currentId={current} now={now} onOpen={open}
+              onRename={onSessionRename} onFork={forkSession} onArchive={onSessionArchive} t={t}
+              placement={sessionPlacement(node.id, group)}
+              drag={layoutPending ? undefined : {
+                start: () => {
+                  sessionDropCommitted.current = false
+                  setSectionTarget(undefined)
+                  setDrag({ accountKey: group.key, sessionId: node.id, over: null })
+                },
+                active: sameGroup,
+                marker: sameGroup && drag.over?.id === node.id ? drag.over.half : null,
+                hover: (half) => { setSectionTarget(undefined); if (drag !== null) setDrag({ ...drag, over: { id: node.id, half } }) },
+                drop: (half) => { if (sameGroup) commitSessionDrag(drag, { id: node.id, half }) },
+                end: endDrag,
+              }} />
           )
         })}
+        {collapsed.hiddenCount > 0 && (
+          <button type="button" className={css.sessionOverflowButton} aria-expanded={sessionsExpanded}
+            onClick={() => { setExpandedSessionGroups(keys => toggled(keys, group.key)) }}>
+            {sessionsExpanded ? t('sessions.collapse') : t('sessions.expand', { n: collapsed.hiddenCount })}
+          </button>
+        )}
+      </div>
+    )
+  }
+  const groupMap = new Map(groups.map(group => [group.key, group]))
+  const defaultGroups = groups.filter(group => group.workspaceId === undefined || !workspaceSections.has(group.workspaceId))
+  const renderSection = (section: SidebarSection | null, index: number) => {
+    const sectionId = section?.id ?? null
+    const expanded = section === null || sectionExpansion[section.id] !== false
+    const sectionGroups = section === null ? defaultGroups : section.workspaceIds.flatMap((id) => {
+      const group = groupMap.get(id)
+      return group === undefined ? [] : [group]
+    })
+    const directNodes = section?.sessionIds.flatMap((id) => { const node = nodes.get(id); return node === undefined ? [] : [node] }) ?? []
+    const headingVisible = section !== null || sections.length > 0
+    const firstDrop = workspaceDrag?.over?.id === sectionGroups[0]?.workspaceId && workspaceDrag?.over?.half === 'before'
+    const dragActive = activeDrag !== null && !layoutPending
+    return (
+      <div key={sectionId ?? 'default'} data-sidebar-section={sectionId ?? 'default'}
+        className={css.customSection}
+        onDragOver={(event) => {
+          if (!dragActive) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'move'
+          setSectionTarget(sectionId)
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSectionTarget(undefined)
+        }}
+        onDrop={(event) => {
+          if (!dragActive) return
+          event.preventDefault()
+          event.stopPropagation()
+          dropInSection(sectionId, 'after')
+        }}>
+        {headingVisible && <SidebarSectionHeader title={section?.title ?? t('section.default')} expanded={expanded}
+          onToggle={() => { if (section !== null) setSectionExpanded(section.id, !expanded) }}
+          onRename={section === null ? undefined : () => { onSectionDialog({ type: 'rename', section }) }}
+          onDelete={section === null ? undefined : () => { onSectionDialog({ type: 'delete', section }) }}
+          onUp={section === null || index === 0 ? undefined : () => {
+            execute(() => sectionActions.insertSectionBefore({
+              sectionId: section.id, beforeSectionId: (sections[index - 1] as SidebarSection).id,
+            }))
+          }}
+          onDown={section === null || index === sections.length - 1 ? undefined : () => {
+            const beforeSectionId = sections[index + 2]?.id
+            execute(() => sectionActions.insertSectionBefore({ sectionId: section.id,
+              ...(beforeSectionId === undefined ? {} : { beforeSectionId }) }))
+          }}
+          draggable={section !== null && !layoutPending}
+          inside={dragActive && activeDrag.kind !== 'section' && sectionTarget === sectionId}
+          t={t}
+          drag={{
+            start: () => { if (section !== null) { setSectionTarget(undefined); setActiveDrag({ kind: 'section', sectionId: section.id, over: null }) } },
+            active: dragActive,
+            marker: activeDrag?.kind === 'section' && activeDrag.over?.id === sectionId ? activeDrag.over.half : null,
+            hover: (half) => {
+              setSectionTarget(sectionId)
+              if (activeDrag?.kind === 'section') setActiveDrag({ ...activeDrag, over: { id: sectionId, half } })
+            },
+            drop: (half) => { dropInSection(sectionId, half) },
+            end: endDrag,
+          }} />}
+        {expanded && (
+          <div role={headingVisible ? 'group' : undefined} aria-label={headingVisible ? section?.title ?? t('section.default') : undefined}
+            className={clsx(css.sectionList, firstDrop && css.listTopDropActive)}>
+            {firstDrop && <span className={css.listTopDropIndicator} aria-hidden="true" />}
+            {sectionGroups.map(renderGroup)}
+            {directNodes.map(node => (
+              <SessionNodeItem key={node.id} node={node} currentId={current} now={now} onOpen={open}
+                onRename={onSessionRename} onFork={forkSession} onArchive={onSessionArchive} t={t}
+                placement={sessionPlacement(node.id)}
+                drag={layoutPending ? undefined : {
+                  start: () => {
+                    setSectionTarget(undefined)
+                    setDrag({ accountKey: sectionId as SidebarSectionId, sessionId: node.id, over: null })
+                  },
+                  active: drag !== null,
+                  marker: drag?.over?.id === node.id ? drag.over.half : null,
+                  hover: (half) => { setSectionTarget(undefined); if (drag !== null) setDrag({ ...drag, over: { id: node.id, half } }) },
+                  drop: (half) => {
+                    if (drag === null || drag.sessionId === node.id) { endDrag(); return }
+                    const sessionId = drag.sessionId
+                    const without = directNodes.filter(candidate => candidate.id !== sessionId)
+                    const beforeSessionId = half === 'before' ? node.id : without[without.findIndex(candidate => candidate.id === node.id) + 1]?.id
+                    execute(() => sectionActions.moveSessionToSection({ sessionId, sectionId,
+                      ...(beforeSessionId === undefined ? {} : { beforeSessionId }) }))
+                  },
+                  end: endDrag,
+                }} />
+            ))}
+            {sectionGroups.length === 0 && directNodes.length === 0 && (
+              <div className={clsx(css.emptySection, dragActive && sectionTarget === sectionId && css.sectionDropActive)}>
+                {headingVisible ? t('section.empty') : t('empty.none')}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className={clsx(css.treeBody, css.wide)}>
+      {layoutError !== null && (
+        <div role="alert" className={css.layoutError}>
+          <span>{t('section.error', { message: layoutError.message })}</span>
+          <Button variant="outline" disabled={layoutPending} onClick={() => { execute(layoutError.retry) }}>{t('section.retry')}</Button>
+        </div>
+      )}
+      <div className={css.list} role="tree" aria-label={t('section.sessions')} aria-busy={layoutPending}>
+        {sections.map((section, index) => renderSection(section, index))}
+        {renderSection(null, sections.length)}
       </div>
       <span className={css.fade} />
     </div>
@@ -817,6 +966,7 @@ export function WorkspaceBrowser({
   archiveSession,
   insertSessionBefore,
   createWorkspace,
+  createSection, renameSection, deleteSection, insertSectionBefore, moveWorkspaceToSection, moveSessionToSection,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -826,6 +976,11 @@ export function WorkspaceBrowser({
 }: WorkspaceBrowserProps) {
   const home = useHostInfo(info => info.home)
   const workspaces = useWorkspaces(state => state.items)
+  const sections = useWorkspaces(state => state.layout.sections)
+  const sectionActions: SidebarActions = {
+    createSection, renameSection, deleteSection, insertSectionBefore, moveWorkspaceToSection, moveSessionToSection,
+  }
+  const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null)
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
   // Live occupancy of this surface's directory-flow hole (the same source the
@@ -834,6 +989,10 @@ export function WorkspaceBrowser({
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
   const groupExpansion = useStore(s => s.groupExpansion)
+  const sectionExpansion = useStore(s => s.sectionExpansion)
+  useEffect(() => {
+    if (workspacePhase === 'ready') actions.retainSectionKeys(sections.map(section => section.id))
+  }, [workspacePhase, sections, actions.retainSectionKeys])
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
   const currentBlankSessionId = useSessions((state) => {
@@ -1134,6 +1293,14 @@ export function WorkspaceBrowser({
         )}
         <div className={clsx(css.headerActions, wide && searchExpanded && css.headerActionsHidden)}>
           {wide && (
+            <Tooltip label={t('section.create')} side="bottom" delayMs={500}>
+              <button type="button" className={css.iconButton} aria-label={t('section.create')}
+                onClick={() => { setSectionDialog({ type: 'create' }) }}>
+                <IconPlusOutline16 />
+              </button>
+            </Tooltip>
+          )}
+          {wide && (
             <ViewOptionsMenu
               groupBy={groupBy}
               orderBy={orderBy}
@@ -1232,6 +1399,11 @@ export function WorkspaceBrowser({
             )
             : (
               <SessionTree
+                sections={sections}
+                sectionExpansion={sectionExpansion}
+                setSectionExpanded={actions.setSectionExpanded}
+                sectionActions={sectionActions}
+                onSectionDialog={setSectionDialog}
                 useSessions={useSessions}
                 useSessionPendingInteraction={useSessionPendingInteraction}
                 onSessionRename={onSessionRename}
@@ -1265,6 +1437,21 @@ export function WorkspaceBrowser({
             ))}
       </div>
 
+      {sectionDialog !== null && (
+        <SectionModal dialog={sectionDialog} sections={sections} t={t}
+          onClose={() => { setSectionDialog(null) }}
+          onCommit={async (title) => {
+            if (sectionDialog.type === 'create') {
+              const created = await createSection({ title })
+              actions.setSectionExpanded(created.sectionId, true)
+              actions.setGroupBy('workspace')
+              setQuery('')
+              setSearchExpanded(false)
+            } else if (sectionDialog.type === 'rename') {
+              await renameSection({ sectionId: sectionDialog.section.id, title })
+            } else await deleteSection({ sectionId: sectionDialog.section.id })
+          }} />
+      )}
       <Modal
         open={renameTarget !== null}
         onClose={closeRename}
@@ -1358,4 +1545,9 @@ export function WorkspaceBrowser({
       </Modal>
     </div>
   )
+}
+
+/* v8 ignore next 3 -- sidebar drag kinds are constructed exclusively by the typed row callbacks. */
+function assertNever(value: never): never {
+  throw new Error(`Unexpected sidebar drag: ${String(value)}`)
 }

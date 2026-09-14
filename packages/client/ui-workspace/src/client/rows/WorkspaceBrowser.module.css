@@ -14,6 +14,26 @@
   padding-right: 0;
 }
 
+.customSection { position: relative; }
+.sectionList { position: relative; }
+.emptySection {
+  padding: 12px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  border-radius: 8px;
+}
+.sectionDropActive {
+  outline: 1px dashed var(--dsw-alias-label-secondary);
+  outline-offset: -1px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.layoutError {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--dsw-alias-label-primary);
+}
+
 .iconButton {
   flex: none;
   display: inline-flex;

@@ -14,14 +14,15 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
+import { insertSectionEntry, invalidSection, requireSection, sectionTitle, validateSections } from './sections.ts'
 
 export { WorkspaceMoveInvalidError } from './entity.ts'
 import { realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
+import type { SidebarSectionId, WorkspaceLayout, Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
 
-export type { Workspace } from './types.ts'
+export type { SidebarSection, SidebarSectionId, WorkspaceLayout, Workspace } from './types.ts'
 export { workspaceDomainState, workspaceRecord, workspaceDomainSpec } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 export { realpathNormalize } from './paths.ts'
@@ -39,15 +40,15 @@ export function WorkspaceId(id: string): WorkspaceId {
 }
 
 /**
- * An archiveSession request named a session neither live nor in session
- * persistence — a definite miss only; storage faults propagate as themselves.
+ * A navigation request names a Session absent from live state and persistence.
+ * Storage faults propagate independently of this definite miss.
  */
 export class WorkspaceUnknownSessionError extends Error {
   /**
    * @param sessionId - The unknown session id.
    */
   constructor(readonly sessionId: SessionId) {
-    super(`cannot archive session '${sessionId}': live sessions and session persistence hold no such session`)
+    super(`unknown session '${sessionId}': live sessions and session persistence hold no such session`)
     this.name = 'WorkspaceUnknownSessionError'
   }
 }
@@ -135,6 +136,11 @@ export class WorkspaceRegistry extends Service {
 
     await this.indexLiveSessions()
     this.validateStoredState(this.requireState())
+    for (const section of this.requireState().sections) {
+      for (const id of section.sessionIds) {
+        if (!await this.sessionKnown(id)) throw invalidSection(`Stored sidebar section references missing Session "${id}"`)
+      }
+    }
     this.rebuildEntities()
     this.reportFilteredCandidates()
   }
@@ -234,6 +240,137 @@ export class WorkspaceRegistry extends Service {
     return this.requireState().archivedSessionIds
   }
 
+  /** The committed default order and custom sections, with their durable revision. */
+  get layout(): WorkspaceLayout {
+    const state = this.requireState()
+    return { revision: state.layoutRevision, workspaceIds: state.workspaceIds, sections: state.sections }
+  }
+
+  /**
+   * Append an empty custom section with a unique non-blank title.
+   * @param title - proposed section title.
+   * @returns the created identity and committed layout.
+   */
+  createSection(title: string): Promise<{ sectionId: SidebarSectionId; layout: WorkspaceLayout }> {
+    return this.enqueueOperation(async () => {
+      const state = this.requireState()
+      const resolved = sectionTitle(state, title)
+      const sectionId = randomUUID() as SidebarSectionId
+      await this.setState({ ...state, sections: [...state.sections, {
+        id: sectionId, title: resolved, workspaceIds: [], sessionIds: [],
+      }] })
+      return { sectionId, layout: this.layout }
+    })
+  }
+
+  /**
+   * Rename one section without changing its placement.
+   * @param sectionId - section identity.
+   * @param title - proposed unique title.
+   * @returns the committed layout.
+   */
+  renameSection(sectionId: SidebarSectionId, title: string): Promise<WorkspaceLayout> {
+    return this.editLayout((state) => {
+      const section = requireSection(state, sectionId)
+      section.title = sectionTitle(state, title, sectionId)
+    })
+  }
+
+  /**
+   * Remove a section, appending its projects to the default area and restoring Session placement.
+   * @param sectionId - section identity.
+   * @returns the committed layout; files and Session accounting remain intact.
+   */
+  deleteSection(sectionId: SidebarSectionId): Promise<WorkspaceLayout> {
+    return this.editLayout((state) => {
+      const section = requireSection(state, sectionId)
+      const restored = new Set(section.workspaceIds)
+      state.workspaceIds = [...state.workspaceIds.filter(id => !restored.has(id)), ...section.workspaceIds]
+      state.sections = state.sections.filter(candidate => candidate.id !== sectionId)
+    })
+  }
+
+  /**
+   * Move a section before another section, or append it.
+   * @param sectionId - section to move.
+   * @param beforeSectionId - destination anchor; omitted appends.
+   * @returns the committed layout.
+   */
+  insertSectionBefore(sectionId: SidebarSectionId, beforeSectionId?: SidebarSectionId): Promise<WorkspaceLayout> {
+    return this.editLayout((state) => {
+      requireSection(state, sectionId)
+      const byId = new Map(state.sections.map(section => [section.id, section]))
+      state.sections = insertSectionEntry([...byId.keys()], sectionId, beforeSectionId)
+        .map(id => byId.get(id) as WorkspaceDomainState['sections'][number])
+    })
+  }
+
+  /**
+   * Move a project between sections or within one project's section account.
+   * @param workspaceId - registered project.
+   * @param sectionId - destination; null restores the default area.
+   * @param beforeWorkspaceId - project in the destination; omitted appends.
+   * @returns the committed layout.
+   */
+  moveWorkspaceToSection(
+    workspaceId: WorkspaceId, sectionId: SidebarSectionId | null, beforeWorkspaceId?: WorkspaceId,
+  ): Promise<WorkspaceLayout> {
+    return this.editLayout((state) => {
+      if (!state.workspaceIds.includes(workspaceId)) throw new WorkspaceOrderInvalidError(workspaceId)
+      const destination = sectionId === null ? undefined : requireSection(state, sectionId)
+      const assigned = new Set(state.sections.flatMap(section => section.workspaceIds))
+      const ids = destination?.workspaceIds ?? state.workspaceIds.filter(id => !assigned.has(id))
+      const next = insertSectionEntry(ids, workspaceId, beforeWorkspaceId)
+      if (beforeWorkspaceId === workspaceId) return
+      for (const section of state.sections) section.workspaceIds = section.workspaceIds.filter(id => id !== workspaceId)
+      if (destination === undefined) {
+        const without = state.workspaceIds.filter(id => id !== workspaceId)
+        const at = beforeWorkspaceId === undefined ? without.length : without.indexOf(beforeWorkspaceId)
+        without.splice(at, 0, workspaceId)
+        state.workspaceIds = without
+      } else destination.workspaceIds = next
+    })
+  }
+
+  /**
+   * Place a Session directly in a section without changing its working directory or account.
+   * @param sessionId - existing ordinary Session.
+   * @param sectionId - destination; null restores the Workspace or Ungrouped position.
+   * @param beforeSessionId - independent Session in the destination; omitted appends.
+   * @returns the committed layout.
+   */
+  moveSessionToSection(
+    sessionId: SessionId, sectionId: SidebarSectionId | null, beforeSessionId?: SessionId,
+  ): Promise<WorkspaceLayout> {
+    return this.enqueueOperation(async () => {
+      if (!await this.sessionKnown(sessionId)) throw new WorkspaceUnknownSessionError(sessionId)
+      const header = await this.readSessionHeader(sessionId)
+      if (header.origin === 'subagent') throw invalidSection('Subagent Sessions cannot be placed in sidebar sections')
+      const state = structuredClone(this.requireState())
+      const destination = sectionId === null ? undefined : requireSection(state, sectionId)
+      if (destination === undefined && beforeSessionId !== undefined) {
+        throw invalidSection('Restoring default Session placement does not accept an insertion anchor')
+      }
+      const next = destination === undefined ? [] : insertSectionEntry(destination.sessionIds, sessionId, beforeSessionId)
+      for (const section of state.sections) section.sessionIds = section.sessionIds.filter(id => id !== sessionId)
+      if (destination !== undefined) destination.sessionIds = next
+      return this.commitLayout(state)
+    })
+  }
+
+  private editLayout(edit: (state: WorkspaceDomainState) => void): Promise<WorkspaceLayout> {
+    return this.enqueueOperation(async () => {
+      const state = structuredClone(this.requireState())
+      edit(state)
+      return this.commitLayout(state)
+    })
+  }
+
+  private async commitLayout(state: WorkspaceDomainState): Promise<WorkspaceLayout> {
+    if (!sameLayout(this.requireState(), state)) await this.setState(state)
+    return this.layout
+  }
+
   /**
    * Archive one session durably. The session must exist (live or in session
    * persistence); its workspace accounting — or lack of one — is irrelevant.
@@ -328,9 +465,10 @@ export class WorkspaceRegistry extends Service {
 
     try {
       await this.setState({
+        ...state,
         initialized: true,
         workspaceIds: [id, ...state.workspaceIds],
-        archivedSessionIds: state.archivedSessionIds,
+        pendingMutation: undefined,
       })
     } catch (error) {
       this.entities.delete(id)
@@ -360,9 +498,11 @@ export class WorkspaceRegistry extends Service {
     if (entity === undefined) return false
     const state = this.requireState()
     const nextState = {
+      ...state,
       initialized: true,
       workspaceIds: state.workspaceIds.filter(workspaceId => workspaceId !== id),
-      archivedSessionIds: state.archivedSessionIds,
+      sections: state.sections.map(section => ({ ...section, workspaceIds: section.workspaceIds.filter(key => key !== id) })),
+      pendingMutation: undefined,
     }
     await this.setState({
       ...nextState,
@@ -417,9 +557,8 @@ export class WorkspaceRegistry extends Service {
     }
     await this.requireTable().delete(pending.workspaceId)
     await this.setState({
-      initialized: state.initialized,
-      workspaceIds: state.workspaceIds,
-      archivedSessionIds: state.archivedSessionIds,
+      ...state,
+      pendingMutation: undefined,
     })
   }
 
@@ -502,12 +641,13 @@ export class WorkspaceRegistry extends Service {
       .map(([id]) => id)
 
     if (!sameIds(state.workspaceIds, workspaceIds)) {
-      await this.setState({ initialized: false, workspaceIds, archivedSessionIds: state.archivedSessionIds })
+      await this.setState({ ...state, initialized: false, workspaceIds })
     }
-    await this.setState({ initialized: true, workspaceIds, archivedSessionIds: state.archivedSessionIds })
+    await this.setState({ ...state, initialized: true, workspaceIds })
   }
 
   private validateStoredState(state: WorkspaceDomainState): void {
+    validateSections(state)
     const table = this.requireTable()
     const order = new Set<WorkspaceId>()
     for (const id of state.workspaceIds) {
@@ -647,8 +787,10 @@ export class WorkspaceRegistry extends Service {
   }
 
   private async setState(state: WorkspaceDomainState): Promise<void> {
-    await (this.global as DomainGlobal<WorkspaceDomainState>).set(state)
-    this.state = state
+    const current = this.requireState()
+    const next = { ...state, layoutRevision: current.layoutRevision + (sameLayout(current, state) ? 0 : 1) }
+    await (this.global as DomainGlobal<WorkspaceDomainState>).set(next)
+    this.state = next
   }
 
   private enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -665,5 +807,10 @@ export class WorkspaceRegistry extends Service {
 
 const sameSessionIds = (left: readonly SessionId[], right: readonly SessionId[]): boolean =>
   left.length === right.length && left.every((id, index) => id === right[index])
+
+function sameLayout(left: WorkspaceDomainState, right: WorkspaceDomainState): boolean {
+  return sameIds(left.workspaceIds, right.workspaceIds)
+    && JSON.stringify(left.sections) === JSON.stringify(right.sections)
+}
 
 export default WorkspaceRegistry

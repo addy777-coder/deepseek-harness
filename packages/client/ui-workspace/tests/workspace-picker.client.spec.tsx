@@ -34,6 +34,7 @@ const sessions: SessionListState = {
 }
 const noPendingInteraction: SessionPendingInteractionSnapshot = new Map()
 const workspaceState = (items: readonly WorkspaceView[]): WorkspaceSnapshot => ({
+  layout: { revision: 0, workspaceIds: [], sections: [] },
   items, archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
 })
 function anchor(): { current: HTMLElement } {

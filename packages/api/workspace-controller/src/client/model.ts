@@ -1,10 +1,14 @@
 /** Client-side Workspace state model shared by Remote transport and UI projection. */
 
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
+import type { WorkspaceLayout } from '@deepseek-ai/dsh-workspace/types'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteFailure, RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
+  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
+  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
+  SessionSectionMoveRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceBaseline,
@@ -27,6 +31,7 @@ export type WorkspaceListPhase = 'pending' | 'ready'
 /** Immutable Client Workspace state. */
 export interface WorkspaceSnapshot {
   readonly items: readonly WorkspaceView[]
+  readonly layout: WorkspaceLayout
   /** Complete registry-global archive set in Host order. */
   readonly archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds']
   readonly state: 'idle' | 'loading' | 'error'
@@ -43,7 +48,7 @@ export interface WorkspaceFollowSink {
   /** Remove one Workspace row. */
   removeView(workspaceId: WorkspaceId): void
   /** Replace the Host-confirmed Workspace order. */
-  replaceOrder(workspaceIds: readonly WorkspaceId[]): void
+  replaceLayout(layout: WorkspaceLayout): void
   /** Replace the complete archived Session set. */
   replaceArchived(sessionIds: WorkspaceArchiveValue['archivedSessionIds']): void
 }
@@ -57,12 +62,9 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   private state: WorkspaceSnapshot['state'] = 'loading'
   private phase: WorkspaceListPhase = 'pending'
   private error: RemoteFailure | null = null
-  /** Latest local reorder request; only its unary echo may install order. */
-  private orderRequestGeneration = 0
-  /** Increments on stream orders so a later remote commit outranks an older unary echo. */
-  private orderFrameGeneration = 0
-  /** Last complete order accepted from a baseline, increment, or current unary echo. */
-  private committedOrder: WorkspaceId[] = []
+  private layout: WorkspaceLayout = { revision: -1, workspaceIds: [], sections: [] }
+  /** A replacement baseline fences unary replies from previous connection generations. */
+  private baselineGeneration = 0
   /** Host Workspace ids are never reused, so delayed data cannot resurrect a removed row. */
   private readonly removedIds = new Set<WorkspaceId>()
   private readonly listeners = new Set<() => void>()
@@ -83,8 +85,12 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
    * @returns generated Remote result.
    */
   async create(input: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
+    const generation = this.baselineGeneration
     const result = await this.remote.create(input)
-    if (result.ok) this.upsert(result.value.workspace)
+    if (result.ok && generation === this.baselineGeneration) {
+      this.upsert(result.value.workspace)
+      this.replaceLayout(result.value.layout)
+    }
     return result
   }
 
@@ -106,13 +112,17 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
    * @returns generated Remote result.
    */
   async delete(workspaceId: WorkspaceId): Promise<RemoteResult<WorkspaceDeleteValue>> {
+    const generation = this.baselineGeneration
     const result = await this.remote.delete({ workspaceId })
-    if (result.ok) this.remove(workspaceId, true)
+    if (result.ok && generation === this.baselineGeneration) {
+      this.replaceLayout(result.value.layout)
+      this.remove(workspaceId, true)
+    }
     return result
   }
 
   /**
-   * Optimistically move a Workspace and reconcile the returned complete order.
+   * Move a Workspace after the Host commits its complete layout.
    * @param workspaceId - Workspace to move.
    * @param beforeWorkspaceId - anchor Workspace; omitted appends.
    * @returns generated Remote result.
@@ -121,18 +131,12 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     workspaceId: WorkspaceId,
     beforeWorkspaceId?: WorkspaceId,
   ): Promise<RemoteResult<WorkspaceOrderValue>> {
-    const requestGeneration = ++this.orderRequestGeneration
-    const frameGeneration = this.orderFrameGeneration
-    const localOrder = this.items.map(workspace => workspace.workspaceId)
-    this.installOrder(insertIdBefore(localOrder, workspaceId, beforeWorkspaceId))
+    const generation = this.baselineGeneration
     const result = await this.remote.insertBefore({
       workspaceId,
       ...beforeWorkspaceId === undefined ? {} : { beforeWorkspaceId },
     })
-    if (requestGeneration === this.orderRequestGeneration
-      && frameGeneration === this.orderFrameGeneration) {
-      this.installOrder(result.ok ? result.value.workspaceIds : this.committedOrder, result.ok)
-    }
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
     return result
   }
 
@@ -171,11 +175,84 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   /**
+   * Append a custom sidebar section after validating its title.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async createSection(request: SidebarSectionCreateRequest): Promise<RemoteResult<SidebarSectionCreateValue>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.createSection(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value.layout)
+    return result
+  }
+
+  /**
+   * Rename a custom sidebar section.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async renameSection(request: SidebarSectionRenameRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.renameSection(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
+    return result
+  }
+
+  /**
+   * Remove a section and restore its entries to their default placement.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async deleteSection(request: SidebarSectionRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.deleteSection(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
+    return result
+  }
+
+  /**
+   * Reorder custom sections without changing their entries.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.insertSectionBefore(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
+    return result
+  }
+
+  /**
+   * Move a project into a section or back into the default project area.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.moveWorkspaceToSection(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
+    return result
+  }
+
+  /**
+   * Move an independent Session entry while preserving its working directory.
+   * @param request - section mutation fields.
+   * @returns the Host receipt after merging its current-generation layout.
+   */
+  async moveSessionToSection(request: SessionSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    const generation = this.baselineGeneration
+    const result = await this.remote.moveSessionToSection(request)
+    if (result.ok && generation === this.baselineGeneration) this.replaceLayout(result.value)
+    return result
+  }
+
+  /**
    * Replace the projection from one complete stream-generation baseline.
    * @param baseline - complete Workspace and archive projection.
    */
   replaceBaseline(baseline: WorkspaceBaseline): void {
-    this.orderFrameGeneration++
+    this.baselineGeneration++
+    this.layout = baseline.layout
     this.installViews(baseline.items)
     this.installArchived(baseline.archivedSessionIds)
     this.state = 'idle'
@@ -195,9 +272,11 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   /** Replace Host-confirmed order from the current follow generation. */
-  replaceOrder(workspaceIds: readonly WorkspaceId[]): void {
-    this.orderFrameGeneration++
-    this.installOrder(workspaceIds, true)
+  replaceLayout(layout: WorkspaceLayout): void {
+    if (layout.revision <= this.layout.revision) return
+    this.layout = layout
+    this.installOrder(layout.workspaceIds)
+    this.invalidate()
   }
 
   /**
@@ -248,6 +327,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   private buildSnapshot(): WorkspaceSnapshot {
     return {
       items: this.items,
+      layout: this.layout,
       archivedSessionIds: this.archivedSessionIds,
       state: this.state,
       phase: this.phase,
@@ -262,8 +342,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     this.invalidate()
   }
 
-  private installOrder(workspaceIds: readonly WorkspaceId[], committed = false): void {
-    if (committed) this.committedOrder = [...workspaceIds]
+  private installOrder(workspaceIds: readonly WorkspaceId[]): void {
     const rank = new Map(workspaceIds.map((id, index) => [id, index]))
     const items = [...this.items].sort((left, right) =>
       (rank.get(left.workspaceId) ?? Number.MAX_SAFE_INTEGER)
@@ -280,9 +359,6 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     // Unary responses and stream increments race on separate requests. Keep
     // the newest Host projection regardless of their arrival order.
     if (installed !== undefined && Date.parse(view.updatedAt) < Date.parse(installed.updatedAt)) return
-    if (!this.committedOrder.includes(view.workspaceId)) {
-      this.committedOrder = [view.workspaceId, ...this.committedOrder]
-    }
     this.items = index === -1
       ? [view, ...this.items]
       : this.items.map((item, position) => position === index ? view : item)
@@ -291,7 +367,6 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
 
   private remove(workspaceId: WorkspaceId, immediate = false): void {
     this.removedIds.add(workspaceId)
-    this.committedOrder = this.committedOrder.filter(id => id !== workspaceId)
     const items = this.items.filter(item => item.workspaceId !== workspaceId)
     if (items.length === this.items.length) {
       // A successful unary echo still publishes an earlier increment's
@@ -309,7 +384,6 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
       if (!this.removedIds.has(view.workspaceId)) installed.set(view.workspaceId, view)
     }
     this.items = [...installed.values()]
-    this.committedOrder = views.map(view => view.workspaceId)
   }
 
   private invalidate(immediate = false): void {
@@ -343,17 +417,4 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     this.snapshotDirty = false
     this.snapshotCache = this.buildSnapshot()
   }
-}
-
-function insertIdBefore(
-  ids: readonly WorkspaceId[],
-  id: WorkspaceId,
-  beforeId?: WorkspaceId,
-): WorkspaceId[] {
-  if (!ids.includes(id) || (beforeId !== undefined && !ids.includes(beforeId)) || beforeId === id) {
-    return [...ids]
-  }
-  const without = ids.filter(candidate => candidate !== id)
-  const at = beforeId === undefined ? without.length : without.indexOf(beforeId)
-  return [...without.slice(0, at), id, ...without.slice(at)]
 }

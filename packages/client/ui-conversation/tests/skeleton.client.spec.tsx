@@ -95,6 +95,7 @@ function workspace(id = 'w1'): WorkspaceView {
 }
 
 const workspaceState = (items: readonly WorkspaceView[]): WorkspaceSnapshot => ({
+  layout: { revision: 0, workspaceIds: items.map(item => item.workspaceId), sections: [] },
   items, archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
 })
 

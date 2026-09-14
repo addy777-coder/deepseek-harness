@@ -90,7 +90,7 @@ function mountFrame(options: { readonly focused?: boolean; readonly titlebar?: b
     } as SessionListState
     return sel(sessionState)
   }) as never
-  const workspaceState: WorkspaceSnapshot = {
+  const workspaceState: WorkspaceSnapshot = { layout: { revision: 0, workspaceIds: [], sections: [] },
     items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
     ...(workspacesReady.current ? {} : { state: 'loading' as const, phase: 'pending' as const }),
   }

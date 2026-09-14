@@ -91,6 +91,8 @@ export interface SearchResultSet {
 /** Viewing state consumed by the derivation. */
 export interface TreeView {
   expandedGroups: readonly string[]
+  /** Sessions displayed directly in custom sections instead of under their Workspace. */
+  independentSessionIds?: readonly SessionId[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
 }
@@ -284,6 +286,7 @@ export function deriveGroups(
 ): GroupNode[] {
   const archived = new Set(archivedSessionIds)
   const expandedGroups = new Set(view.expandedGroups)
+  const independent = new Set(view.independentSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
   const currentGroup = list.current === undefined
     ? undefined
@@ -292,17 +295,19 @@ export function deriveGroups(
   const groups: GroupNode[] = []
   for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
+    const visible = g.sessions.filter(session => !independent.has(session.id))
+    if (g.workspaceId === undefined && visible.length === 0) continue
     groups.push({
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
       createdAt: g.createdAt,
       label: g.label,
-      sessionCount: g.sessions.length,
+      sessionCount: visible.length,
       expanded,
-      containsCurrent: g.key === currentGroup,
+      containsCurrent: g.key === currentGroup && (list.current === undefined || !independent.has(list.current)),
       sessions: expanded
-        ? g.sessions.map(session => sessionNode(session, descendants, pendingInteractions))
+        ? visible.map(session => sessionNode(session, descendants, pendingInteractions))
         : [],
     })
   }

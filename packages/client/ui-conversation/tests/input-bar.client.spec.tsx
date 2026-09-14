@@ -164,7 +164,7 @@ function bench(over?: BenchOptions) {
       ids: [], byId: {}, current: undefined, phase: 'ready',
       subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
     })),
-    useWorkspaces: bindSnapshotSelector(createSnapshotStore({
+    useWorkspaces: bindSnapshotSelector(createSnapshotStore({ layout: { revision: 0, workspaceIds: [], sections: [] },
       items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
     })),
     useProjection: ((key: string, selector?: (v: unknown) => unknown) =>

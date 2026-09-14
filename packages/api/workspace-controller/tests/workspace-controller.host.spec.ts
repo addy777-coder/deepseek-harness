@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -21,9 +22,59 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 }
 
 const roots: Context[] = []
+const directories: string[] = []
+
+describe('Workspace layout failure publication', () => {
+  it('propagates a failed placement write and detects an inconsistent published removal', async () => {
+    const { controller, ctx, root } = await harness()
+    const workspace = await controller.create({ path: stageDir(root, 'placement-failure') })
+    const error = new Error('disk write failed')
+    vi.spyOn(ctx.workspaceRegistry, 'moveWorkspaceToSection').mockRejectedValueOnce(error)
+    await expect(controller.moveWorkspaceToSection({ workspaceId: workspace.workspace.workspaceId, sectionId: null }))
+      .rejects.toBe(error)
+    const feed = new WorkspaceFeed(ctx)
+    ctx.emit('domain/changed', {
+      domain: 'workspace', table: 'workspaces', key: workspace.workspace.workspaceId, operation: 'deleted',
+    })
+    expect(() => feed.baseline()).toThrow('Committed sidebar layout references missing Workspace')
+  })
+})
+
+describe('WorkspaceController custom sections', () => {
+  it('publishes complete section layouts and maps invalid members to business errors', async () => {
+    const { controller, ctx, root } = await harness()
+    const project = await controller.create({ path: stageDir(root, 'section-project') })
+    const session = ctx.sessions.create(SessionId('section-session'), { meta: { cwd: project.workspace.path } })
+    const abort = new AbortController()
+    const iterator = controller.follow(abort.signal)[Symbol.asyncIterator]()
+    await nextFrame(iterator)
+    const first = await controller.createSection({ title: ' First ' })
+    await expect(nextFrame(iterator)).resolves.toEqual({ type: 'layout', layout: first.layout })
+    const second = await controller.createSection({ title: 'Second' })
+    await nextFrame(iterator)
+    await controller.moveWorkspaceToSection({ workspaceId: project.workspace.workspaceId, sectionId: first.sectionId })
+    await controller.moveSessionToSection({ sessionId: session.id, sectionId: first.sectionId })
+    await controller.renameSection({ sectionId: second.sectionId, title: 'Renamed' })
+    await controller.insertSectionBefore({ sectionId: second.sectionId, beforeSectionId: first.sectionId })
+    expect(ctx.workspaceRegistry.layout.sections[1]?.sessionIds).toEqual([session.id])
+    await expect(controller.moveWorkspaceToSection({ workspaceId: 'missing' as WorkspaceId, sectionId: first.sectionId }))
+      .rejects.toMatchObject({ code: 'workspace/not-found' })
+    await expect(controller.moveSessionToSection({ sessionId: SessionId('missing'), sectionId: first.sectionId }))
+      .rejects.toMatchObject({ code: 'session/not-found' })
+    const child = ctx.sessions.create(SessionId('child'), { meta: { parentSession: session.id, origin: 'subagent', delegationDepth: 1 } })
+    await expect(controller.moveSessionToSection({ sessionId: child.id, sectionId: first.sectionId }))
+      .rejects.toMatchObject({ code: 'workspace/section-invalid' })
+    await controller.deleteSection({ sectionId: first.sectionId })
+    expect(ctx.workspaceRegistry.layout.sections).toHaveLength(1)
+    expect(ctx.sessions.get(session.id)?.header.cwd).toBe(project.workspace.path)
+    abort.abort()
+    await iterator.return?.()
+  })
+})
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(ctx => ctx.fiber.dispose()))
+  await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })))
 })
 
 interface Deferred<T> {
@@ -39,6 +90,7 @@ function deferred<T>(): Deferred<T> {
 
 async function harness() {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-workspace-controller-')))
+  directories.push(root)
   const ctx = new Context()
   roots.push(ctx)
   await ctx.plugin(SessionStore)
@@ -168,7 +220,7 @@ describe('WorkspaceController commands', () => {
     })
     gate.resolve(undefined)
     await blocker
-    await expect(deletion).resolves.toEqual({ deleted: true })
+    await expect(deletion).resolves.toMatchObject({ deleted: true })
     await expect(staleRename).rejects.toMatchObject({ code: 'workspace/not-found' })
   })
 
@@ -180,6 +232,7 @@ describe('WorkspaceController commands', () => {
       workspaceId: first.workspace.workspaceId,
       beforeWorkspaceId: second.workspace.workspaceId,
     })).resolves.toEqual({
+      revision: expect.any(Number) as number, sections: [],
       workspaceIds: [first.workspace.workspaceId, second.workspace.workspaceId],
     })
     await expect(controller.insertBefore({ workspaceId: 'missing' as WorkspaceId }))
@@ -236,7 +289,7 @@ describe('WorkspaceController follow', () => {
         operation: 'put',
         value: {
           initialized: true,
-          workspaceIds: ['missing'],
+          workspaceIds: ['missing'], sections: [], layoutRevision: 1,
           archivedSessionIds: [],
         },
       })
@@ -249,16 +302,14 @@ describe('WorkspaceController follow', () => {
     const iterator = controller.follow(abort.signal)[Symbol.asyncIterator]()
     await expect(nextFrame(iterator)).resolves.toEqual({
       type: 'baseline',
-      value: { items: [], archivedSessionIds: [] },
+      value: { items: [], archivedSessionIds: [], layout: { revision: 0, workspaceIds: [], sections: [] } },
     })
 
     const first = await controller.create({ path: stageDir(root, 'first') })
     await expect(nextFrame(iterator)).resolves.toMatchObject({
       type: 'upsert', workspace: { workspaceId: first.workspace.workspaceId },
     })
-    await expect(nextFrame(iterator)).resolves.toEqual({
-      type: 'order', workspaceIds: [first.workspace.workspaceId],
-    })
+    await expect(nextFrame(iterator)).resolves.toEqual({ type: 'layout', layout: { workspaceIds: [first.workspace.workspaceId], sections: [], revision: expect.any(Number) as number } })
     await controller.rename({ workspaceId: first.workspace.workspaceId, title: 'renamed' })
     await expect(nextFrame(iterator)).resolves.toMatchObject({
       type: 'upsert', workspace: { title: 'renamed' },
@@ -268,17 +319,12 @@ describe('WorkspaceController follow', () => {
     await expect(nextFrame(iterator)).resolves.toMatchObject({
       type: 'upsert', workspace: { workspaceId: second.workspace.workspaceId },
     })
-    await expect(nextFrame(iterator)).resolves.toEqual({
-      type: 'order', workspaceIds: [second.workspace.workspaceId, first.workspace.workspaceId],
-    })
+    await expect(nextFrame(iterator)).resolves.toEqual({ type: 'layout', layout: { workspaceIds: [second.workspace.workspaceId, first.workspace.workspaceId], sections: [], revision: expect.any(Number) as number } })
     await controller.insertBefore({
       workspaceId: first.workspace.workspaceId,
       beforeWorkspaceId: second.workspace.workspaceId,
     })
-    await expect(nextFrame(iterator)).resolves.toEqual({
-      type: 'order',
-      workspaceIds: [first.workspace.workspaceId, second.workspace.workspaceId],
-    })
+    await expect(nextFrame(iterator)).resolves.toEqual({ type: 'layout', layout: { workspaceIds: [first.workspace.workspaceId, second.workspace.workspaceId], sections: [], revision: expect.any(Number) as number } })
 
     const session = ctx.sessions.create(SessionId('archived'), {
       meta: { cwd: first.workspace.path },
@@ -289,11 +335,9 @@ describe('WorkspaceController follow', () => {
     })
     await controller.delete({ workspaceId: second.workspace.workspaceId })
     await expect(nextFrame(iterator)).resolves.toEqual({
-      type: 'order', workspaceIds: [first.workspace.workspaceId],
-    })
-    await expect(nextFrame(iterator)).resolves.toEqual({
       type: 'remove', workspaceId: second.workspace.workspaceId,
     })
+    await expect(nextFrame(iterator)).resolves.toEqual({ type: 'layout', layout: { workspaceIds: [first.workspace.workspaceId], sections: [], revision: expect.any(Number) as number } })
 
     abort.abort()
     await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
@@ -321,7 +365,7 @@ describe('WorkspaceController follow', () => {
     await expect(pending).resolves.toMatchObject({ value: { type: 'upsert' } })
     await expect(iterator.next()).resolves.toEqual({
       done: false,
-      value: { type: 'order', workspaceIds: [created.workspace.workspaceId] },
+      value: { type: 'layout', layout: { workspaceIds: [created.workspace.workspaceId], sections: [], revision: expect.any(Number) as number } },
     })
 
     const closing = iterator.next()

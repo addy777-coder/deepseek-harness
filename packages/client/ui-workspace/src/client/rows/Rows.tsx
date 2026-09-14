@@ -1,11 +1,12 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only. Row ... menus are visual-only
- * except workspace Rename/Delete and session Rename/Fork/Archive; the session
- * and workspace hover cards are suppressed while a menu is open.
+ * time->ellipsis, action buttons) are CSS-only. Row menus expose section placement,
+ * ordering, rename, fork, archive, and project deletion callbacks. Hover cards
+ * stay suppressed while a menu is open.
  */
 import { useState } from 'react'
+import type { SidebarSection, SidebarSectionId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
@@ -85,9 +86,43 @@ export interface RowDragProps {
 }
 
 /** Drag lifecycle owned by a workspace row; its enclosing group owns hit testing. */
-interface WorkspaceRowDragProps {
+export interface WorkspaceRowDragProps {
   start: () => void
   end: () => void
+}
+
+/** Section placement and keyboard reordering supplied by the browsing owner. */
+export interface PlacementActions {
+  sections: readonly SidebarSection[]
+  current: SidebarSectionId | null
+  move: (sectionId: SidebarSectionId | null) => void
+  up?: (() => void) | undefined
+  down?: (() => void) | undefined
+}
+
+function placementItems(placement: PlacementActions | undefined, t: RowTranslate) {
+  if (placement === undefined) return []
+  return [
+    { id: 'section-move', label: t('section.move'), disabled: placement.sections.length === 0,
+      submenu: placement.sections.map(section => ({
+        id: `section:${section.id}`, label: section.title, disabled: section.id === placement.current,
+      })) },
+    { id: 'section-restore', label: t('section.restore'), disabled: placement.current === null },
+    { id: 'section-up', label: t('section.moveUp'), disabled: placement.up === undefined },
+    { id: 'section-down', label: t('section.moveDown'), disabled: placement.down === undefined },
+  ]
+}
+
+function selectPlacement(id: string, placement: PlacementActions | undefined): void {
+  if (placement === undefined) return
+  if (id === 'section-restore') placement.move(null)
+  // Menu emits ordering keys only while their callbacks are present and enabled.
+  else if (id === 'section-up') (placement.up as () => void)()
+  else if (id === 'section-down') (placement.down as () => void)()
+  else {
+    const section = placement.sections.find(candidate => `section:${candidate.id}` === id)
+    if (section !== undefined) placement.move(section.id)
+  }
 }
 
 /** Pointer-position half of a row (insert line above or below). */
@@ -109,7 +144,7 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
+export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, placement, home, t }: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
@@ -117,6 +152,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   actions?: { rename: () => void; delete: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
+  placement?: PlacementActions | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
   t: RowTranslate
@@ -128,6 +164,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
+    ...placementItems(placement, t),
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
   const ownRow = (
@@ -135,6 +172,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
       role="treeitem"
       aria-expanded={row.expanded}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onToggle() } }}
       onClick={onToggle}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
@@ -163,6 +202,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
             items={workspaceMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
+              selectPlacement(id, placement)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
               /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
@@ -375,7 +415,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
+export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, placement, flat = false, t }: {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -388,6 +428,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   onArchive: (id: SessionNode['id']) => void
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
+  placement?: PlacementActions | undefined
   /** The row is rendered without a parent Workspace header. */
   flat?: boolean | undefined
   t: RowTranslate
@@ -405,6 +446,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   const sessionMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
+    ...placementItems(placement, t),
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
   ]
@@ -418,6 +460,9 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       )}
       role="treeitem"
       aria-selected={selected}
+      data-session-id={node.id}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(node.id) } }}
       onClick={() => { onOpen(node.id) }}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
@@ -433,6 +478,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
         : (e) => {
           if (!drag.active) return
           e.preventDefault()
+          e.stopPropagation()
           e.dataTransfer.dropEffect = 'move'
           drag.hover(rowHalf(e))
         }}
@@ -441,6 +487,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
         : (e) => {
           if (!drag.active) return
           e.preventDefault()
+          e.stopPropagation()
           drag.drop(rowHalf(e))
         }}
     >
@@ -470,6 +517,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
+              selectPlacement(id, placement)
             }}
             portal
             closeOnPointerLeave

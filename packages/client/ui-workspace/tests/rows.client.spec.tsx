@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
-import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SidebarSectionId, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -16,6 +16,57 @@ const t = makeTranslate(zh, commonZh) as never
 
 const sid = (id: string) => id as SessionId
 const wid = (id: string) => id as WorkspaceId
+
+describe('sidebar row keyboard and placement actions', () => {
+  const node: SessionNode = { id: sid('session'), title: 'Session', blank: false, running: false,
+    runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0 }
+  const group: GroupNode = { key: 'project', workspaceId: wid('project'), cwd: '/project', createdAt: 0,
+    label: 'Project', sessionCount: 0, expanded: true, containsCurrent: false, sessions: [] }
+
+  it('opens rows from Enter/Space while leaving child controls and other keys independent', () => {
+    const onOpen = vi.fn()
+    const onToggle = vi.fn()
+    render(<><ProjectRowItem group={group} onToggle={onToggle} onCreate={vi.fn()} t={t}
+      actions={{ rename: vi.fn(), delete: vi.fn() }} />
+    <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen} onRename={vi.fn()}
+      onFork={vi.fn()} onArchive={vi.fn()} t={t} /></>)
+    const rows = screen.getAllByRole('treeitem')
+    for (const row of rows) {
+      fireEvent.keyDown(row, { key: 'Enter' })
+      fireEvent.keyDown(row, { key: ' ' })
+      fireEvent.keyDown(row, { key: 'ArrowDown' })
+      fireEvent.keyDown(row.querySelector('button') as HTMLButtonElement, { key: 'Enter' })
+    }
+    expect(onOpen).toHaveBeenCalledTimes(2)
+    expect(onToggle).toHaveBeenCalledTimes(2)
+  })
+
+  it('moves to a chosen section, restores default placement, and orders through the row menu', () => {
+    const move = vi.fn()
+    const up = vi.fn()
+    const down = vi.fn()
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} placement={{
+        sections: [
+          { id: 'first' as SidebarSectionId, title: 'First', workspaceIds: [], sessionIds: [] },
+          { id: 'second' as SidebarSectionId, title: 'Second', workspaceIds: [], sessionIds: [] },
+        ],
+        current: 'first' as SidebarSectionId, move, up, down,
+      }} />)
+    const open = (): void => { fireEvent.click(screen.getByRole('button', { name: '会话“Session”的操作' })) }
+    open()
+    fireEvent.focus(screen.getByRole('menuitem', { name: '移动到分区' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Second' }))
+    expect(move).toHaveBeenCalledWith('second')
+    for (const name of ['恢复默认位置', '上移', '下移']) {
+      open()
+      fireEvent.click(screen.getByRole('menuitem', { name }))
+    }
+    expect(move).toHaveBeenLastCalledWith(null)
+    expect(up).toHaveBeenCalledOnce()
+    expect(down).toHaveBeenCalledOnce()
+  })
+})
 
 /** Half detection reads the row rect; jsdom rects are all-zero by default. */
 function stubRect(row: HTMLElement): void {

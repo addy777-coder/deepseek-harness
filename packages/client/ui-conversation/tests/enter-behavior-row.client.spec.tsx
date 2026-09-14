@@ -23,7 +23,7 @@ function emptySessions() {
 }
 
 function emptyWorkspaces() {
-  return bindSnapshotSelector(createSnapshotStore<WorkspaceSnapshot>({
+  return bindSnapshotSelector(createSnapshotStore<WorkspaceSnapshot>({ layout: { revision: 0, workspaceIds: [], sections: [] },
     items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
   }))
 }

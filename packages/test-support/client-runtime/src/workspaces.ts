@@ -29,6 +29,53 @@ type WorkspaceStub<Key extends WorkspaceAction> = (
  * richer behavior replace them via {@link TestWorkspaces.stub}.
  */
 export class TestWorkspaces implements IWorkspaces {
+  async createSection(request: Parameters<IWorkspaces['createSection']>[0]): ReturnType<IWorkspaces['createSection']> {
+    this.calls.push({ method: 'createSection', args: [request] })
+    const stub = this.stubs.get('createSection')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['createSection']>)
+    const layout = this.list.getSnapshot().layout
+    return { sectionId: 'test-section' as import('@deepseek-ai/dsh-api-workspace-controller/client').SidebarSectionId, layout }
+  }
+
+  async renameSection(request: Parameters<IWorkspaces['renameSection']>[0]): ReturnType<IWorkspaces['renameSection']> {
+    this.calls.push({ method: 'renameSection', args: [request] })
+    const stub = this.stubs.get('renameSection')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['renameSection']>)
+    const layout = this.list.getSnapshot().layout
+    return layout
+  }
+
+  async deleteSection(request: Parameters<IWorkspaces['deleteSection']>[0]): ReturnType<IWorkspaces['deleteSection']> {
+    this.calls.push({ method: 'deleteSection', args: [request] })
+    const stub = this.stubs.get('deleteSection')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['deleteSection']>)
+    const layout = this.list.getSnapshot().layout
+    return layout
+  }
+
+  async insertSectionBefore(request: Parameters<IWorkspaces['insertSectionBefore']>[0]): ReturnType<IWorkspaces['insertSectionBefore']> {
+    this.calls.push({ method: 'insertSectionBefore', args: [request] })
+    const stub = this.stubs.get('insertSectionBefore')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['insertSectionBefore']>)
+    const layout = this.list.getSnapshot().layout
+    return layout
+  }
+
+  async moveWorkspaceToSection(request: Parameters<IWorkspaces['moveWorkspaceToSection']>[0]): ReturnType<IWorkspaces['moveWorkspaceToSection']> {
+    this.calls.push({ method: 'moveWorkspaceToSection', args: [request] })
+    const stub = this.stubs.get('moveWorkspaceToSection')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['moveWorkspaceToSection']>)
+    const layout = this.list.getSnapshot().layout
+    return layout
+  }
+
+  async moveSessionToSection(request: Parameters<IWorkspaces['moveSessionToSection']>[0]): ReturnType<IWorkspaces['moveSessionToSection']> {
+    this.calls.push({ method: 'moveSessionToSection', args: [request] })
+    const stub = this.stubs.get('moveSessionToSection')
+    if (stub !== undefined) return await (stub(request) as ReturnType<IWorkspaces['moveSessionToSection']>)
+    const layout = this.list.getSnapshot().layout
+    return layout
+  }
   /** The useWorkspaces standard feed. */
   readonly list: SnapshotStore<WorkspaceFixtureSnapshot>
 

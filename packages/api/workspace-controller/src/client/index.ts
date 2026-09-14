@@ -17,7 +17,7 @@ export type {
 } from './model.ts'
 export { WorkspaceController, WorkspaceCreateError } from './service.ts'
 export type { IWorkspaces, WorkspaceSource } from './service.ts'
-export type { WorkspaceId, WorkspaceView } from '../types.ts'
+export type { SidebarSectionId, SidebarSection, WorkspaceLayout, WorkspaceId, WorkspaceView } from '../types.ts'
 
 type WorkspaceBaselineFrame = Extract<WorkspaceFollowFrame, { type: 'baseline' }>
 
@@ -101,8 +101,8 @@ function acceptIncrement(accept: WorkspaceFollowSink, frame: WorkspaceFollowIncr
     case 'remove':
       accept.removeView(frame.workspaceId)
       return
-    case 'order':
-      accept.replaceOrder(frame.workspaceIds)
+    case 'layout':
+      accept.replaceLayout(frame.layout)
       return
     case 'archived':
       accept.replaceArchived(frame.archivedSessionIds)

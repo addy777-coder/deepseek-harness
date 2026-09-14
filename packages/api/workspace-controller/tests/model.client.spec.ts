@@ -3,6 +3,9 @@ import {
   ClientWorkspaceModel, type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
+  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
+  SessionSectionMoveRequest, WorkspaceLayout,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -21,8 +24,108 @@ import type {
 import { RemoteError, type RemoteFailure, type RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+
+function layout(workspaceIds: readonly WorkspaceId[] = [], revision = 0): WorkspaceLayout {
+  return { revision, workspaceIds, sections: [] }
+}
+
 const sid = (id: string): SessionId => id as SessionId
 const wid = (id: string): WorkspaceId => id as WorkspaceId
+
+describe('Workspace section command generations', () => {
+  const invocations = [
+    (model: ClientWorkspaceModel) => model.renameSection({ sectionId: 'one' as SidebarSectionRequest['sectionId'], title: 'Name' }),
+    (model: ClientWorkspaceModel) => model.deleteSection({ sectionId: 'one' as SidebarSectionRequest['sectionId'] }),
+    (model: ClientWorkspaceModel) => model.insertSectionBefore({ sectionId: 'one' as SidebarSectionRequest['sectionId'] }),
+    (model: ClientWorkspaceModel) => model.moveWorkspaceToSection({ workspaceId: wid('one'), sectionId: null }),
+    (model: ClientWorkspaceModel) => model.moveSessionToSection({ sessionId: sid('one'), sectionId: null }),
+  ]
+  it.each(invocations.map((invoke, index) => ({ index, invoke })))('keeps the committed layout on failed or pre-reconnect command $index', async ({ invoke }) => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model)
+    const configure = (reply: Promise<RemoteResult<WorkspaceLayout>>): void => {
+      remote.onRenameSection = () => reply
+      remote.onDeleteSection = () => reply
+      remote.onInsertSectionBefore = () => reply
+      remote.onMoveWorkspaceToSection = () => reply
+      remote.onMoveSessionToSection = () => reply
+    }
+    configure(Promise.resolve(workspaceError(new RemoteError('workspace/section-invalid', 'invalid', { reason: 'invalid' }))))
+    await expect(invoke(model)).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot().layout.revision).toBe(0)
+    const gate = deferred<RemoteResult<WorkspaceLayout>>()
+    configure(gate.promise)
+    const pending = invoke(model)
+    model.replaceBaseline({ items: [], archivedSessionIds: [], layout: layout([], 4) })
+    gate.resolve(remoteOk(layout([], 99)))
+    await pending
+    expect(model.getSnapshot().layout.revision).toBe(4)
+    configure(Promise.resolve(remoteOk(layout([], 5))))
+    await invoke(model)
+    expect(model.getSnapshot().layout.revision).toBe(5)
+  })
+
+  it('ignores a section creation receipt from an earlier baseline and preserves failed creation state', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model)
+    remote.onCreateSection = () => Promise.resolve(workspaceError(new RemoteError('workspace/section-invalid', 'invalid', { reason: 'invalid' })))
+    await expect(model.createSection({ title: '' })).resolves.toMatchObject({ ok: false })
+    const gate = deferred<RemoteResult<SidebarSectionCreateValue>>()
+    remote.onCreateSection = () => gate.promise
+    const pending = model.createSection({ title: 'Late' })
+    baseline(model)
+    gate.resolve(remoteOk({ sectionId: 'late' as SidebarSectionRequest['sectionId'], layout: layout([], 99) }))
+    await pending
+    expect(model.getSnapshot().layout.revision).toBe(0)
+  })
+})
+
+describe('ClientWorkspaceModel section layout receipts', () => {
+  it('keeps a newer layout when older create/rename receipts arrive after deletion', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model)
+    const created = deferred<RemoteResult<SidebarSectionCreateValue>>()
+    const renamed = deferred<RemoteResult<WorkspaceLayout>>()
+    remote.onCreateSection = () => created.promise
+    remote.onRenameSection = () => renamed.promise
+    const sectionId = 'section' as SidebarSectionCreateValue['sectionId']
+    const pendingCreate = model.createSection({ title: 'Section' })
+    const newer = { revision: 2, workspaceIds: [], sections: [{ id: sectionId, title: 'Renamed', workspaceIds: [], sessionIds: [] }] }
+    model.replaceLayout(newer)
+    created.resolve(remoteOk({ sectionId, layout: { ...newer, revision: 1 } }))
+    await pendingCreate
+    expect(model.getSnapshot().layout).toEqual(newer)
+    const pendingRename = model.renameSection({ sectionId, title: 'Again' })
+    remote.onDeleteSection = () => Promise.resolve(remoteOk(layout([], 4)))
+    await model.deleteSection({ sectionId })
+    renamed.resolve(remoteOk({ ...newer, revision: 3 }))
+    await pendingRename
+    expect(model.getSnapshot().layout).toEqual(layout([], 4))
+  })
+
+  it('fences pre-reconnect receipts and leaves failed placements unchanged', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model)
+    const reply = deferred<RemoteResult<WorkspaceLayout>>()
+    remote.onMoveSessionToSection = () => reply.promise
+    const pending = model.moveSessionToSection({ sessionId: sid('one'), sectionId: null })
+    model.handleCarrierFailure()
+    model.replaceBaseline({ items: [], archivedSessionIds: [], layout: layout([], 8) })
+    reply.resolve(remoteOk(layout([], 99)))
+    await pending
+    expect(model.getSnapshot().layout.revision).toBe(8)
+    remote.onMoveWorkspaceToSection = () => Promise.resolve(workspaceError(new RemoteError('workspace/section-invalid', 'invalid', { reason: 'invalid' })))
+    await expect(model.moveWorkspaceToSection({ workspaceId: wid('one'), sectionId: null })).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot().layout.revision).toBe(8)
+    remote.onInsertSectionBefore = () => Promise.resolve(remoteOk(layout([], 9)))
+    await model.insertSectionBefore({ sectionId: 'section' as SidebarSectionCreateValue['sectionId'] })
+    expect(model.getSnapshot().layout.revision).toBe(9)
+  })
+})
 
 function workspace(
   id: string,
@@ -64,17 +167,59 @@ function deferred<T>(): Deferred<T> {
 }
 
 class FakeWorkspaceRemote implements WorkspaceRemote {
+  onCreateSection: (request: SidebarSectionCreateRequest) => Promise<RemoteResult<SidebarSectionCreateValue>> =
+    () => Promise.resolve(remoteOk({ sectionId: 'section' as SidebarSectionCreateValue['sectionId'], layout: layout([], 1) }))
+  createSection(request: SidebarSectionCreateRequest): Promise<RemoteResult<SidebarSectionCreateValue>> {
+    this.record('createSection', request)
+    return this.onCreateSection(request)
+  }
+
+  onRenameSection: (request: SidebarSectionRenameRequest) => Promise<RemoteResult<WorkspaceLayout>> =
+    () => Promise.resolve(remoteOk(layout([], 1)))
+  renameSection(request: SidebarSectionRenameRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    this.record('renameSection', request)
+    return this.onRenameSection(request)
+  }
+
+  onDeleteSection: (request: SidebarSectionRequest) => Promise<RemoteResult<WorkspaceLayout>> =
+    () => Promise.resolve(remoteOk(layout([], 1)))
+  deleteSection(request: SidebarSectionRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    this.record('deleteSection', request)
+    return this.onDeleteSection(request)
+  }
+
+  onInsertSectionBefore: (request: SidebarSectionInsertBeforeRequest) => Promise<RemoteResult<WorkspaceLayout>> =
+    () => Promise.resolve(remoteOk(layout([], 1)))
+  insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    this.record('insertSectionBefore', request)
+    return this.onInsertSectionBefore(request)
+  }
+
+  onMoveWorkspaceToSection: (request: WorkspaceSectionMoveRequest) => Promise<RemoteResult<WorkspaceLayout>> =
+    () => Promise.resolve(remoteOk(layout([], 1)))
+  moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    this.record('moveWorkspaceToSection', request)
+    return this.onMoveWorkspaceToSection(request)
+  }
+
+  onMoveSessionToSection: (request: SessionSectionMoveRequest) => Promise<RemoteResult<WorkspaceLayout>> =
+    () => Promise.resolve(remoteOk(layout([], 1)))
+  moveSessionToSection(request: SessionSectionMoveRequest): Promise<RemoteResult<WorkspaceLayout>> {
+    this.record('moveSessionToSection', request)
+    return this.onMoveSessionToSection(request)
+  }
+
   readonly calls: Array<{ readonly method: string; readonly request: unknown }> = []
   onCreate: (request: WorkspaceCreateRequest) => Promise<RemoteResult<WorkspaceCreateValue>> = request =>
-    Promise.resolve(remoteOk({ workspace: workspace(request.path.split('/').pop() ?? 'workspace'), created: true }))
+    Promise.resolve(remoteOk({ workspace: workspace(request.path.split('/').pop() ?? 'workspace'), created: true, layout: layout([], 1) }))
   onRename: (request: WorkspaceRenameRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
     Promise.resolve(remoteOk({ workspace: { ...workspace(String(request.workspaceId)), title: request.title } }))
   onDelete: (_request: WorkspaceDeleteRequest) => Promise<RemoteResult<WorkspaceDeleteValue>> = () =>
-    Promise.resolve(remoteOk({ deleted: true }))
+    Promise.resolve(remoteOk({ deleted: true, layout: layout([], 2) }))
   onInsertBefore: (
     request: WorkspaceInsertBeforeRequest,
   ) => Promise<RemoteResult<WorkspaceOrderValue>> = request =>
-    Promise.resolve(remoteOk({ workspaceIds: [request.workspaceId] }))
+    Promise.resolve(remoteOk(layout([request.workspaceId], 1)))
   onInsertSessionBefore: (
     request: WorkspaceInsertSessionBeforeRequest,
   ) => Promise<RemoteResult<WorkspaceValue>> = request => Promise.resolve(remoteOk({
@@ -131,7 +276,7 @@ function baseline(
   items: readonly WorkspaceView[] = [],
   archivedSessionIds: readonly SessionId[] = [],
 ): void {
-  model.replaceBaseline({ items, archivedSessionIds })
+  model.replaceBaseline({ items, archivedSessionIds, layout: layout(items.map(item => item.workspaceId)) })
 }
 
 describe('ClientWorkspaceModel', () => {
@@ -140,7 +285,7 @@ describe('ClientWorkspaceModel', () => {
     expect(model.getSnapshot()).toMatchObject({ phase: 'pending', state: 'loading' })
     baseline(model, [workspace('old'), workspace('kept')])
     model.upsertView(workspace('new'))
-    model.replaceOrder([wid('kept'), wid('new'), wid('old')])
+    model.replaceLayout(layout([wid('kept'), wid('new'), wid('old')], model.getSnapshot().layout.revision + 1))
     model.replaceArchived([sid('hidden')])
     model.removeView(wid('old'))
     expect(model.getSnapshot()).toMatchObject({ phase: 'ready', state: 'idle', archivedSessionIds: ['hidden'] })
@@ -173,13 +318,14 @@ describe('ClientWorkspaceModel', () => {
     remote.onCreate = request => Promise.resolve(remoteOk({
       workspace: workspace('created', [], '2026-02-01T00:00:00.000Z'),
       created: request.path === '/w/created',
+      layout: layout([wid('created')], 1),
     }))
     await expect(model.create({ path: '/w/created' })).resolves.toMatchObject({ ok: true })
     expect(remote.calls).toContainEqual({ method: 'create', request: { path: '/w/created' } })
     expect(model.getSnapshot().items[0]?.workspaceId).toBe('created')
   })
 
-  it('lets newer stream order outrank unary echoes and rolls failures back', async () => {
+  it('accepts newer stream layouts and preserves them after a refused command', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)
     baseline(model, [workspace('one'), workspace('two'), workspace('three')])
@@ -187,9 +333,9 @@ describe('ClientWorkspaceModel', () => {
     const gate = deferred<RemoteResult<WorkspaceOrderValue>>()
     remote.onInsertBefore = () => gate.promise
     const pending = model.insertBefore(wid('three'), wid('one'))
-    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['three', 'one', 'two'])
-    model.replaceOrder([wid('one'), wid('three'), wid('two')])
-    gate.resolve(remoteOk({ workspaceIds: [wid('three'), wid('one'), wid('two')] }))
+    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
+    model.replaceLayout(layout([wid('one'), wid('three'), wid('two')], 2))
+    gate.resolve(remoteOk(layout([wid('three'), wid('one'), wid('two')], 1)))
     await pending
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'three', 'two'])
 
@@ -197,12 +343,12 @@ describe('ClientWorkspaceModel', () => {
       new RemoteError('workspace/not-found', 'gone', { workspaceId: wid('three') }),
     ))
     const rejected = model.insertBefore(wid('three'))
-    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
+    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'three', 'two'])
     await expect(rejected).resolves.toMatchObject({ ok: false })
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'three', 'two'])
   })
 
-  it('keeps a newer optimistic reorder when an older refused call settles', async () => {
+  it('waits for a committed reorder while overlapping calls settle', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)
     baseline(model, [workspace('one'), workspace('two'), workspace('three')])
@@ -217,12 +363,12 @@ describe('ClientWorkspaceModel', () => {
       new RemoteError('workspace/not-found', 'first refused', { workspaceId: wid('three') }),
     ))
     await expect(first).resolves.toMatchObject({ ok: false })
-    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['two', 'three', 'one'])
-    secondGate.resolve(remoteOk({ workspaceIds: [wid('two'), wid('three'), wid('one')] }))
+    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
+    secondGate.resolve(remoteOk(layout([wid('two'), wid('three'), wid('one')], 1)))
     await expect(second).resolves.toMatchObject({ ok: true })
   })
 
-  it('rolls overlapping rejected reorders back to the last Host order', async () => {
+  it('keeps the last Host layout when overlapping reorders reject', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)
     baseline(model, [workspace('one'), workspace('two'), workspace('three')])
@@ -233,10 +379,10 @@ describe('ClientWorkspaceModel', () => {
 
     const first = model.insertBefore(wid('three'), wid('one'))
     const second = model.insertBefore(wid('two'), wid('three'))
-    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['two', 'three', 'one'])
+    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
     firstGate.resolve(workspaceError(new RemoteError('workspace/not-found', 'first rejected', { workspaceId: wid('three') })))
     await expect(first).resolves.toMatchObject({ ok: false })
-    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['two', 'three', 'one'])
+    expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
     secondGate.resolve(workspaceError(new RemoteError('workspace/not-found', 'second rejected', { workspaceId: wid('two') })))
     await expect(second).resolves.toMatchObject({ ok: false })
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two', 'three'])
@@ -319,11 +465,11 @@ describe('ClientWorkspaceModel', () => {
     model.upsertView(workspace('one', [sid('new')], '2026-03-01T00:00:00.000Z'))
     expect(model.getSnapshot().items[0]?.sessionIds).toEqual(['new'])
 
-    model.replaceOrder([wid('one')])
+    model.replaceLayout(layout([wid('one')], model.getSnapshot().layout.revision + 1))
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two'])
-    model.replaceOrder([wid('two')])
+    model.replaceLayout(layout([wid('two')], model.getSnapshot().layout.revision + 1))
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['two', 'one'])
-    model.replaceOrder([wid('one')])
+    model.replaceLayout(layout([wid('one')], model.getSnapshot().layout.revision + 1))
     expect(model.getSnapshot().items.map(item => item.workspaceId)).toEqual(['one', 'two'])
 
     await expect(model.insertBefore(wid('one'), wid('one'))).resolves.toMatchObject({ ok: true })

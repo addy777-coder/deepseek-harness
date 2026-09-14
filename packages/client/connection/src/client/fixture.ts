@@ -36,6 +36,8 @@ import type { SettingsDescribeValue, SettingsNamespaceView } from '@deepseek-ai/
 import { deriveEventMessage, foldSurface } from '@deepseek-ai/dsh-session/surface'
 import type { RpcResult } from './api.ts'
 import { randomUuid } from './random-uuid.ts'
+import { createFixtureSections } from './fixture-sections.ts'
+import type { FixtureWorkspaceId as WorkspaceId, FixtureWorkspaceLayout } from './fixture-sections.ts'
 import type {
   ClientConnectionRpc, ConnectionRpcFailure, ConnectionRpcResult,
 } from '../rpc.ts'
@@ -291,7 +293,6 @@ interface FixtureSessionApi {
   cancel(request: { readonly sessionId: SessionId }): Promise<ConnectionRpcResult<unknown>>
 }
 
-type WorkspaceId = string & { readonly __fixtureWorkspaceId: 'WorkspaceId' }
 
 interface WorkspaceView {
   readonly workspaceId: WorkspaceId
@@ -303,16 +304,16 @@ interface WorkspaceView {
 }
 
 interface WorkspaceCreateRequest { readonly path: string }
-interface WorkspaceCreateValue { readonly workspace: WorkspaceView; readonly created: boolean }
+interface WorkspaceCreateValue { readonly workspace: WorkspaceView; readonly created: boolean; readonly layout: FixtureWorkspaceLayout }
 interface WorkspaceRenameRequest { readonly workspaceId: WorkspaceId; readonly title: string }
 interface WorkspaceValue { readonly workspace: WorkspaceView }
 interface WorkspaceDeleteRequest { readonly workspaceId: WorkspaceId }
-interface WorkspaceDeleteValue { readonly deleted: true }
+interface WorkspaceDeleteValue { readonly deleted: true; readonly layout: FixtureWorkspaceLayout }
 interface WorkspaceInsertBeforeRequest {
   readonly workspaceId: WorkspaceId
   readonly beforeWorkspaceId?: WorkspaceId
 }
-interface WorkspaceOrderValue { readonly workspaceIds: readonly WorkspaceId[] }
+type WorkspaceOrderValue = FixtureWorkspaceLayout
 interface WorkspaceInsertSessionBeforeRequest {
   readonly workspaceId: WorkspaceId
   readonly sessionId: SessionId
@@ -327,11 +328,12 @@ type WorkspaceFollowFrame =
     readonly value: {
       readonly items: readonly WorkspaceView[]
       readonly archivedSessionIds: readonly SessionId[]
+      readonly layout: FixtureWorkspaceLayout
     }
   }
   | { readonly type: 'upsert'; readonly workspace: WorkspaceView }
   | { readonly type: 'remove'; readonly workspaceId: WorkspaceId }
-  | { readonly type: 'order'; readonly workspaceIds: readonly WorkspaceId[] }
+  | { readonly type: 'layout'; readonly layout: FixtureWorkspaceLayout }
   | { readonly type: 'archived'; readonly archivedSessionIds: readonly SessionId[] }
 
 interface FixtureWorkspaceApi {
@@ -1925,6 +1927,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   // Registry-global archive set mirroring the host: archived sessions keep
   // their workspace accounting slot and only grouping surfaces hide them.
   const archivedSessionIds: SessionId[] = []
+  const sidebar = createFixtureSections(workspaces,
+    (id) => { const session = summaryOf(id); return session === undefined ? undefined : session.origin ?? 'ordinary' },
+    (layout) =>{  emitWorkspace({ type: 'layout', layout }) })
   const workspaceSnapshot = (workspace: FixtureWorkspace): WorkspaceView => ({
     ...workspace,
     sessionIds: [...workspace.sessionIds],
@@ -1934,6 +1939,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     value: {
       items: workspaces.map(workspaceSnapshot),
       archivedSessionIds: [...archivedSessionIds],
+      layout: sidebar.snapshot(),
     },
   })
 
@@ -3262,7 +3268,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     create: (request) => {
       const existing = workspaces.find(workspace => workspace.path === request.path)
       if (existing !== undefined) {
-        return sessionOk({ workspace: workspaceSnapshot(existing), created: false })
+        return sessionOk({ workspace: workspaceSnapshot(existing), created: false, layout: sidebar.snapshot() })
       }
       const now = new Date().toISOString()
       const created: FixtureWorkspace = {
@@ -3276,7 +3282,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       workspaces.unshift(created)
       const workspace = workspaceSnapshot(created)
       emitWorkspace({ type: 'upsert', workspace })
-      return sessionOk({ workspace, created: true })
+      return sessionOk({ workspace, created: true, layout: sidebar.commit() })
     },
     rename: (request) => {
       const workspace = workspaces.find(candidate => candidate.workspaceId === request.workspaceId)
@@ -3319,8 +3325,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         })
       }
       workspaces.splice(index, 1)
+      sidebar.removeWorkspace(request.workspaceId)
       emitWorkspace({ type: 'remove', workspaceId: request.workspaceId })
-      return sessionOk({ deleted: true })
+      return sessionOk({ deleted: true, layout: sidebar.commit() })
     },
     insertBefore: (request) => {
       const source = workspaces.findIndex(workspace => workspace.workspaceId === request.workspaceId)
@@ -3349,13 +3356,10 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           : workspaces.findIndex(candidate => candidate.workspaceId === request.beforeWorkspaceId)
         workspaces.splice(at, 0, workspace)
         if (workspaces.some((candidate, index) => candidate.workspaceId !== previousOrder[index])) {
-          emitWorkspace({
-            type: 'order',
-            workspaceIds: workspaces.map(candidate => candidate.workspaceId),
-          })
+          sidebar.commit()
         }
       }
-      return sessionOk({ workspaceIds: workspaces.map(candidate => candidate.workspaceId) })
+      return sessionOk(sidebar.snapshot())
     },
     insertSessionBefore: (request) => {
       const workspace = workspaces.find(candidate => candidate.workspaceId === request.workspaceId)
@@ -3577,6 +3581,24 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         case '$events/result': return Promise.resolve(answerRemoteEvent(args as unknown as FixtureRemoteEventResult))
         case 'workspace/create': return workspaceApi.create(request as WorkspaceCreateRequest)
+        case 'workspace/createSection': return Promise.resolve(sidebar.createSection(
+          request as Parameters<typeof sidebar.createSection>[0],
+        ))
+        case 'workspace/renameSection': return Promise.resolve(sidebar.renameSection(
+          request as Parameters<typeof sidebar.renameSection>[0],
+        ))
+        case 'workspace/deleteSection': return Promise.resolve(sidebar.deleteSection(
+          request as Parameters<typeof sidebar.deleteSection>[0],
+        ))
+        case 'workspace/insertSectionBefore': return Promise.resolve(sidebar.insertSectionBefore(
+          request as Parameters<typeof sidebar.insertSectionBefore>[0],
+        ))
+        case 'workspace/moveWorkspaceToSection': return Promise.resolve(sidebar.moveWorkspaceToSection(
+          request as Parameters<typeof sidebar.moveWorkspaceToSection>[0],
+        ))
+        case 'workspace/moveSessionToSection': return Promise.resolve(sidebar.moveSessionToSection(
+          request as Parameters<typeof sidebar.moveSessionToSection>[0],
+        ))
         case 'workspace/rename': return workspaceApi.rename(request as WorkspaceRenameRequest)
         case 'workspace/delete': return workspaceApi.delete(request as WorkspaceDeleteRequest)
         case 'workspace/insertBefore': return workspaceApi.insertBefore(request as WorkspaceInsertBeforeRequest)

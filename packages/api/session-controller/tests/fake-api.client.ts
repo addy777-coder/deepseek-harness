@@ -159,6 +159,7 @@ export class FakeApiClient {
     projections: {},
   }
   workspaceBaseline: Extract<WorkspaceFollowFrame, { type: 'baseline' }>['value'] = {
+    layout: { revision: 0, workspaceIds: [], sections: [] },
     items: [],
     archivedSessionIds: [],
   }
@@ -172,17 +173,17 @@ export class FakeApiClient {
   onSubagentInterrupt: (payload: unknown) => Promise<RemoteResult<SubagentInterruptReceipt>>
     = () => Promise.resolve(ok({ accepted: true as const }))
 
-  onWorkspaceCreate: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView; created: boolean }>> =
-    () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws'), created: true }))
+  onWorkspaceCreate: (payload: unknown) => ReturnType<WorkspaceRemote['create']> =
+    () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws'), created: true, layout: this.workspaceBaseline.layout }))
 
   onWorkspaceRename: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
     () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws') }))
 
-  onWorkspaceDelete: (payload: unknown) => Promise<RemoteResult<{ deleted: true }>> =
-    () => Promise.resolve(ok({ deleted: true }))
+  onWorkspaceDelete: (payload: unknown) => ReturnType<WorkspaceRemote['delete']> =
+    () => Promise.resolve(ok({ deleted: true, layout: this.workspaceBaseline.layout }))
 
-  onWorkspaceInsertBefore: (payload: unknown) => Promise<RemoteResult<{ workspaceIds: WorkspaceId[] }>> =
-    () => Promise.resolve(ok({ workspaceIds: [] }))
+  onWorkspaceInsertBefore: (payload: unknown) => ReturnType<WorkspaceRemote['insertBefore']> =
+    () => Promise.resolve(ok(this.workspaceBaseline.layout))
 
   onWorkspaceInsertSessionBefore: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
     () => Promise.resolve(ok({ workspace: fakeWorkspace('fk-ws') }))
@@ -250,6 +251,12 @@ export class FakeApiClient {
         ),
       },
       workspace: {
+        createSection: () => Promise.resolve(ok({ sectionId: 'section' as never, layout: this.workspaceBaseline.layout })),
+        renameSection: () => Promise.resolve(ok(this.workspaceBaseline.layout)),
+        deleteSection: () => Promise.resolve(ok(this.workspaceBaseline.layout)),
+        insertSectionBefore: () => Promise.resolve(ok(this.workspaceBaseline.layout)),
+        moveWorkspaceToSection: () => Promise.resolve(ok(this.workspaceBaseline.layout)),
+        moveSessionToSection: () => Promise.resolve(ok(this.workspaceBaseline.layout)),
         create: payload => this.record('workspace.create', payload, this.onWorkspaceCreate(payload)),
         rename: payload => this.record('workspace.rename', payload, this.onWorkspaceRename(payload)),
         delete: payload => this.record('workspace.delete', payload, this.onWorkspaceDelete(payload)),

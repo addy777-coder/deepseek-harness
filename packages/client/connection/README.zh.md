@@ -29,6 +29,10 @@ Client 通过 `ctx.connection.rpc` 调用逻辑 channel。Web 页面使用 HTTP 
 
 -----
 
+### 独立浏览器夹具
+
+仅供浏览器开发的夹具模拟 Workspace 布局基线、带版本的更新和分区命令。项目与 Session 的归类保存在内存中，重新创建夹具时会重置；持久组织结构由 Host Workspace 注册表拥有。
+
 <a id="browser-authentication-and-request-trust"></a>
 ## Web 认证与请求信任
 

@@ -15,10 +15,34 @@ import type {} from '@deepseek-ai/dsh-typert-protocol'
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
 
+/** Stable identity of a user-created sidebar section. */
+export type SidebarSectionId = Branded<'SidebarSectionId'>
+
+/** Ordered navigation entries; Session membership and working directories are independent. */
+export interface SidebarSection {
+  readonly id: SidebarSectionId
+  readonly title: string
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sessionIds: readonly SessionId[]
+}
+
+/** One committed sidebar layout. Revisions increase across every layout mutation and rollback. */
+export interface WorkspaceLayout {
+  readonly revision: number
+  readonly workspaceIds: readonly WorkspaceId[]
+  readonly sections: readonly SidebarSection[]
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** No registration carries that Workspace identity. */
     'workspace/not-found': { readonly workspaceId: WorkspaceId }
+    /** No custom sidebar section carries this identity. */
+    'workspace/section-not-found': { readonly sectionId: SidebarSectionId }
+    /** Another sidebar section uses the trimmed title. */
+    'workspace/section-name-conflict': { readonly title: string }
+    /** A section title, member, or insertion anchor is invalid. */
+    'workspace/section-invalid': { readonly reason: string }
   }
 }
 

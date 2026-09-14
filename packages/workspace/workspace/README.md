@@ -59,6 +59,10 @@ await project.setTitle('Renamed')
 ctx.workspaceRegistry.list() // shows the project, newest first
 ```
 
+### Custom sidebar sections
+
+Create uniquely named sections, move projects or independent Sessions into them, and reorder each category. A project or independent Session has at most one custom section placement. Deleting a section restores its entries to default navigation; deleting a project removes its section entry but retains independently placed Sessions. The registry serializes these edits with project creation, deletion, and recovery and publishes only durable changes.
+
 ### Grouping sessions under a project
 
 A session joins the project of the directory it runs in: create a session in a project's directory and it appears under that project, newest first. A session can only belong to one project. A session whose directory cannot be validated — no recorded directory, or a moved or deleted folder — cannot join and stays ungrouped.
@@ -102,7 +106,7 @@ The API is one small family with two owners: `WorkspaceRegistry` creates, orders
 
 ### Durable shape
 
-The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, and the optional `pendingMutation` marker. Records written before `archivedSessionIds` existed parse with an empty set through the schema default.
+The registry opens the `workspace` domain (version 3): a `workspaces` table plus global project order, archive identities, custom sections, a monotonic layout revision, and an optional recovery marker. Each section holds separate ordered project and independent Session identities. Placement never changes a Session working directory or Workspace account. Earlier domain versions are rejected without clearing or migrating them.
 
 ### Lifecycle
 

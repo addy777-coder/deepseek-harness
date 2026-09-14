@@ -51,7 +51,7 @@ const sessionList = {
   currentAddress: undefined,
 }
 const attentionState: AttentionState = new Map()
-const workspaceState = {
+const workspaceState = { layout: { revision: 0, workspaceIds: [], sections: [] },
   items: [],
   archivedSessionIds: [],
   state: 'idle' as const,

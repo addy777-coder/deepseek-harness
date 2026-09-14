@@ -13,6 +13,7 @@ import type {
   WorkspaceBaseline,
   WorkspaceFollowFrame,
   WorkspaceView,
+  WorkspaceLayout,
 } from './types.ts'
 
 /**
@@ -46,15 +47,15 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
 /** Owns Workspace domain observation and all active follow generations. */
 export class WorkspaceFeed {
   private readonly followers = new Set<WorkspaceFollower>()
-  private knownIds: Set<string>
-  private order: readonly string[]
+  private readonly views = new Map<string, WorkspaceView>()
+  private layout: WorkspaceLayout
   private archived: readonly string[]
 
   /** @param ctx - Host context containing the authoritative Workspace registry. */
   constructor(private readonly ctx: Context) {
     const baseline = ctx.workspaceRegistry.list()
-    this.knownIds = new Set(baseline.map(workspace => String(workspace.id)))
-    this.order = baseline.map(workspace => String(workspace.id))
+    for (const workspace of baseline) this.views.set(workspace.id, workspaceView(workspace))
+    this.layout = structuredClone(ctx.workspaceRegistry.layout)
     this.archived = ctx.workspaceRegistry.archivedSessionIds.map(String)
     ctx.on('domain/changed', (change: DomainChanged) => { this.changed(change) })
     ctx.effect(() => () => {
@@ -69,8 +70,13 @@ export class WorkspaceFeed {
    */
   baseline(): WorkspaceBaseline {
     return {
-      items: this.ctx.workspaceRegistry.list().map(workspaceView),
+      items: this.layout.workspaceIds.map((id) => {
+        const view = this.views.get(id)
+        if (view === undefined) throw new Error(`Committed sidebar layout references missing Workspace "${id}"`)
+        return view
+      }),
       archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds],
+      layout: this.layout,
     }
   }
 
@@ -97,19 +103,19 @@ export class WorkspaceFeed {
     if (change.table === '') {
       if (change.operation !== 'put') return
       const state = workspaceDomainState.parse(change.value)
-      const nextOrder = state.workspaceIds.map(String)
-      const orderChanged = !sameStrings(this.order, nextOrder)
+      // A pending delete is committed by its table deletion, not by the preparatory global write.
+      if (state.pendingMutation !== undefined) return
       for (const id of state.workspaceIds) {
-        if (this.knownIds.has(id)) continue
+        if (this.views.has(id)) continue
         const workspace = this.ctx.workspaceRegistry.get(id)
         if (workspace === undefined) {
           throw new Error(`committed Workspace registry references missing Workspace "${id}"`)
         }
-        this.knownIds.add(id)
-        this.publish({ type: 'upsert', workspace: workspaceView(workspace) })
+        const view = workspaceView(workspace)
+        this.views.set(id, view)
+        this.publish({ type: 'upsert', workspace: view })
       }
-      this.order = nextOrder
-      if (orderChanged) this.publish({ type: 'order', workspaceIds: [...state.workspaceIds] })
+      this.publishLayout({ revision: state.layoutRevision, workspaceIds: state.workspaceIds, sections: state.sections })
       const nextArchived = state.archivedSessionIds.map(String)
       if (!sameStrings(this.archived, nextArchived)) {
         this.archived = nextArchived
@@ -119,15 +125,24 @@ export class WorkspaceFeed {
     }
     if (change.table !== 'workspaces') return
     if (change.operation === 'deleted') {
-      if (!this.knownIds.delete(change.key)) return
+      if (!this.views.delete(change.key)) return
       this.publish({ type: 'remove', workspaceId: WorkspaceId(change.key) })
+      this.publishLayout(this.ctx.workspaceRegistry.layout)
       return
     }
-    if (!this.knownIds.has(change.key)) return
+    if (!this.views.has(change.key)) return
+    const workspace = changedWorkspaceView(change.key, change.value)
+    this.views.set(change.key, workspace)
     this.publish({
       type: 'upsert',
-      workspace: changedWorkspaceView(change.key, change.value),
+      workspace,
     })
+  }
+
+  private publishLayout(layout: WorkspaceLayout): void {
+    if (layout.revision <= this.layout.revision) return
+    this.layout = structuredClone(layout)
+    this.publish({ type: 'layout', layout: this.layout })
   }
 
   private publish(frame: Exclude<WorkspaceFollowFrame, { readonly type: 'baseline' }>): void {

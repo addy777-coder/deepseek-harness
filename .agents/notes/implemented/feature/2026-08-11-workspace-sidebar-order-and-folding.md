@@ -14,9 +14,9 @@ Workspace groups themselves had no user-controlled durable order. Browser-native
 
 ### Workspace order
 
-The Workspace registry owns a durable `workspaceIds` order and exposes `insertBefore(id, beforeId?)` with DOM `insertBefore` semantics. The Host RPC `workspace.insertBefore` returns the complete committed order, and a pure order mutation emits `host/workspace-order-changed` with the same complete order. Unknown source or anchor ids reject as `workspace-not-found`; self-anchored and already-positioned moves do not write.
+The Workspace registry owns a durable `workspaceIds` order and exposes `insertBefore(id, beforeId?)` with DOM `insertBefore` semantics. The Host RPC `workspace.insertBefore` returns the committed layout, and the Workspace follow stream publishes its `layout` increment. Unknown source or anchor ids reject as `workspace/not-found`; self-anchored and already-positioned moves do not write.
 
-The client installs a Workspace drag optimistically. Request and frame generations ensure that only the latest unary echo can replace local order and that a newer Host frame outranks an older response; a latest rejected request restores the last complete order accepted from a Host baseline, frame, or current unary echo. Every successful list baseline restores Host order so reconnects adopt durable changes made elsewhere.
+Committed layout revisions order Host responses and stream updates; replacement baselines fence earlier-generation replies. [Durable Sidebar Sections](2026-09-14-sidebar-sections.md) owns section placement and this delivery rule. Every successful baseline restores Host order so reconnects adopt durable changes made elsewhere.
 
 ### Session folding and view order
 
@@ -28,7 +28,7 @@ When New Session creation selects a blank Session, the browser promotes it once 
 
 ### Drag and compact chrome
 
-Workspace hit testing uses the complete rendered group section, including visible Session rows. One insertion boundary is shared by the preceding group's lower half and the following group's upper half, and the indicator is an absolutely positioned line with a joined right-facing chevron that does not affect layout. A tree-body overlay draws the first boundary at the same negative offset outside the scrolling clip, so the leading chevron remains visible without moving the list. A collapsed Session drag resolves its insertion boundary from rendered rows, places the source before any hidden account members at that boundary, and rejects a result that would hide the source. During a Workspace or Session drag, document-level `dragover` and `drop` handlers accept the native operation; if release occurs outside the Workspace list, `dragend` commits the last valid marker.
+Workspace hit testing uses the complete rendered group section, including visible Session rows. One insertion boundary is shared by the preceding group's lower half and the following group's upper half, and the indicator is an absolutely positioned line with a joined right-facing chevron that does not affect layout. An absolute indicator draws the first Workspace insertion boundary without moving the list. A collapsed Session drag resolves its insertion boundary from rendered rows, places the source before any hidden account members at that boundary, and rejects a result that would hide the source. The grouped browser cancels outside releases under the section placement rule. The flat list accepts document-level drops and commits its last valid marker on drag end.
 
 Search is a header action while collapsed and expands across the title and trailing actions. An outside click collapses a query that is empty after trimming but retains a non-empty query; while the rail search gesture is still in flight the outside-click listener stays unmounted ([rail-search self-dismissal](../bug-fix/2026-08-18-rail-search-outside-click-self-dismissal.md)). Compact Workspace and Session rows, a 24px bottom fade, and the absence of per-Workspace Session counts preserve vertical space without removing navigation affordances.
 
@@ -44,7 +44,7 @@ Search is a header action while collapsed and expands across the title and trail
 
 **Use numeric drop indices or header-only hit testing.** Indices drift when rows change during a drag, while header midpoints disagree with the visible boundary when a Workspace is expanded. Anchor ids and full-section geometry remain stable under both conditions.
 
-**Let the browser reject an outside release.** The application would commit the last valid marker while the browser displays a rejected-drop animation, presenting contradictory feedback.
+**Reject a flat-list outside release while still committing its last marker.** The browser would display a rejected-drop animation for an accepted move. Grouped section placement instead cancels both the operation and the marker.
 
 ## Consequences
 
@@ -56,4 +56,4 @@ Search is a header action while collapsed and expands across the title and trail
 
 ## Testing
 
-Domain and Host tests cover durable Workspace moves, no-op and invalid anchors, restart recovery, full-order RPC responses, order frames, and one Workspace snapshot per Host-stream baseline. Runtime tests cover optimistic order, frame/response precedence, overlapping rejection rollback to Host-confirmed order, reconnect baselines, and New Session target priority. UI tests cover five-row folding, the blank-row quota and hidden count, collapsed drag anchors across hidden rows, transient expansion reset, pruning persisted state after Workspace removal, order-preserving mode switches, one-time recent-update and New Session promotion, Manual drag retention after the first prompt, browser-local Ungrouped and flat-list drag persistence, hierarchy-free flat-row leading spacing, selected view indicators, expanded-section Workspace hit testing, an unclipped first insertion boundary, outside-list Workspace and Session drops, search collapse rules, and compact CSS dimensions. A shipped-composition Web snapshot pins five established rows beside the provisional New Session.
+Domain and Host tests cover durable Workspace moves, no-op and invalid anchors, restart recovery, full-order RPC responses, order frames, and one Workspace snapshot per Host-stream baseline. Runtime tests cover committed layout revisions, stale-response rejection, unchanged order after refused moves, reconnect baselines, and New Session target priority. UI tests cover five-row folding, the blank-row quota and hidden count, collapsed drag anchors across hidden rows, transient expansion reset, pruning persisted state after Workspace removal, order-preserving mode switches, one-time recent-update and New Session promotion, Manual drag retention after the first prompt, browser-local Ungrouped and flat-list drag persistence, hierarchy-free flat-row leading spacing, selected view indicators, expanded-section Workspace hit testing, an unclipped first insertion boundary, outside-list Workspace and Session drops, search collapse rules, and compact CSS dimensions. A shipped-composition Web snapshot pins five established rows beside the provisional New Session.

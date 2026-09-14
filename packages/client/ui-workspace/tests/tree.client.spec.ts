@@ -41,6 +41,11 @@ const schedule = (id: string, scheduledAt: string): ScheduleRecord => ({
 })
 
 describe('deriveGroups', () => {
+  it('omits Ungrouped when its only Session is placed independently', () => {
+    expect(deriveGroups(list(summary('loose', 1)), [], noArchive, noAttention, {
+      expandedGroups: [UNGROUPED_KEY], independentSessionIds: [sid('loose')],
+    })).toEqual([])
+  })
   it('keeps Host Workspace and sessionIds order without Client recency sorting', () => {
     const sessions = list(summary('newer', 20), summary('older', 10))
     const workspaces = [workspace('first', ['older', 'newer']), workspace('empty', [])]
