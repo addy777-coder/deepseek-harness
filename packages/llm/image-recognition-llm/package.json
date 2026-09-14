@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-image-recognition-llm",
   "description": "LLM-backed image recognition for text-only DeepSeek Harness model routes",
-  "version": "0.1.2-alpha.5",
+  "version": "0.1.2-alpha.6",
   "publishConfig": {
     "access": "public"
   },

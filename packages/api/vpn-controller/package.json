@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-vpn-controller",
   "description": "VPN settings Remote commands and redacted Client connection state",
-  "version": "0.1.2-alpha.5",
+  "version": "0.1.2-alpha.6",
   "publishConfig": {
     "access": "public"
   },

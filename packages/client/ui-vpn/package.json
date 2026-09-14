@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-vpn",
   "description": "VPN settings for importing company profiles and managing private model connectivity",
-  "version": "0.1.2-alpha.5",
+  "version": "0.1.2-alpha.6",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
