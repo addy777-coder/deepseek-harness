@@ -31,6 +31,8 @@ peerDependencyRules:
 allowBuilds:
   esbuild: true
   lefthook: true
+  # Desktop development uses the checksum-verified binary installed by this pinned Electron release.
+  'electron@44.0.0': true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
   node-pty: true
   # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists
