@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -42,6 +42,20 @@ describe('Desktop packaged native assets', () => {
   it.each(targets)('accepts a complete $directory runtime', async (target) => {
     const { root } = await fixture(target)
     await expect(verifyDesktopRuntimeAssets(root, target)).resolves.toBeUndefined()
+  })
+
+  it('accepts a runtime reached through a filesystem alias', async () => {
+    const target = resolveVpnTarget('darwin', 'arm64')
+    const { root } = await fixture(target)
+    const parent = await mkdtemp(join(tmpdir(), 'dsh-desktop-assets-alias-'))
+    roots.push(parent)
+    const alias = join(parent, 'runtime')
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    try {
+      await expect(verifyDesktopRuntimeAssets(alias, target)).resolves.toBeUndefined()
+    } finally {
+      await unlink(alias)
+    }
   })
 
   it.each(targets)('rejects a missing $directory node-pty addon', async (target) => {

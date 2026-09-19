@@ -82,6 +82,8 @@ Windows 和受支持 Linux 格式的设置**关于**页面检查 GitHub Releases
 
 feed 配置来自 `electron-builder.yml` 的 publish 部分（resources 中的 `app-update.yml`）。非打包构建仅在设置 `DSH_DESKTOP_UPDATE_FEED` 时检查 generic feed；Electron 场景使用该覆盖对接本地 fixture 服务器。[更新器决策](../../.agents/notes/implemented/feature/2026-09-09-desktop-in-app-update.zh.md) 说明了 `builder-util-runtime@9.7.0` 取消补丁和整包下载策略。
 
+插件候选使用正式 profile 的私有同级目录，使 pnpm 的本地包相对引用在原子重命名后保持有效。取消或拒绝候选时会删除这些目录。
+
 POSIX 关闭会在请求正常退出前捕获后代，只终止 PID 与启动身份匹配的进程，并等待独立命令组停止后才重启 Host。超时错误会指出幸存进程。
 
 -----

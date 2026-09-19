@@ -48,7 +48,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pnpm exec tsx scripts/release/desktop.ts prepare
       - name: Verify release policy
-        run: pnpm exec vitest run scripts/release/desktop-release.spec.ts scripts/release/desktop-artifacts.spec.ts scripts/desktop-ci-sandbox.spec.ts scripts/desktop-linux-launcher.spec.ts scripts/ci-workflow.spec.ts
+        run: pnpm exec vitest run scripts/release/desktop-release.spec.ts scripts/release/desktop-artifacts.spec.ts scripts/desktop-ci-sandbox.spec.ts scripts/desktop-linux-launcher.spec.ts scripts/desktop-runtime-assets.spec.ts scripts/ci-workflow.spec.ts apps/desktop/tests/plugin-manager.spec.ts
 
   build:
     name: Build ${{ matrix.target }} installers
@@ -144,7 +144,10 @@ jobs:
             native/vpn/.cache/dependencies/binary-cache
           key: vpn-deps-v1-${{ matrix.target }}-${{ hashFiles('native/vpn/deps/**', 'native/vpn/scripts/prepare-deps.ps1', 'native/vpn/scripts/dependency-install.ps1') }}
       - name: Verify VPN dependency download retries
-        run: pwsh -File native/vpn/tests/dependency-install.test.ps1
+        run: |
+          pwsh -File native/vpn/tests/dependency-install.test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'VPN download retry checks failed' }
+          pwsh -File native/vpn/tests/toolchain.test.ps1
       - name: Build and verify native VPN distribution
         run: pwsh -File native/vpn/scripts/build.ps1 -Target ${{ matrix.vpn }}
       - name: Save VPN dependency cache

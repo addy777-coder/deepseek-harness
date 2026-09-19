@@ -1,5 +1,5 @@
 /** Validate the native files and executable permissions carried by a Desktop runtime. */
-import { chmod, stat } from 'node:fs/promises'
+import { chmod, realpath, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import type { VpnTarget } from '../apps/desktop/src/main/vpn-artifact.ts'
@@ -31,10 +31,11 @@ async function firstFile(candidates: readonly string[]): Promise<string> {
 }
 
 async function runtimeAssets(directory: string, target: VpnTarget): Promise<RuntimeAsset[]> {
+  const root = await realpath(directory)
   const platform = target.platform === 'windows' ? 'win32' : target.platform
-  const pty = packageDirectory(directory, 'node-pty')
-  runtimeResolution(directory, 'koffi')
-  runtimeResolution(directory, 'sharp')
+  const pty = packageDirectory(root, 'node-pty')
+  runtimeResolution(root, 'koffi')
+  runtimeResolution(root, 'sharp')
   const addonNames = target.platform === 'windows' ? ['conpty.node', 'conpty_console_list.node'] : ['pty.node']
   const assets: RuntimeAsset[] = []
   for (const name of addonNames) {
@@ -43,10 +44,10 @@ async function runtimeAssets(directory: string, target: VpnTarget): Promise<Runt
     assets.push({ path, executable: false })
     if (target.platform === 'darwin') assets.push({ path: join(dirname(path), 'spawn-helper'), executable: true })
   }
-  const ripgrep = packageDirectory(directory, `@vscode/ripgrep-${platform}-${target.arch}`)
+  const ripgrep = packageDirectory(root, `@vscode/ripgrep-${platform}-${target.arch}`)
   assets.push({ path: join(ripgrep, 'bin', target.platform === 'windows' ? 'rg.exe' : 'rg'), executable: true })
   if (target.platform === 'linux') {
-    const landlock = packageDirectory(directory, `@deepseek-ai/node-addon-landlock-run-linux-${target.arch}`)
+    const landlock = packageDirectory(root, `@deepseek-ai/node-addon-landlock-run-linux-${target.arch}`)
     assets.push({ path: join(landlock, 'bin/landlock-run'), executable: true })
   }
   return assets

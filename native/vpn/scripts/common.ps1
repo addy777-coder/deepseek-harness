@@ -5,6 +5,10 @@ function Get-VpnRoot {
   [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
 
+function Get-VpnApplicationPath([string]$Name) {
+  (Get-Command $Name -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+}
+
 function Get-VpnTarget([string]$Name) {
   $platform = if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'darwin' } elseif ($IsLinux) { 'linux' } else { throw 'Unsupported native VPN host.' }
   $arch = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
@@ -27,9 +31,9 @@ function Get-VpnToolchain([string]$VsDevCmdPath) {
     $pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
     return [pscustomobject]@{
       VsDevCmd = $null
-      CMake = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
-      CTest = (Get-Command ctest -CommandType Application -ErrorAction Stop).Source
-      Ninja = (Get-Command ninja -CommandType Application -ErrorAction Stop).Source
+      CMake = Get-VpnApplicationPath cmake
+      CTest = Get-VpnApplicationPath ctest
+      Ninja = Get-VpnApplicationPath ninja
       Vcpkg = Join-Path $root ('.cache/tools/vcpkg-' + $pins.vcpkg.revision + '/vcpkg')
     }
   }

@@ -42,7 +42,7 @@ POSIX 关闭会在正常退出请求前记录后代，使独立命令组在父�
 
 插件设置页接受一个 pnpm package spec，并把它放在 `--` 之后；它不接受 package-manager flag。解析在私有临时 profile 中以 `--ignore-scripts` 进行。manager 比较旧版与候选依赖 closure，并拒绝每个声明 `preinstall`、`install`、`postinstall` 或 `prepare` 的新增或变化包。它会校验 bundle patch 路径，以及 inserted row 引用的 Client 声明与已构建导出，再显示解析版本、integrity 或 commit 与校验状态。
 
-应用操作要求原生警告，因为运行时插件代码拥有 Host 的本机权限。manager 会为 profile 自有文件计算 fingerprint、停止 Host、在同一卷上重命名旧版与候选 profile 目录，再启动候选。ready 失败会恢复备份、重新启动旧 Host 并重载全部窗口。取消、解析失败、脚本拒绝、陈旧 transaction 检测与校验失败都不会改变 live profile。CLI 与 Desktop 使用同一个纯 bundle reconciliation 函数。
+应用操作要求原生警告，因为运行时插件代码拥有 Host 的本机权限。候选 profile 是正式 profile 的私有同级目录：pnpm 的本地包相对引用和目录符号链接必须在切换后保留原目标。manager 会为 profile 自有文件计算 fingerprint、停止 Host、在同一卷上重命名旧版与候选 profile 目录，再启动候选。ready 失败会恢复备份、重新启动旧 Host 并重载全部窗口。取消、解析失败、脚本拒绝、陈旧 transaction 检测与校验失败都不会改变 live profile。CLI 与 Desktop 使用同一个纯 bundle reconciliation 函数。
 
 ### 验证
 

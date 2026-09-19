@@ -776,9 +776,9 @@ describe('Desktop installer publication', () => {
     })
     expect(JSON.stringify(steps[restore])).toContain('${{ matrix.target }}')
     expect(JSON.stringify(steps[restore])).toContain("hashFiles('native/vpn/deps/**'")
-    expect(steps.find(step => step.name === 'Verify VPN dependency download retries')).toMatchObject({
-      run: 'pwsh -File native/vpn/tests/dependency-install.test.ps1',
-    })
+    const checks = steps.find(step => step.name === 'Verify VPN dependency download retries')?.run
+    expect(checks).toContain('pwsh -File native/vpn/tests/dependency-install.test.ps1')
+    expect(checks).toContain('pwsh -File native/vpn/tests/toolchain.test.ps1')
   })
 
   it('grants write access only to verified publication and never uses npm or PyPI publish', () => {

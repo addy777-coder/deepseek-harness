@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import {
-  cp, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, stat, writeFile,
+  cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, stat, writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { app, dialog, type BrowserWindow, type MessageBoxOptions } from 'electron'
@@ -612,10 +612,12 @@ export class DesktopPluginManager {
     const token = randomUUID()
     const managedStagingRoot = stagingRoot(home)
     const root = join(managedStagingRoot, token)
-    const profile = join(root, 'profile')
+    let profile: string | undefined
     assertInside(managedStagingRoot, root)
     try {
-      await mkdir(profile, { recursive: true, mode: 0o700 })
+      await mkdir(root, { recursive: true, mode: 0o700 })
+      // pnpm saves relative local paths and symlinks; sibling profiles preserve their targets after rename.
+      profile = await mkdtemp(join(dirname(live), '.desktop-plugin-'))
       for (const entry of await readdir(live, { withFileTypes: true })) {
         if (entry.name === 'node_modules') continue
         await cp(join(live, entry.name), join(profile, entry.name), {
@@ -657,6 +659,7 @@ export class DesktopPluginManager {
       this.staged.set(token, { token, root, profile, baseline, summary })
       return summary
     } catch (error) {
+      if (profile !== undefined) await rm(profile, { recursive: true, force: true })
       await rm(root, { recursive: true, force: true })
       throw error
     }
@@ -669,6 +672,8 @@ export class DesktopPluginManager {
     if (this.applying.has(token)) throw new Error('desktop plugins: transaction is being applied')
     this.staged.delete(token)
     assertInside(stagingRoot(this.runtime.home()), transaction.root)
+    assertInside(dirname(profileDir(this.runtime.home())), transaction.profile)
+    await rm(transaction.profile, { recursive: true, force: true })
     await rm(transaction.root, { recursive: true, force: true })
   }
 
@@ -692,6 +697,7 @@ export class DesktopPluginManager {
     if (!await this.runtime.confirm(parent, options)) return
     if (await profileFingerprint(profileDir(this.runtime.home())) !== transaction.baseline) {
       this.staged.delete(token)
+      await rm(transaction.profile, { recursive: true, force: true })
       await rm(transaction.root, { recursive: true, force: true })
       throw new Error('desktop plugins: profile changed since this transaction was resolved; resolve it again')
     }
@@ -743,6 +749,7 @@ export class DesktopPluginManager {
       }
       this.hooks.reloadWindows()
       this.staged.delete(token)
+      await rm(transaction.profile, { recursive: true, force: true })
       await rm(transaction.root, { recursive: true, force: true })
       throw new Error('desktop plugins: the new profile failed to start and was rolled back', { cause: error })
     } finally {

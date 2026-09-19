@@ -82,6 +82,8 @@ The Settings **About** page on Windows and supported Linux formats checks the Gi
 
 Feed configuration comes from the publish section of `electron-builder.yml` (`app-update.yml` in resources). An unpackaged build checks a generic feed only when `DSH_DESKTOP_UPDATE_FEED` is set; the Electron scenario uses that override against a local fixture server. The [updater decision](../../.agents/notes/implemented/feature/2026-09-09-desktop-in-app-update.md) explains the `builder-util-runtime@9.7.0` cancellation patch and full-installer policy.
 
+Plugin candidates use private sibling directories of the live profile so pnpm’s relative local-package references survive the atomic rename. Cancellation and rejected candidates remove those directories.
+
 POSIX shutdown captures descendants before requesting graceful exit, terminates only matching PID/start identities, and waits for detached command groups to stop before restarting the Host. Timeout errors identify surviving processes.
 
 -----

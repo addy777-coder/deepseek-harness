@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -220,6 +220,73 @@ describe('DesktopPluginManager', () => {
     expect(hooks.stopHost).toHaveBeenCalledTimes(1)
     expect(hooks.startHost).toHaveBeenCalledTimes(1)
     expect(hooks.reloadWindows).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves local dependency references when promoting the candidate profile', async () => {
+    const { home, live } = await fixture()
+    const localPackage = join(home, 'local-plugin')
+    await mkdir(localPackage)
+    await writeFile(join(localPackage, 'package.json'), '{"name":"@fixture/desktop-plugin"}')
+    const { value } = manager(home, async (profile) => {
+      await installFixturePackage(profile)
+      const path = join(profile, 'package.json')
+      const manifest = JSON.parse(await readFile(path, 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['@fixture/desktop-plugin'] = `link:${relative(profile, localPackage)}`
+      await writeFile(path, JSON.stringify(manifest))
+      return ''
+    }, async () => {
+      const manifest = JSON.parse(await readFile(join(live, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      const installed = resolve(live, manifest.dependencies['@fixture/desktop-plugin'].slice('link:'.length))
+      expect(JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'))).toEqual({ name: '@fixture/desktop-plugin' })
+    })
+    const staged = await value.stage({ action: 'install', spec: localPackage })
+    await expect(value.apply(staged.token)).resolves.toBeUndefined()
+    expect((await readdir(dirname(live))).filter(name => name.startsWith('.desktop-plugin-'))).toEqual([])
+  })
+
+  it('keeps relative local-package symlinks valid after the profile swap', async (context) => {
+    const { home, live } = await fixture()
+    const localPackage = join(home, 'local-plugin')
+    await mkdir(localPackage)
+    const probe = join(home, 'symlink-probe')
+    try {
+      await symlink('local-plugin', probe, 'dir')
+    } catch (error) {
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') {
+        context.skip()
+        return
+      }
+      throw error
+    }
+    await unlink(probe)
+    const { value } = manager(home, async (profile) => {
+      await installFixturePackage(profile)
+      const directory = join(profile, 'node_modules/@fixture/desktop-plugin')
+      const manifest = await readFile(join(directory, 'package.json'), 'utf8')
+      await writeFile(join(localPackage, 'package.json'), manifest)
+      await writeFile(join(localPackage, 'cordis.patch.yml'), '[]\n')
+      await rm(directory, { recursive: true })
+      await symlink(relative(dirname(directory), localPackage), directory, 'dir')
+      return ''
+    }, async () => {
+      const manifest = JSON.parse(await readFile(join(live, 'node_modules/@fixture/desktop-plugin/package.json'), 'utf8')) as { name: string }
+      expect(manifest.name).toBe('@fixture/desktop-plugin')
+    })
+    const staged = await value.stage({ action: 'install', spec: localPackage })
+    await expect(value.apply(staged.token)).resolves.toBeUndefined()
+  })
+
+  it('removes the sibling candidate when the user cancels its preview', async () => {
+    const { home, live } = await fixture()
+    let candidate = ''
+    const { value } = manager(home, async (profile) => { candidate = profile; await installFixturePackage(profile); return '' })
+    const staged = await value.stage({ action: 'install', spec: '@fixture/desktop-plugin' })
+    expect((await stat(candidate)).isDirectory()).toBe(true)
+    await value.cancel(staged.token)
+    await expect(stat(candidate)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await readdir(dirname(live))).filter(name => name.startsWith('.desktop-plugin-'))).toEqual([])
+    const manifest = JSON.parse(await readFile(join(live, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+    expect(manifest.dependencies).toEqual({})
   })
 
   it('restores the previous profile and restarts its Host when the candidate fails readiness', async () => {
