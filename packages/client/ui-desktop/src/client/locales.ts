@@ -5,8 +5,6 @@ export type DesktopKey = keyof typeof zh
 export const zh = {
   'brand': 'DSH Desktop',
   'brand.mark': 'DSH',
-  'openWindow': '在新窗口打开当前会话',
-  'openMain': '返回主窗口',
   'newTask': '新建任务',
   'plugins.tab': '管理',
   'plugins.title': '桌面插件',
@@ -63,8 +61,6 @@ export const zh = {
 export const en: Record<DesktopKey, string> = {
   'brand': 'DSH Desktop',
   'brand.mark': 'DSH',
-  'openWindow': 'Open current session in a new window',
-  'openMain': 'Return to main window',
   'newTask': 'New task',
   'plugins.tab': 'Manage',
   'plugins.title': 'Desktop plugins',

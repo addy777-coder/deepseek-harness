@@ -10,7 +10,7 @@ const replayEntry = resolve(repository, 'packages', 'test-support', 'llm-replay'
 const driver = resolve(repository, 'apps', 'desktop', 'tests', 'electron.e2e.ts')
 const runnable = process.platform === 'win32' && existsSync(desktopEntry) && existsSync(replayEntry)
 
-it.skipIf(!runnable)('replays a recorded PowerShell tool round through Electron MessagePort IPC', async () => {
+it.skipIf(!runnable)('replays a PowerShell tool round, exports its ZIP, and opens links in the main Electron window', async () => {
   const env = { ...process.env, DSH_DESKTOP_REPLAY: '1' }
   delete env.DSH_DESKTOP_EXECUTABLE
   const result = await new Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }>((resolveResult, reject) => {

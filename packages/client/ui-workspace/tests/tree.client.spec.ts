@@ -8,7 +8,7 @@ import {
   deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel,
   UNGROUPED_KEY,
 } from '../src/client/tree.ts'
-import { createWorkspaceViewStore } from '../src/client/stores.ts'
+import { DEFAULT_SECTION_KEY, createWorkspaceViewStore } from '../src/client/stores.ts'
 
 const sid = (id: string) => id as SessionId
 const wid = (id: string) => id as WorkspaceId
@@ -43,7 +43,7 @@ const schedule = (id: string, scheduledAt: string): ScheduleRecord => ({
 describe('deriveGroups', () => {
   it('omits Ungrouped when its only Session is placed independently', () => {
     expect(deriveGroups(list(summary('loose', 1)), [], noArchive, noAttention, {
-      expandedGroups: [UNGROUPED_KEY], independentSessionIds: [sid('loose')],
+      expandedGroups: [], independentSessionIds: [sid('loose')],
     })).toEqual([])
   })
   it('keeps Host Workspace and sessionIds order without Client recency sorting', () => {
@@ -82,12 +82,11 @@ describe('deriveGroups', () => {
     },
   )
 
-  it('puts only real unaccounted Sessions in the trailing Ungrouped group', () => {
+  it('puts only real unaccounted Sessions in the trailing headerless Ungrouped run', () => {
     const sessions = list(summary('owned', 1, '/projects/first'), summary('loose', 9, '/other'))
-    const groups = deriveGroups(
-      sessions, [workspace('first', ['owned'])], noArchive, noAttention, view([UNGROUPED_KEY]),
-    )
+    const groups = deriveGroups(sessions, [workspace('first', ['owned'])], noArchive, noAttention, view())
     expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
+    expect(groups[1]).toMatchObject({ workspaceId: undefined, label: '', expanded: true })
     expect(groups[1]!.sessions.map(session => session.id)).toEqual([sid('loose')])
   })
 
@@ -98,7 +97,7 @@ describe('deriveGroups', () => {
       [],
       noArchive,
       noAttention,
-      view([UNGROUPED_KEY], ['two', 'stale', 'two']),
+      view([], ['two', 'stale', 'two']),
     )
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([
       sid('two'), sid('new'), sid('one'),
@@ -231,7 +230,7 @@ describe('deriveGroups', () => {
       [],
       noArchive,
       noAttention,
-      { expandedGroups: [UNGROUPED_KEY] },
+      view(),
     )
 
     expect(groups).toHaveLength(1)
@@ -242,9 +241,28 @@ describe('deriveGroups', () => {
 
     // Equal timestamps use ids as a deterministic tiebreak in either input order.
     expect(deriveGroups(
-      list(summary('tie-a', 1), summary('tie-b', 1)), [], noArchive, noAttention, view([UNGROUPED_KEY]),
+      list(summary('tie-a', 1), summary('tie-b', 1)), [], noArchive, noAttention, view(),
     )[0]!
       .sessions.map(node => node.id)).toEqual([sid('tie-a'), sid('tie-b')])
+  })
+
+  it('folds only a real Workspace group: no expansion record hides the Ungrouped run', () => {
+    const sessions = list(summary('loose', 1, '/other'), summary('owned', 2, '/projects/first'))
+    const groups = deriveGroups(
+      sessions,
+      [workspace('first', ['owned'])],
+      noArchive,
+      noAttention,
+      view(['first'], ['loose']),
+    )
+    expect(groups.map(group => [group.key, group.expanded])).toEqual([['first', true], [UNGROUPED_KEY, true]])
+    expect(deriveGroups(
+      sessions,
+      [workspace('first', ['owned'])],
+      noArchive,
+      noAttention,
+      view([], ['loose']),
+    ).map(group => [group.key, group.expanded])).toEqual([['first', false], [UNGROUPED_KEY, true]])
   })
 
   it('tolerates Workspace membership arriving before its Session summary', () => {
@@ -266,7 +284,7 @@ describe('deriveGroups', () => {
     const sessions = list(kept, gone, looseGone)
     const groups = deriveGroups(
       sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'),
-      noAttention, view(['first', UNGROUPED_KEY]),
+      noAttention, view(['first']),
     )
     // The archived member drops from its group AND the archived stray never
     // surfaces an Ungrouped bucket; counts follow the visible rows.
@@ -519,6 +537,16 @@ describe('createWorkspaceViewStore', () => {
     expect(snapshot.groupExpansion).toEqual({ '': true, alpha: true })
     expect(snapshot.sessionOrderByAccount).toEqual({ alpha: ['alpha-session'] })
     expect(snapshot.sessionUpdatedAtByAccount).toEqual({ alpha: { 'alpha-session': 2 } })
+  })
+
+  it('keeps the default area folded across a durable-section prune', () => {
+    const store = createWorkspaceViewStore().create()
+    store.actions.setSectionExpanded(DEFAULT_SECTION_KEY, false)
+    store.actions.setSectionExpanded('deleted', false)
+
+    store.actions.retainSectionKeys(['alpha'])
+
+    expect(store.getSnapshot().sectionExpansion).toEqual({ [DEFAULT_SECTION_KEY]: false })
   })
 })
 

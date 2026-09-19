@@ -105,7 +105,7 @@ async function run(): Promise<void> {
   const bootstrap: DesktopWindowBootstrap = await window.dshDesktop.bootstrap()
   if (bootstrap.hostError !== undefined) throw new Error(bootstrap.hostError)
   window.__DSH_DESKTOP__ = bootstrap
-  document.body.dataset.dshDesktop = bootstrap.kind
+  document.body.dataset.dshDesktop = 'main'
   const port = await waitForHostPort(bootstrap.windowId)
   const transport = new DesktopTransportClient(port)
   ;(globalThis as TransportGlobal).__DSH_TRANSPORT__ = {

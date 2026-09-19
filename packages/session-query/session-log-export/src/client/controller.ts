@@ -1,6 +1,7 @@
 /** Browser download state shared by the Session Header button and `/export`. */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { RpcFetch } from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Download phases presented by the shared modal. */
@@ -18,7 +19,6 @@ export interface SessionLogDownloadState {
   bySession: Record<string, SessionLogDownloadEntry | undefined>
 }
 
-type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 type Save = (url: string, filename: string) => void
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
@@ -33,8 +33,8 @@ export function sessionLogZipFilename(sessionId: SessionId): string {
 }
 
 /**
- * Hand a Host download URL to the browser download manager.
- * @param url - same-origin Host download URL.
+ * Hand an archive URL to the browser download manager.
+ * @param url - same-origin Host download URL or local Blob URL.
  * @param filename - browser download filename.
  */
 export function downloadUrl(url: string, filename: string): void {
@@ -47,7 +47,7 @@ export function downloadUrl(url: string, filename: string): void {
 /** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
 function hostBase(): string {
   const origin = (globalThis as { location?: { origin?: string } }).location?.origin
-  return origin !== undefined && origin !== 'null' ? origin : 'http://dsh.internal'
+  return origin !== undefined && origin !== 'null' && !origin.startsWith('file:') ? origin : 'http://dsh.internal'
 }
 
 function messageOf(error: unknown): string {
@@ -63,12 +63,14 @@ export class SessionLogDownloadController {
   private disposed = false
 
   /**
-   * @param fetcher - HTTP carrier used to read the host-streamed ZIP.
+   * @param fetcher - carrier used to request the Host archive.
    * @param save - browser save operation.
+   * @param delivery - direct URL for HTTP downloads, or buffered bytes for an internal carrier.
    */
   constructor(
-    private readonly fetcher: Fetch = (input, init) => fetch(input, init),
+    private readonly fetcher: RpcFetch = (input, init) => fetch(input, init),
     private readonly save: Save = downloadUrl,
+    private readonly delivery: 'url' | 'blob' = 'url',
   ) {}
 
   /**
@@ -115,12 +117,25 @@ export class SessionLogDownloadController {
       const url = new URL('/api/session.export', hostBase())
       url.searchParams.set('sessionId', sessionId)
       url.searchParams.set('includeDescendants', 'true')
-      const response = await this.fetcher(url, { method: 'HEAD', signal })
+      const response = await this.fetcher(url, { method: this.delivery === 'blob' ? 'GET' : 'HEAD', signal })
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
-      this.save(url.toString(), sessionLogZipFilename(sessionId))
+      if (this.delivery === 'blob') {
+        const archive = await response.blob()
+        signal.throwIfAborted()
+        const download = URL.createObjectURL(archive)
+        try {
+          this.save(download, sessionLogZipFilename(sessionId))
+        } finally {
+          // Chromium consumes the anchor asynchronously after the click handler.
+          setTimeout(() => { URL.revokeObjectURL(download) }, 0)
+        }
+      } else {
+        signal.throwIfAborted()
+        this.save(url.toString(), sessionLogZipFilename(sessionId))
+      }
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
       this.publish(sessionId, { open, status: 'success', error: null })
     } catch (error: unknown) {

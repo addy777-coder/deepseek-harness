@@ -1,7 +1,7 @@
 /** Context-isolated bridge for fixed desktop shell operations and Host port delivery. */
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  DesktopShellApi, DesktopUpdateState, DesktopWindowBootstrap,
+  DesktopIntent, DesktopShellApi, DesktopUpdateState, DesktopWindowBootstrap,
 } from '../shared/contracts.ts'
 import { channels } from './channels.ts'
 
@@ -13,11 +13,15 @@ ipcRenderer.on(channels.hostPort, (event, payload: { readonly windowId: string }
 
 function subscribeIntent(listener: Parameters<DesktopShellApi['onIntent']>[0]): () => void {
   const wrapped = (_event: Electron.IpcRendererEvent, value: unknown): void => {
-    if (typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'new-task') {
+    if (typeof value !== 'object' || value === null) return
+    if (Reflect.get(value, 'type') === 'new-task') {
       listener({ type: 'new-task' })
+    } else if (Reflect.get(value, 'type') === 'open-session' && typeof Reflect.get(value, 'sessionId') === 'string') {
+      listener(value as DesktopIntent)
     }
   }
   ipcRenderer.on(channels.intent, wrapped)
+  ipcRenderer.send(channels.intentReady)
   return () => { ipcRenderer.off(channels.intent, wrapped) }
 }
 
@@ -41,8 +45,6 @@ function subscribeUpdateState(listener: Parameters<DesktopShellApi['onUpdateStat
 
 const api: DesktopShellApi = {
   bootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<DesktopWindowBootstrap>,
-  openSession: sessionId => ipcRenderer.invoke(channels.openSession, sessionId) as Promise<void>,
-  openMain: () => ipcRenderer.invoke(channels.openMain) as Promise<void>,
   newTask: () => ipcRenderer.invoke(channels.newTask) as Promise<void>,
   reportSelection: (sessionId) => { ipcRenderer.send(channels.reportSelection, sessionId) },
   notifyTaskSettled: (sessionId, title) => { ipcRenderer.send(channels.notify, { sessionId, title }) },

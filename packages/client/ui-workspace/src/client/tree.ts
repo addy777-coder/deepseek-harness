@@ -1,7 +1,7 @@
 /**
  * Derives the workspace browser tree from Host Workspace order and membership.
- * Unassigned Sessions trail under Ungrouped; only the selected blank Session
- * remains visible.
+ * Sessions outside every Workspace trail as one headerless Ungrouped run;
+ * only the selected blank Session remains visible.
  */
 import {
   type SessionListState, type SessionSearchResultItem, type SessionSummary,
@@ -46,15 +46,11 @@ export interface SessionNode {
 /** Session order selected by the Workspace browser. */
 export type SessionOrderBy = 'manual' | 'updated'
 
-/** One workspace group section: header row facts + visible top-level session rows. */
-export interface GroupNode {
-  /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
+/** Facts every group section carries, header row or not. */
+interface GroupNodeBase {
+  /** Group key: a Workspace id or {@link UNGROUPED_KEY}. */
   key: string
-  /** Backing Workspace id; absent only for the ungrouped bucket. */
-  workspaceId: WorkspaceId | undefined
-  cwd: string | undefined
-  /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
-  createdAt: number | undefined
+  /** Row label; empty for the headerless Ungrouped run. */
   label: string
   /** Total visible sessions in the group. */
   sessionCount: number
@@ -64,6 +60,28 @@ export interface GroupNode {
   /** Visible session rows (empty while the group is folded). */
   sessions: readonly SessionNode[]
 }
+
+/** One real Workspace group: the only group rendering a header row and a hover card. */
+export interface WorkspaceGroupNode extends GroupNodeBase {
+  workspaceId: WorkspaceId
+  cwd: string | undefined
+  /** Workspace creation time (epoch ms). */
+  createdAt: number
+}
+
+/**
+ * Sessions outside every Workspace: one trailing headerless run of rows.
+ * Nothing labels, folds, or starts a Session in this bucket — it has no
+ * backing Workspace — so it carries no header facts.
+ */
+export interface UngroupedGroupNode extends GroupNodeBase {
+  workspaceId: undefined
+  cwd: undefined
+  createdAt: undefined
+}
+
+/** One group in render order. */
+export type GroupNode = WorkspaceGroupNode | UngroupedGroupNode
 
 /** One flat search row combining list metadata with an optional content match. */
 export interface SearchResultNode {
@@ -97,14 +115,10 @@ export interface TreeView {
   ungroupedOrder?: readonly string[]
 }
 
-interface Group {
-  key: string
-  workspaceId: WorkspaceId | undefined
-  cwd: string | undefined
-  createdAt: number | undefined
-  label: string
-  sessions: SessionSummary[]
-}
+/** One group before presentation projection: the same split, over Session summaries. */
+type DerivedGroup =
+  | { key: string; workspaceId: WorkspaceId; cwd: string | undefined; createdAt: number; label: string; sessions: SessionSummary[] }
+  | { key: string; workspaceId: undefined; cwd: undefined; createdAt: undefined; label: string; sessions: SessionSummary[] }
 
 /**
  * Directory display label: basename of the path (both separators accepted).
@@ -150,21 +164,16 @@ function hasActiveSchedule(session: SessionSummary): boolean {
   return (session.projectionValues?.schedule?.length ?? 0) > 0
 }
 
-/** Build one group without projecting session lineage into presentation. */
-function buildGroup(
-  key: string,
-  workspaceId: WorkspaceId | undefined,
-  cwd: string | undefined,
-  createdAt: number | undefined,
-  label: string,
-  members: readonly SessionSummary[],
-  order: 'account' | 'recency',
-): Group {
-  const sessions = [...members]
-  // Real Workspace order comes from sessionIds. Ungrouped falls back to
-  // recency until the browser supplies its persisted local order.
-  if (order === 'recency') sessions.sort(byRecency)
-  return { key, workspaceId, cwd, createdAt, label, sessions }
+/** Build one real Workspace group without projecting session lineage into presentation. */
+function workspaceGroup(workspace: WorkspaceView, members: readonly SessionSummary[]): DerivedGroup {
+  return {
+    key: workspace.workspaceId,
+    workspaceId: workspace.workspaceId,
+    cwd: workspace.path,
+    createdAt: Date.parse(workspace.createdAt),
+    label: workspace.title,
+    sessions: [...members],
+  }
 }
 
 /** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
@@ -186,18 +195,32 @@ function orderedUngrouped(members: readonly SessionSummary[], stored: readonly s
 }
 
 /**
+ * Build the trailing Ungrouped run: members follow the browser-local order,
+ * or recency before that order is initialized.
+ */
+function ungroupedGroup(members: readonly SessionSummary[], stored: readonly string[] | undefined): DerivedGroup {
+  return {
+    key: UNGROUPED_KEY,
+    workspaceId: undefined,
+    cwd: undefined,
+    createdAt: undefined,
+    label: '',
+    sessions: stored === undefined ? [...members].sort(byRecency) : orderedUngrouped(members, stored),
+  }
+}
+
+/**
  * Group Sessions by Host Workspace: one group per entity in stable Host
  * order, with members resolved from sessionIds in their stored order. Sessions
- * outside every Workspace trail in the browser-local Ungrouped order, which
- * falls back to recency before that order is initialized.
+ * outside every Workspace trail in one headerless run.
  */
 function groupByWorkspace(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
   ungroupedOrder: readonly string[] | undefined,
-): Group[] {
-  const groups: Group[] = []
+): DerivedGroup[] {
+  const groups: DerivedGroup[] = []
   const accounted = new Set<SessionId>()
   for (const workspace of workspaces) {
     const members: SessionSummary[] = []
@@ -208,26 +231,13 @@ function groupByWorkspace(
       if (!sessionVisible(summary, list.current, archived)) continue
       members.push(summary)
     }
-    groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
-      Date.parse(workspace.createdAt), workspace.title, members, 'account',
-    ))
+    groups.push(workspaceGroup(workspace, members))
   }
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
       s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
-  if (stray.length > 0) {
-    groups.push(buildGroup(
-      UNGROUPED_KEY,
-      undefined,
-      undefined,
-      undefined,
-      '',
-      ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
-      ungroupedOrder === undefined ? 'recency' : 'account',
-    ))
-  }
+  if (stray.length > 0) groups.push(ungroupedGroup(stray, ungroupedOrder))
   return groups
 }
 
@@ -265,16 +275,17 @@ function sessionNode(
 /**
  * Derive the workspace browser groups with every session as a top-level row.
  *
- * Every group shows; sessions populate under expanded groups in the selected
- * local order. Blank sessions are excluded except for the selected
- * provisional New Session row; archived sessions are excluded everywhere.
- * Content search lives outside this derivation
- * (see {@link deriveSearchResults}).
+ * Every Workspace group shows; its sessions populate while it is expanded, in
+ * the selected local order. Sessions outside every Workspace trail as one
+ * headerless Ungrouped run that no expansion record folds. Blank sessions are
+ * excluded except for the selected provisional New Session row; archived
+ * sessions are excluded everywhere. Content search lives outside this
+ * derivation (see {@link deriveSearchResults}).
  * @param list - sessions list snapshot (`current` feeds containsCurrent).
  * @param workspaces - real workspaces in stable Host order.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
- * @param view - local expansion arrays.
+ * @param view - local expansion and order records.
  * @returns group sections in render order.
  */
 export function deriveGroups(
@@ -294,14 +305,12 @@ export function deriveGroups(
         ?? UNGROUPED_KEY
   const groups: GroupNode[] = []
   for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
-    const expanded = expandedGroups.has(g.key)
     const visible = g.sessions.filter(session => !independent.has(session.id))
     if (g.workspaceId === undefined && visible.length === 0) continue
-    groups.push({
+    // The Ungrouped run owns no fold control, so no expansion record can hide it.
+    const expanded = g.workspaceId === undefined || expandedGroups.has(g.key)
+    const rows = {
       key: g.key,
-      workspaceId: g.workspaceId,
-      cwd: g.cwd,
-      createdAt: g.createdAt,
       label: g.label,
       sessionCount: visible.length,
       expanded,
@@ -309,7 +318,10 @@ export function deriveGroups(
       sessions: expanded
         ? visible.map(session => sessionNode(session, descendants, pendingInteractions))
         : [],
-    })
+    }
+    groups.push(g.workspaceId === undefined
+      ? { ...rows, workspaceId: undefined, cwd: undefined, createdAt: undefined }
+      : { ...rows, workspaceId: g.workspaceId, cwd: g.cwd, createdAt: g.createdAt })
   }
   return groups
 }

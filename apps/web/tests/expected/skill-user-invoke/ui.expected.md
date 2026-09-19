@@ -16,8 +16,8 @@
 - text: /user-invoke-demo and confirm the fixture wiring {{clock}}
 - button "Copy":
   - img
-- button "Thought for a while":
-  - text: Thought for a while
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
 - button "Copy":

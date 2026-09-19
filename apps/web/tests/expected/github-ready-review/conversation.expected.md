@@ -24,8 +24,8 @@
   - img
   - img
   - text: System prompt
-- button "Thought for a while":
-  - text: Thought for a while
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: "Review complete: no actionable findings."
 - button "Copy":

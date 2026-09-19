@@ -21,8 +21,8 @@
   - img
   - img
   - text: System prompt
-- button "6 tool calls" [expanded]:
-  - text: 6 tool calls
+- button "Ran for {{duration}}" [expanded]:
+  - text: Ran for {{duration}}
   - img
 - button "Context injection goal":
   - img
@@ -105,8 +105,8 @@
   - img
   - img
   - text: System prompt
-- button "5 tool calls · 2 messages" [expanded]:
-  - text: 5 tool calls · 2 messages
+- button "Ran for {{duration}}" [expanded]:
+  - text: Ran for {{duration}}
   - img
 - button "Context injection goal":
   - img

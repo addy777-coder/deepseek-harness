@@ -1,8 +1,8 @@
 - navigation "Session hierarchy":
   - button "Seeded turn" [disabled]
   - text: /
-  - button "1 subagent":
-    - text: 1 subagent
+  - button "Ran for {{duration}}":
+    - text: Ran for {{duration}}
     - img
 - img
 - text: Minimal mode

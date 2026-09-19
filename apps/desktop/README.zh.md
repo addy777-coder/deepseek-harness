@@ -74,7 +74,7 @@ runtime staging 要求依赖已在本机缓存中。pnpm 11.7 的锁文件策略
 <a id="process-and-window-behavior"></a>
 ## 进程与窗口行为
 
-一个主窗口拥有导航与设置。一个 Session 可以在一个去重后的专注任务窗口中打开；关闭该窗口不会停止任务，关闭主窗口则退出应用。主进程为冷 profile 初始化与 Loader 完全加载提供最多 120 秒；ready 超时会报告最后一个启动阶段与 Host stderr 尾部。退出时，主进程会请求 Host 停止并等待最多五秒，之后终止其进程树。Host 意外退出时，窗口会保留诊断页，直到用户选择**重启 Host**。
+一个主窗口拥有导航、Session 与设置。Session 链接与通知点击会在该窗口选择对应 Session；Client 订阅前收到的导航会等待就绪后投递。关闭主窗口会退出应用。主进程为冷 profile 初始化与 Loader 完全加载提供最多 120 秒；ready 超时会报告最后一个启动阶段与 Host stderr 尾部。退出时，主进程会请求 Host 停止并等待最多五秒，之后终止其进程树。Host 意外退出时，窗口会保留诊断页，直到用户选择**重启 Host**。
 
 安装应用会在包格式支持桌面集成时注册 `dsh://new` 和 `dsh://session/<base64url-session-id>`。Windows/macOS 在协议注册生效时支持登录后启动；Linux 将该偏好显示为不可用。全局快捷键和完成通知通过原生桌面会话工作；Windows 便携 ZIP 不注册协议。
 

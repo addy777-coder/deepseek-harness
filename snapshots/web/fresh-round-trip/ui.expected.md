@@ -16,8 +16,8 @@
 - text: "Use the bash tool to run exactly: echo WEB_E2E_OK. Then reply with the single word DONE and stop. {{clock}}"
 - button "Copy":
   - img
-- button "1 tool call":
-  - text: 1 tool call
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: DONE
 - button "Copy":

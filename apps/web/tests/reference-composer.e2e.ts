@@ -358,9 +358,6 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
 
   it('renders the durable direct-message then recall order', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-order'))
-    const group = page.getByRole('treeitem', { name: /Ungrouped/ })
-    await group.waitFor({ timeout: 15_000 })
-    if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
     const target = page.getByRole('treeitem', { name: /Reference order target/ })
     await target.waitFor({ timeout: 15_000 })
     await target.click()

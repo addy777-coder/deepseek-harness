@@ -222,15 +222,8 @@ export class ClientSessions implements ISessions {
     private readonly rootCtx: Context,
     remote: SessionRemotes,
   ) {
-    const desktop = (globalThis as {
-      __DSH_DESKTOP__?: { readonly kind?: unknown; readonly sessionId?: unknown }
-    }).__DSH_DESKTOP__
-    const focusedSessionId = desktop?.kind === 'task' && typeof desktop.sessionId === 'string'
-      ? desktop.sessionId as SessionId
-      : undefined
     this.selection = createSnapshotStore<SessionSelection>(
-      focusedSessionId === undefined ? {} : { sessionId: focusedSessionId },
-      focusedSessionId === undefined ? { persist: { name: 'dsh.sessions.current' } } : {})
+      {}, { persist: { name: 'dsh.sessions.current' } })
     const restored = this.selection.getSnapshot()
     this.manager = new SessionManager(
       remote,

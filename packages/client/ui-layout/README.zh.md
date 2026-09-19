@@ -1,5 +1,5 @@
 ---
-description: "共享 GUI 外壳布局：三栏 AppFrame、可选 Desktop 标题栏、专注任务模式、面板几何与主题呈现。"
+description: "共享 GUI 外壳布局：三栏 AppFrame、可选 Desktop 标题栏、面板几何与主题呈现。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包提供共享 GUI 外壳：一个带可缩放侧栏与详情面板的三栏 AppFrame、可选的载体标题栏、移除导航栏的专注任务模式，以及供其他插件调用以打开或关闭详情栏的 `ctx.layout` 面板几何服务。空间不足时，它的让步链先收缩再关闭详情栏。它还承载主题呈现器，把解析后的配色方案、别名 token、正文字号与 `theme-color` 元数据投影到 document。需要标准 Web 或 Desktop 窗口外观时选择它；面板几何是瞬时的，重新加载即重置。
+本包提供共享 GUI 外壳：一个带可缩放侧栏与详情面板的三栏 AppFrame、可选的载体标题栏，以及供其他插件调用以打开或关闭详情栏的 `ctx.layout` 面板几何服务。空间不足时，它的让步链先收缩再关闭详情栏。它还承载主题呈现器，把解析后的配色方案、别名 token、正文字号与 `theme-color` 元数据投影到 document。需要标准 Web 或 Desktop 窗口外观时选择它；面板几何是瞬时的，重新加载即重置。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在 root 槽位挂载本插件；它随即围绕占据侧栏、会话与详情栏的内容渲染应用框架。载体可以占据 `shell.titlebar`，在各栏上方添加窗口外观。用户拖动不可见命中条带缩放侧栏、拖动浮动胶囊缩放详情面板；窗口变窄时只有详情栏收缩，随后自动关闭。关闭的侧栏保留 56px 控制栏；专注 Desktop 任务窗口会完全省略该控制栏与侧栏内容；详情栏关闭到零宽度。
+在 root 槽位挂载本插件；它随即围绕占据侧栏、会话与详情栏的内容渲染应用框架。载体可以占据 `shell.titlebar`，在各栏上方添加窗口外观。用户拖动不可见命中条带缩放侧栏、拖动浮动胶囊缩放详情面板；窗口变窄时只有详情栏收缩，随后自动关闭。关闭的侧栏保留 56px 控制栏；详情栏关闭到零宽度。
 
 ### 主题呈现
 
@@ -53,7 +53,7 @@ kind: "package-reference"
 - [ui-sidebar](../ui-sidebar/README.zh.md)——占据 `sidebar` 栏及其座位。
 - [ui-conversation](../ui-conversation/README.zh.md)——占据 `conversation` 与 `details` 栏。
 - [ui-theme](../ui-theme/README.zh.md)——呈现器消费其解析快照的主题 seam。
-- [ui-desktop](../ui-desktop/README.zh.md)——占据可选标题栏并选择专注任务模式。
+- [ui-desktop](../ui-desktop/README.zh.md)——占据可选标题栏。
 - [Web 客户端架构](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.zh.md)——浏览器插件行如何加载并注册槽位。
 
 -----

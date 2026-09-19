@@ -1,8 +1,6 @@
 - banner:
   - navigation "Session hierarchy":
-    - button "/user-invoke-demo and confirm the fixtur" [disabled]
-  - img
-  - text: Standard mode
+    - button "Begin your reply with the" [disabled]
   - button "Session log":
     - text: Session log
     - img
@@ -13,21 +11,13 @@
   - img
   - img
   - text: System prompt
-- text: /user-invoke-demo and confirm the fixture wiring {{clock}}
+- text: Begin your reply with the plain sentence "Reading the workspace now." as text, and in that same message call the bash tool with the command "echo alpha". After the tool result, reply with the single word DONE and stop. {{clock}}
 - button "Copy":
   - img
-- button "Ran for {{duration}}" [expanded]:
+- button "Ran for {{duration}}":
   - text: Ran for {{duration}}
   - img
-- button "Context injection @deepseek-ai/dsh-system-prompt":
-  - img
-  - img
-  - text: Context injection @deepseek-ai/dsh-system-prompt
-- button "Context injection user-invoke-demo":
-  - img
-  - img
-  - text: Context injection user-invoke-demo
-- paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
+- paragraph: DONE
 - button "Copy":
   - img
 - button "Good response":
@@ -36,6 +26,9 @@
   - img
 - button "Branch into a new conversation":
   - img
+- button "Usage 15.8K tok":
+  - img
+  - text: Usage 15.8K tok
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
@@ -47,6 +40,6 @@
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
-- button "0% of context used"
+- button "6% of context used"
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 256 tok · Output 16 tok
+- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 50% Input 15.7K tok · Output 112 tok

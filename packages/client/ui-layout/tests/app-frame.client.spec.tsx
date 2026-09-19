@@ -54,7 +54,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-function mountFrame(options: { readonly focused?: boolean; readonly titlebar?: boolean } = {}) {
+function mountFrame(options: { readonly titlebar?: boolean } = {}) {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: unknown }[] = []
@@ -104,7 +104,6 @@ function mountFrame(options: { readonly focused?: boolean; readonly titlebar?: b
       useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
-      {...options.focused === undefined ? {} : { focused: options.focused }}
     />
   )
   const utils = render(element())
@@ -188,13 +187,6 @@ describe('AppFrame', () => {
     const { frame, getByTestId } = mountFrame({ titlebar: true })
     expect(getByTestId('desktop-titlebar')).toBeTruthy()
     expect(tracks(frame)).toEqual([280, 0])
-  })
-
-  it('removes the navigation track and controls from a focused task window', () => {
-    const { frame, queryByTestId } = mountFrame({ focused: true })
-    expect(tracks(frame)).toEqual([0, 0])
-    expect(queryByTestId('sidebar-content')).toBeNull()
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
   })
 
   it('renders the session pair with empty owner shares (sessionId is framework-standard)', () => {

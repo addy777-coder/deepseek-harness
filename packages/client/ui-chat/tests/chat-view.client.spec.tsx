@@ -1284,7 +1284,8 @@ describe('ChatView', () => {
       turnEnds: new Map([[1, 6]]),
     })
     const view = render(<h.ChatView {...h.props} />)
-    const toggle = view.getByRole('button', { name: '1 次工具调用 · 1 条消息 · 1 个 subagent' })
+    const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe('用时 4秒')
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(toggle.getAttribute('data-turn-process-tool-calls')).toBe('1')
     expect(toggle.getAttribute('data-turn-process-messages')).toBe('1')
@@ -1310,12 +1311,12 @@ describe('ChatView', () => {
     expect(members.map(member => member.getAttribute('hidden'))).toEqual([null, null, null])
 
     act(() => { h.set({ nodes: [user(1, 'question'), first] }) })
-    expect(view.getByRole('button', { name: '已思考' }).getAttribute('aria-expanded')).toBe('false')
+    expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
     expect(members[0]?.getAttribute('hidden')).toBeNull()
     act(() => { h.set({
       nodes: [user(1, 'question'), first, toolResult(3, 'a'), toolResult(4, 'b', 'subagent'), second],
     }) })
-    const renewedToggle = view.getByRole('button', { name: '1 次工具调用 · 1 条消息 · 1 个 subagent' })
+    const renewedToggle = turnProcessControl(view.container)!
     expect(renewedToggle.getAttribute('aria-expanded')).toBe('true')
     expect(members[0]?.getAttribute('hidden')).toBeNull()
   })
@@ -1601,7 +1602,10 @@ describe('ChatView', () => {
     expect(contextRow?.getAttribute('hidden')).toBe('until-found')
   })
 
-  it('keeps a foldable closed Turn fully visible while history is partial', () => {
+  it.each([
+    { name: 'with recorded timing', timed: true, label: '用时 27分37秒' },
+    { name: 'without the Turn start', timed: false, label: '已思考' },
+  ])('folds a closed Turn $name while earlier history remains unloaded', ({ timed, label }) => {
     const h = makeHarness({
       nodes: [
         user(1, 'question'),
@@ -1610,22 +1614,31 @@ describe('ChatView', () => {
         assistant(4, 'final answer', 1, 2),
       ],
       turnEnds: new Map([[1, 5]]),
+      turnTimings: timed ? new Map([[1, { startTime: 1_000, endTime: 1_658_000 }]]) : new Map(),
       hasMore: true,
     })
     const view = render(<h.ChatView {...h.props} />)
     const contextRow = view.container.querySelector<HTMLElement>('[data-chat-flow-kind="context"]')
 
-    expect(turnProcessControl(view.container)).toBeNull()
-    expect(contextRow?.getAttribute('hidden')).toBeNull()
-    expect(contextRow?.hasAttribute('data-turn-process-member')).toBe(false)
-
-    act(() => { h.set({ hasMore: false }) })
     const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe(label)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(contextRow?.getAttribute('hidden')).toBe('until-found')
+    expect(view.getByText('final answer').closest('[hidden]')).toBeNull()
+
+    fireEvent.click(toggle)
+    expect(contextRow?.getAttribute('hidden')).toBeNull()
+    act(() => { h.set({ hasMore: false }) })
+    expect(turnProcessControl(view.container)).toBe(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(contextRow?.getAttribute('hidden')).toBeNull()
+
+    fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(contextRow?.getAttribute('hidden')).toBe('until-found')
   })
 
-  it('withholds process controls for partial history and folds final-page groups', () => {
+  it('folds completed Turns as their history is prepended', () => {
     const h = makeHarness({
       nodes: [user(9, 'visible question'), assistant(10, 'visible answer', 2)],
       hasMore: true,
@@ -1643,7 +1656,7 @@ describe('ChatView', () => {
           assistant(10, 'visible answer', 2),
         ],
         turnEnds: new Map([[1, 5]]),
-        hasMore: false,
+        hasMore: true,
       })
     })
 
@@ -1812,7 +1825,8 @@ describe('ChatView', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     // The time pill carries the run time; first-step ttft (1.2s) and 100
     // tokens over 5s of decode move into its dialog.
-    const timeTrigger = view.getByRole('button', { name: /用时 19秒/ })
+    const tail = view.container.querySelector<HTMLElement>('[data-turn-tail]')!
+    const timeTrigger = within(tail).getByRole('button', { name: /用时 19秒/ })
     expect(timeTrigger.textContent).toBe('用时 19秒')
     expect(view.queryByText(/速度 20 tok\/s|首 token/)).toBeNull()
     fireEvent.click(timeTrigger)

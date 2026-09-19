@@ -111,6 +111,22 @@ describe('web e2e: custom sidebar sections', () => {
       await captureStableAria(page, '[role="tree"][aria-label="Sessions"]', scaffold.workspaceCwd), webSnapshotMode())
     await page.screenshot({ path: join(process.cwd(), '.playwright-mcp/workspace-sections.png'), animations: 'disabled' })
 
+    // The default area folds through the same heading control as a custom
+    // section, and its fold is browser-local: it survives a reload while the
+    // durable sections keep their own states.
+    await page.getByRole('button', { name: 'Unsectioned', exact: true }).click()
+    await expect.poll(
+      () => page.getByRole('button', { name: 'Unsectioned', exact: true }).getAttribute('aria-expanded'),
+    ).toBe('false')
+    await expect.poll(() => page.getByText('Drop a project or session here', { exact: true }).count()).toBe(0)
+    await page.reload({ waitUntil: 'load' })
+    await expect.poll(
+      () => page.getByRole('button', { name: 'Unsectioned', exact: true }).getAttribute('aria-expanded'),
+      { timeout: 15_000 },
+    ).toBe('false')
+    expect(await page.getByRole('button', { name: 'Work', exact: true }).getAttribute('aria-expanded')).toBe('true')
+    await page.getByRole('button', { name: 'Unsectioned', exact: true }).click()
+
     const saved = structuredClone(scaffold.ctx.workspaceRegistry.layout)
     await page.context().close()
     await peer.context().close()

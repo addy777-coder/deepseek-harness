@@ -16,8 +16,8 @@
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
-- button "Thought for a while" [expanded]:
-  - text: Thought for a while
+- button "Ran for {{duration}}" [expanded]:
+  - text: Ran for {{duration}}
   - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img

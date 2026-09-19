@@ -104,11 +104,10 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
 
   it.skipIf(MODE === 'record')('enables branch only on the completed transcript tail', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-message-actions'))
-    const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
-    await groupRow.click()
-    const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 10_000 })
+    // The seeded Session is unattached, so it renders as one plain row in the
+    // trailing Ungrouped run: the tree holds no bucket row above it.
+    const sessionRow = page.locator('[role="treeitem"]').first()
+    await sessionRow.waitFor({ timeout: 15_000 })
     await sessionRow.click()
     await expect.poll(() => page.getByText(MID_TURN_TEXT, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
@@ -152,10 +151,12 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       () => scaffold.ctx.agents.list().find(agent => agent.session.header.parentSession === SessionId(SEED_ID)),
       { timeout: 15_000 },
     ).toBeDefined()
+    // Two rows: the seeded Session and its fork. Unattached Sessions render as
+    // plain rows in the trailing Ungrouped run, which adds no header row.
     await expect.poll(
       () => page.locator('[role="treeitem"]').count(),
       { timeout: 10_000 },
-    ).toBe(3)
+    ).toBe(2)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
@@ -176,10 +177,11 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       () => scaffold.ctx.agents.list().filter(agent => agent.session.header.parentSession !== undefined).length,
       { timeout: 15_000 },
     ).toBe(2)
+    // Three rows: the seeded Session and both forks, still without a header row.
     await expect.poll(
       () => page.locator('[role="treeitem"]').count(),
       { timeout: 10_000 },
-    ).toBe(4)
+    ).toBe(3)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
