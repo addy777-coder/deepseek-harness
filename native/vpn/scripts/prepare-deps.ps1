@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param([string]$VsDevCmdPath, [string]$Target)
 . (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'dependency-install.ps1')
 $root = Get-VpnRoot
 $targetInfo = Get-VpnTarget $Target
 $toolchain = Get-VpnToolchain $VsDevCmdPath
@@ -29,11 +30,12 @@ try {
   $env:X_VCPKG_REGISTRIES_CACHE = Join-Path $deps 'registries'
   $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $deps 'binary-cache'
   $env:VCPKG_MAX_CONCURRENCY = '8'
-  & $toolchain.Vcpkg install "--vcpkg-root=$registry" "--triplet=$($targetInfo.Triplet)" "--host-triplet=$($targetInfo.HostTriplet)" `
-    "--x-manifest-root=$deps" "--x-install-root=$deps/installed" "--x-buildtrees-root=$deps/buildtrees" `
-    "--x-packages-root=$deps/packages" "--downloads-root=$deps/downloads" `
-    "--overlay-triplets=$root/deps/triplets" "--overlay-ports=$ports"
-  if ($LASTEXITCODE -ne 0) { throw 'The native VPN dependencies did not build.' }
+  Invoke-VpnDependencyInstall -Executable $toolchain.Vcpkg -Arguments @(
+    'install', "--vcpkg-root=$registry", "--triplet=$($targetInfo.Triplet)", "--host-triplet=$($targetInfo.HostTriplet)",
+    "--x-manifest-root=$deps", "--x-install-root=$deps/installed", "--x-buildtrees-root=$deps/buildtrees",
+    "--x-packages-root=$deps/packages", "--downloads-root=$deps/downloads",
+    "--overlay-triplets=$root/deps/triplets", "--overlay-ports=$ports"
+  )
   $provenance = @{
     triplet = $targetInfo.Triplet
     crt = $targetInfo.Crt

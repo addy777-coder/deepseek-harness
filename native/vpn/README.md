@@ -34,6 +34,8 @@ The output is `dist/<target>/`, where target is `windows-x64`, `darwin-arm64`, `
 
 macOS packaging applies an ad-hoc helper signature before computing its SHA-256 and manifest. This signature is not Developer ID signing or notarization. Desktop packaging must preserve the helper bytes and POSIX executable permission; final installer verification checks the same digest. The native release matrix owns macOS/Linux build and packaged-process verification. Real VPN compatibility requires the explicit [live acceptance run](tests/README.md) on each target with saved company credentials.
 
+Dependency installation retries failed transient downloads at most three times, with waits of five and ten seconds. Compiler errors, permanent HTTP errors and checksum mismatches stop immediately. The Desktop workflow caches downloaded archives and ABI-keyed vcpkg libraries per native target; pinned hashes and source checks remain required.
+
 The source ZIP contains the helper, exact upstream source archives, library source archives, and all selected vcpkg port patches. To use those supplied sources, extract the ZIP into a fresh directory and run:
 
 ```powershell

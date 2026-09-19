@@ -135,8 +135,26 @@ jobs:
         run: pnpm --dir native/landlock-run run build:native
       - name: Build official application and runtime
         run: pnpm run build:official
+      - name: Restore VPN dependency cache
+        id: vpn_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            native/vpn/.cache/dependencies/downloads
+            native/vpn/.cache/dependencies/binary-cache
+          key: vpn-deps-v1-${{ matrix.target }}-${{ hashFiles('native/vpn/deps/**', 'native/vpn/scripts/prepare-deps.ps1', 'native/vpn/scripts/dependency-install.ps1') }}
+      - name: Verify VPN dependency download retries
+        run: pwsh -File native/vpn/tests/dependency-install.test.ps1
       - name: Build and verify native VPN distribution
         run: pwsh -File native/vpn/scripts/build.ps1 -Target ${{ matrix.vpn }}
+      - name: Save VPN dependency cache
+        if: steps.vpn_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            native/vpn/.cache/dependencies/downloads
+            native/vpn/.cache/dependencies/binary-cache
+          key: ${{ steps.vpn_cache.outputs.cache-primary-key }}
       - name: Stage Desktop runtime
         run: pnpm --filter @deepseek-ai/dsh-desktop run stage:runtime
       - name: Stage Desktop application

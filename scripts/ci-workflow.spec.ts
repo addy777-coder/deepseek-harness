@@ -757,6 +757,30 @@ describe('Desktop installer publication', () => {
     expect(JSON.stringify(verify)).toContain('scripts/release/desktop.ts assemble')
   })
 
+  it('caches only verified VPN dependency downloads and ABI-keyed libraries between native runs', () => {
+    const build = workflowJob(loadWorkflow('.github/workflows/desktop-publish.yml'), 'build')
+    if (!Array.isArray(build.steps)) throw new Error('Desktop build must define steps')
+    const steps = build.steps.filter(isRecord)
+    const restore = steps.findIndex(step => step.name === 'Restore VPN dependency cache')
+    const native = steps.findIndex(step => step.name === 'Build and verify native VPN distribution')
+    const save = steps.findIndex(step => step.name === 'Save VPN dependency cache')
+    expect(restore).toBeGreaterThan(-1)
+    expect(native).toBeGreaterThan(restore)
+    expect(save).toBeGreaterThan(native)
+    const paths = 'native/vpn/.cache/dependencies/downloads\nnative/vpn/.cache/dependencies/binary-cache\n'
+    expect(steps[restore]).toMatchObject({ uses: 'actions/cache/restore@v4', with: { path: paths } })
+    expect(steps[save]).toMatchObject({
+      uses: 'actions/cache/save@v4',
+      if: "steps.vpn_cache.outputs.cache-hit != 'true'",
+      with: { path: paths, key: '${{ steps.vpn_cache.outputs.cache-primary-key }}' },
+    })
+    expect(JSON.stringify(steps[restore])).toContain('${{ matrix.target }}')
+    expect(JSON.stringify(steps[restore])).toContain("hashFiles('native/vpn/deps/**'")
+    expect(steps.find(step => step.name === 'Verify VPN dependency download retries')).toMatchObject({
+      run: 'pwsh -File native/vpn/tests/dependency-install.test.ps1',
+    })
+  })
+
   it('grants write access only to verified publication and never uses npm or PyPI publish', () => {
     const workflow = loadWorkflow('.github/workflows/desktop-publish.yml')
     if (!isRecord(workflow.jobs)) throw new Error('Desktop release must define jobs')

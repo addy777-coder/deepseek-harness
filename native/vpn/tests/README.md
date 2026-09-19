@@ -8,6 +8,8 @@ English | [中文](README.zh.md)
 
 The [helper build](../scripts/build.ps1) runs native packet/CONNECT tests, offline process checks and source-package restoration on each supported target. These checks need no company credentials. The separate live fixture verifies the saved company provider through the production credential, network and pi-ai services. The native CI matrix verifies macOS/Linux binaries; a maintainer with saved company credentials owns real VPN acceptance on each target.
 
+Run `pwsh -File native/vpn/tests/dependency-install.test.ps1` to check bounded dependency-download retries with local subprocess fixtures. It verifies recovery and rejection without network requests or compiled VPN binaries.
+
 ## Live run
 
 Save the VPN profile and account in the desktop settings, configure the company provider to use VPN and Anthropic Messages, and save its model credential. Disconnect the desktop VPN before launching the separate fixture. The fixture owns its own tunnel and leaves external OpenVPN clients untouched; an active external OpenVPN process or competing helper fails acceptance.

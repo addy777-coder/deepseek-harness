@@ -8,6 +8,8 @@ description: "离线原生 VPN 检查，以及通过受支持的 dsh 启动器�
 
 [辅助进程构建](../scripts/build.ps1)会在各受支持目标上运行原生数据包/CONNECT 测试、离线进程检查和源码包恢复验证，不需要公司凭据。单独的真实连接测试通过正式的凭据、网络和 pi-ai 服务验证已保存的公司提供商。原生 CI 矩阵验证 macOS/Linux 二进制文件；拥有已保存公司凭据的维护者负责各目标上的真实 VPN 验收。
 
+运行 `pwsh -File native/vpn/tests/dependency-install.test.ps1`，通过本地子进程 fixture 检查有界的依赖下载重试。它验证恢复和拒绝行为，不发起网络请求，也不需要已编译的 VPN 二进制。
+
 ## 真实连接运行
 
 在桌面设置中保存 VPN 配置和账号，将公司提供商设为使用 VPN 和 Anthropic Messages，并保存其模型凭据。启动独立测试前，先断开桌面 VPN。测试管理自己的隧道，不修改外部 OpenVPN 客户端；存在活动的外部 OpenVPN 进程或竞争的辅助进程时，验收会失败。

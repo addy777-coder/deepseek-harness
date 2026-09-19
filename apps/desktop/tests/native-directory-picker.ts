@@ -1,7 +1,7 @@
 /** Real Windows selection and cancellation through the installed dialog worker. */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -59,8 +59,10 @@ export async function assertNativeDirectoryPicker(executable: string, runtime: s
 
   const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-picker-'))
   try {
-    const selected = join(root, '安卓开发-🚀')
-    await mkdir(selected)
+    const directory = join(root, '安卓开发-🚀')
+    await mkdir(directory)
+    // Windows TEMP can use an 8.3 alias; the native chooser returns the long path.
+    const selected = await realpath(directory)
     for (const expected of [selected, null]) {
       const child = spawn(executable, [worker], {
         cwd: root,
