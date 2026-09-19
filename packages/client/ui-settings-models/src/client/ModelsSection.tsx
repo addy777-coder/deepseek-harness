@@ -12,7 +12,7 @@
  * re-renders from pushed invalidations or the post-apply reload.
  */
 
-import { useState, useSyncExternalStore } from 'react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, IconPlusOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -24,8 +24,6 @@ import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
-import { ImageRecognitionCard } from './ImageRecognitionCard.tsx'
-import type { ImageRecognitionCardController } from './image-recognition-controller.ts'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -41,8 +39,6 @@ export interface ModelsSectionInjected {
   operations: ModelsOperations
   /** Settings schema and immutable path callbacks. */
   schema: SettingsSchemaOperations
-  /** Global image-recognition model editor. */
-  imageRecognition?: ImageRecognitionCardController
   /** Section copy. */
   t: (key: keyof typeof en) => string
 }
@@ -85,7 +81,7 @@ interface EditorTarget extends ProviderIdentity {
 /** Values that vary around the shared provider-editor rendering. */
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
-  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'protectedImageRecognition' | 'onClose'
+  'namespace' | 'schema' | 'operations' | 't' | 'readOnly' | 'onClose'
 > {
   target: EditorTarget
 }
@@ -197,31 +193,17 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, operations, schema, imageRecognition, t, renderSlot } = props
+  const { controller, useSnapshot, operations, schema, t, renderSlot } = props
   if (
     controller === undefined || useSnapshot === undefined || operations === undefined
     || schema === undefined || t === undefined
   ) return null
-  return <Loaded
-    injected={{
-      controller,
-      useSnapshot,
-      operations,
-      schema,
-      ...imageRecognition === undefined ? {} : { imageRecognition },
-      t,
-    }}
-    renderSlot={renderSlot}
-  />
+  return <Loaded injected={{ controller, useSnapshot, operations, schema, t }} renderSlot={renderSlot} />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
-  const { controller, operations, schema, imageRecognition, t } = injected
+  const { controller, operations, schema, t } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
-  useSyncExternalStore(
-    listener => imageRecognition?.store.subscribe(listener) ?? (() => {}),
-    () => imageRecognition?.store.getSnapshot(),
-  )
   const [editing, setEditing] = useState<EditorTarget | undefined>(undefined)
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EditorTarget | undefined>(undefined)
@@ -308,7 +290,8 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   // step: whether the user already has a provider to talk to.
   const anyUsable = state.rows.some(providerUsable)
   const configured = state.rows.filter(row => row.configured)
-  const addable = state.rows.filter(row => !row.configured && row.entry.settingsNs !== '')
+  const configurable = state.rows.filter(row => state.namespaces.has(row.entry.settingsNs))
+  const addable = configurable.filter(row => !row.configured)
   const addTarget = adding ? editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
   // The draft's directory row, for the card extension seat. A refresh can drop
@@ -334,18 +317,21 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             {providerCopy(t('savedProvider'), savedIdentity)}
           </p>
         )}
-      {imageRecognition === undefined ? null : <ImageRecognitionCard controller={imageRecognition} t={t} />}
       <ul className={styles['rows']}>
         {configured.map((row) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
           if (namespace === undefined) return null
+          const error = row.entry.error === undefined
+            ? null
+            : <p role="alert" className={styles['error']}>{row.entry.error}</p>
           if (needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
             // First-run posture: the provider exists but has no key — the
             // setup card IS its presence on the page, until the user closes it.
             return (
               <li key={row.entry.provider} className={styles['setupCard']}>
+                {error}
                 {renderProviderEditor({
                   target,
                   namespace,
@@ -353,9 +339,6 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
-                  ...imageRecognition === undefined
-                    ? {}
-                    : { protectedImageRecognition: imageRecognition.currentTarget() },
                   onClose: (changed) => { closeSetup(changed, target) },
                 })}
                 {renderSlot(
@@ -438,6 +421,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                     : null}
                 </span>
               </div>
+              {error}
               {renderSlot(
                 'settings.models.provider-card',
                 { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
@@ -451,9 +435,6 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   operations,
                   t,
                   readOnly: !state.writable,
-                  ...imageRecognition === undefined
-                    ? {}
-                    : { protectedImageRecognition: imageRecognition.currentTarget() },
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
@@ -494,9 +475,6 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 operations={operations}
                 t={t}
                 readOnly={!state.writable}
-                {...imageRecognition === undefined
-                  ? {}
-                  : { protectedImageRecognition: imageRecognition.currentTarget() }}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
               {addRow === undefined
@@ -532,37 +510,41 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
               // and equal-width so they read as siblings and line up with the
               // rows above, rather than two pills of different lengths.
               <div className={styles['addActions']}>
-                <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={addable.length === 0 || !state.writable}
-                  onClick={() => {
-                    const first = addable[0]
-                    /* v8 ignore next -- the button is disabled while nothing is addable */
-                    if (first === undefined) return
-                    setSavedTarget(undefined)
-                    setDeclaring(false)
-                    setAdding(true)
-                    setEditing(targetOf(first))
-                  }}
-                >
-                  <IconPlusOutline16 size={14} />
-                  {t('add')}
-                </button>
-                <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={protocols.length === 0 || !state.writable}
-                  onClick={() => {
-                    setSavedTarget(undefined)
-                    setAdding(false)
-                    setEditing(undefined)
-                    setDeclaring(true)
-                  }}
-                >
-                  <IconPlusOutline16 size={14} />
-                  {t('customAdd')}
-                </button>
+                {configurable.length > 0 && (
+                  <button
+                    type="button"
+                    className={styles['addButton']}
+                    disabled={addable.length === 0 || !state.writable}
+                    onClick={() => {
+                      const first = addable[0]
+                      /* v8 ignore next -- the button is disabled while nothing is addable */
+                      if (first === undefined) return
+                      setSavedTarget(undefined)
+                      setDeclaring(false)
+                      setAdding(true)
+                      setEditing(targetOf(first))
+                    }}
+                  >
+                    <IconPlusOutline16 size={14} />
+                    {t('add')}
+                  </button>
+                )}
+                {state.namespaces.has('llm-pi-ai') && (
+                  <button
+                    type="button"
+                    className={styles['addButton']}
+                    disabled={protocols.length === 0 || !state.writable}
+                    onClick={() => {
+                      setSavedTarget(undefined)
+                      setAdding(false)
+                      setEditing(undefined)
+                      setDeclaring(true)
+                    }}
+                  >
+                    <IconPlusOutline16 size={14} />
+                    {t('customAdd')}
+                  </button>
+                )}
               </div>
             )}
       </div>

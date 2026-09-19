@@ -9,9 +9,6 @@
   ],
   "references": [
     {
-      "path": "../modules"
-    },
-    {
       "path": "../../../vendor/schemastery"
     },
     {

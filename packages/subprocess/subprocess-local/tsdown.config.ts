@@ -1,7 +1,11 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ['lib/types/index.js', 'lib/types/posix-process-inspector.js'],
+  entry: {
+    index: 'lib/types/index.js',
+    runner: 'lib/types/bin.js',
+    output: 'lib/types/output.js',
+  },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

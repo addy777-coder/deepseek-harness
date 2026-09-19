@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-connection",
-  "description": "Carrier-neutral GUI RPC and generation lifecycle with an authenticated Web adapter",
-  "version": "0.1.2-alpha.6",
+  "description": "Authenticated RPC transport and generation lifecycle",
+  "version": "0.1.6-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -17,10 +17,6 @@
     ".": {
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
-    },
-    "./web": {
-      "types": "./lib/types/web.d.ts",
-      "default": "./lib/web.js"
     },
     "./client": {
       "types": "./lib/types/client/index.d.ts",
@@ -38,13 +34,13 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-credentials": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^",
     "zod": "^4.4.3"
   },
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "lib/web.js",
-    "lib/api-path-*.js",
     "lib/types/**/*.d.ts"
   ],
   "peerDependencies": {
@@ -54,15 +50,8 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-attachment": "workspace:^",
     "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-credentials": "workspace:^",
-    "@deepseek-ai/dsh-host-directory-picker": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-tool-todo": "workspace:^",
-    "@deepseek-ai/dsh-util-values": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@deepseek-ai/dsh-session": "workspace:^"
   }
 }

@@ -35,6 +35,6 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $material 'downloads') -
 $files = @(Get-ChildItem -LiteralPath $sources, $ports -File -Recurse | Sort-Object FullName | ForEach-Object {
   [ordered]@{ path = [System.IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-[ordered]@{ revisions = $index.revisions; files = $files } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root '.cache/source-provenance.json') -Encoding utf8
+[ordered]@{ revisions = $index.revisions; files = $files } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root '.cache/source-build-record.json') -Encoding utf8
 Initialize-VpnSources
 Write-Output 'Restored verified upstream sources, port patches and dependency source archives. Run scripts/build.ps1 on the matching target host with its C++ build tools installed.'

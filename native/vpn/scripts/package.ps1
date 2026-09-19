@@ -105,7 +105,7 @@ try {
   foreach ($name in @('.gitignore', 'CMakeLists.txt', 'LICENSE', 'THIRD-PARTY-NOTICES.txt', 'README.md', 'README.zh.md', 'README.i18n.yaml')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $source
   }
-  $restored = Test-Path -LiteralPath (Join-Path $root '.cache/source-provenance.json') -PathType Leaf
+  $restored = Test-Path -LiteralPath (Join-Path $root '.cache/source-build-record.json') -PathType Leaf
   foreach ($name in @('openvpn3', 'lwip', 'vcpkg')) {
     $archive = Join-Path $material "archives/$name.tar"
     if ($restored) { Copy-Item -LiteralPath (Join-Path $root "source-material/archives/$name.tar") -Destination $archive }

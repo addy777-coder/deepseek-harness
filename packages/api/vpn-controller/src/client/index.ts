@@ -72,5 +72,7 @@ export function apply(ctx: Context): void {
   const model = new ClientVpnModel(ctx.remote.vpn)
   new VpnClientController(ctx, model)
   ctx.effect(() => ctx.remote.$on('network/changed', (view) => { model.accept(view) }))
-  ctx.on('connection/reset', () => { void model.load() })
+  ctx.on('connection/reset', () => {
+    if (model.getSnapshot().status !== 'idle') void model.load()
+  })
 }

@@ -1,7 +1,6 @@
 /** Browser plugin owning Session export download state and its shared modal. */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { ClientTransportHooks } from '@deepseek-ai/dsh-client-connection/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
@@ -34,8 +33,7 @@ export const inject = ['slots', 'locale']
  * @param ctx - browser context carrying slots and locale services.
  */
 export function apply(ctx: ClientContext): void {
-  const transport = (globalThis as { __DSH_TRANSPORT__?: ClientTransportHooks }).__DSH_TRANSPORT__
-  const controller = new SessionLogDownloadController(transport?.fetch, undefined, transport === undefined ? 'url' : 'blob')
+  const controller = new SessionLogDownloadController()
   ctx.provide('sessionLogDownload', controller)
   ctx.effect(() => async () => { await controller.dispose() }, 'session-log-download: browser download lifecycle')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'session-log-download: browser dictionaries')

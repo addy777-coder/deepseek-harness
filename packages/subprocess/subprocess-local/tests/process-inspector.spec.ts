@@ -89,6 +89,30 @@ function fakeInternals() {
 }
 
 describe('Linux process inspector', () => {
+  it.each(['EACCES', 'EMFILE'])('refuses to publish an empty snapshot when /proc enumeration fails with %s', (code) => {
+    const fake = fakeInternals()
+    const readDir = fake.internals.readDir.bind(fake.internals)
+    fake.internals.readDir = () => { throw Object.assign(new Error('Enumeration failed'), { code }) }
+    const inspector = createProcessInspector('linux', 'x64', fake.internals)
+    expect(() => inspector.snapshot()).toThrow('/proc directory is unreadable')
+    fake.internals.readDir = readDir
+    fake.dirs.set('/proc', ['10'])
+    fake.files.set('/proc/10/stat', stat(10, 10, 10, 10, '500'))
+    expect(inspector.snapshot().complete).toBe(true)
+    expect(inspector.snapshot().tree(10)).toEqual([{ pid: 10, started: '500' }])
+  })
+
+  it('makes no stdin-wait claim when process or task directories cannot be enumerated', () => {
+    const fake = fakeInternals()
+    fake.files.set('/proc/10/stat', stat(10, 10, 10, 10, '500'))
+    fake.links.set('/proc/10/fd/0', '/dev/pts/1')
+    fake.devices.set('/proc/10/fd/0', { character: true, rdev: 99 })
+    const inspector = createProcessInspector('linux', 'x64', fake.internals)
+    expect(inspector.isStdinWaiting(10, 10)).toBe(false)
+    fake.dirs.set('/proc', ['10'])
+    expect(inspector.isStdinWaiting(10, 10)).toBe(false)
+  })
+
   it('treats zombie-only process groups as quiescent and fails closed when unobservable', () => {
     const fake = fakeInternals()
     expect(linuxProcessGroupHasLiveMembers(77, fake.internals)).toBeUndefined()
@@ -285,7 +309,7 @@ describe('macOS process inspector', () => {
   it('reads tpgid and process trees, contains cycles, and identity-fences signals', () => {
     const fake = fakeInternals()
     fake.setTpgid('55\n')
-    fake.setPs(' 10 1 S Mon Jul 21 10:00:00 2026\n 11 10 S Mon Jul 21 10:00:01 2026\n 12 11 S Mon Jul 21 10:00:02 2026\n 13 99 S Mon Jul 21 10:00:03 2026\nmalformed\n')
+    fake.setPs(' 10 1 Mon Jul 21 10:00:00 2026\n 11 10 Mon Jul 21 10:00:01 2026\n 12 11 Mon Jul 21 10:00:02 2026\n 13 99 Mon Jul 21 10:00:03 2026\nmalformed\n')
     const inspector = createProcessInspector('darwin', 'arm64', fake.internals)
     expect(inspector.foregroundPgid(10)).toBe(55)
     expect(inspector.isStdinWaiting(55, 10)).toBe(false)
@@ -303,7 +327,7 @@ describe('macOS process inspector', () => {
     inspector.signalProcess({ pid: 12, started: 'missing' }, 'SIGTERM')
     expect(fake.kills).toEqual([[-55, 'SIGTSTP'], [11, 'SIGKILL']])
 
-    fake.setPs(' 10 11 S Mon Jul 21 10:00:00 2026\n 11 10 S Mon Jul 21 10:00:01 2026\n')
+    fake.setPs(' 10 11 Mon Jul 21 10:00:00 2026\n 11 10 Mon Jul 21 10:00:01 2026\n')
     expect(inspector.snapshot().tree(10)).toEqual([
       { pid: 11, started: 'Mon Jul 21 10:00:01 2026' },
       { pid: 10, started: 'Mon Jul 21 10:00:00 2026' },
@@ -312,7 +336,7 @@ describe('macOS process inspector', () => {
 
   it('re-reads the process table before signalling instead of trusting an earlier observation', () => {
     const fake = fakeInternals()
-    fake.setPs(' 11 10 S Mon Jul 21 10:00:01 2026\n')
+    fake.setPs(' 11 10 Mon Jul 21 10:00:01 2026\n')
     const inspector = createProcessInspector('darwin', 'arm64', fake.internals)
     inspector.snapshot()
     // The member exits after that observation; a recycled pid would otherwise
@@ -321,18 +345,6 @@ describe('macOS process inspector', () => {
 
     inspector.signalProcess({ pid: 11, started: 'Mon Jul 21 10:00:01 2026' }, 'SIGKILL')
 
-    expect(fake.kills).toEqual([])
-  })
-
-  it('treats macOS zombies as quiescent and never signals them', () => {
-    const fake = fakeInternals()
-    fake.setPs(' 11 10 Z+ Mon Jul 21 10:00:01 2026\n')
-    const inspector = createProcessInspector('darwin', 'arm64', fake.internals)
-    const identity = { pid: 11, started: 'Mon Jul 21 10:00:01 2026' }
-    expect(inspector.snapshot().tree(11)).toEqual([identity])
-    expect(inspector.snapshot().alive(identity)).toBe(false)
-    expect(inspector.isAlive(identity)).toBe(false)
-    inspector.signalProcess(identity, 'SIGKILL')
     expect(fake.kills).toEqual([])
   })
 

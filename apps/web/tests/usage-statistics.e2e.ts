@@ -8,7 +8,7 @@ import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
-  launchWebScaffold, realizeSeedFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, realizeSeedFixture, seedSession, selectedSessionFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { saveFailureShot } from './support.ts'
 
@@ -89,7 +89,7 @@ describe('web e2e: recorded usage statistics', () => {
     expect(await metric('Sessions').textContent()).toBe('0')
     await page.getByText('No usage recorded in this period. Start a conversation to see your activity here.', { exact: true }).waitFor()
 
-    const recorded = await readFile(FIXTURE, 'utf8')
+    const recorded = await readFile(await selectedSessionFixture(FIXTURE), 'utf8')
     const recent = await seedSession(scaffold, datedFixture(recorded, NOW - 3_600_000), 'usage-recent')
     await seedSession(scaffold, datedFixture(recorded, NOW - 10 * 86_400_000), 'usage-older')
     await scaffold.ctx.workspaceRegistry.archiveSession(recent)

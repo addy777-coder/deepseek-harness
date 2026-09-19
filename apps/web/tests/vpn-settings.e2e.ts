@@ -14,7 +14,7 @@ import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchCons
   webSnapshotMode, type WebScaffold } from './scaffold.ts'
 
 const OVERLAY = fileURLToPath(new URL('./vpn-settings.overlay.yml', import.meta.url))
-const INSTALL_ANCHOR = fileURLToPath(new URL('../../../packages/bundle/desktop-app/package.json', import.meta.url))
+const INSTALL_ANCHOR = fileURLToPath(new URL('../../../packages/bundle/web-app/package.json', import.meta.url))
 const EXPECTED = fileURLToPath(new URL('./expected/vpn-settings/', import.meta.url))
 const ARTIFACTS = fileURLToPath(new URL('../../../.playwright-mcp/', import.meta.url))
 const MODE = webSnapshotMode()
@@ -37,7 +37,7 @@ describe('web e2e: desktop VPN settings', () => {
     await writeFile(executablePath, executable)
     await mkdir(ARTIFACTS, { recursive: true })
     shots = await mkdtemp(join(ARTIFACTS, 'vpn-settings-'))
-    scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY, extraInstallAnchors: [INSTALL_ANCHOR] })
+    scaffold = await launchWebScaffold({ extraOverlayPath: OVERLAY })
     const internal = scaffold.ctx.loader.internal
     if (!internal) throw new Error('VPN GUI fixture requires the application module loader')
     const provider = await internal.import('@deepseek-ai/dsh-network-openvpn',
@@ -59,6 +59,7 @@ describe('web e2e: desktop VPN settings', () => {
         })
       }
       resolveExecutable(command: string): Promise<string> { return Promise.resolve(command) }
+      terminalEnvironment(): Promise<never> { return Promise.reject(new Error('VPN GUI fixture has no terminal environment')) }
       spawnTerminal(): Promise<never> { return Promise.reject(new Error('VPN GUI fixture has no terminal')) }
       spawn(spec: SubprocessSpawnSpec): ScriptedChild {
         const child = new ScriptedChild()

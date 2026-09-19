@@ -48,7 +48,7 @@ describe('web app browser startup', () => {
     writeFileSync(webserverModule, 'export default globalThis.__dshWebServer\n')
     writeFileSync(connectionModule, [
       "export const inject = ['webServer']",
-      "export const apply = ctx => { ctx.provide('connection', globalThis.__dshConnection); ctx.provide('webConnection', globalThis.__dshConnection) }",
+      "export const apply = ctx => ctx.provide('connection', globalThis.__dshConnection)",
       '',
     ].join('\n'))
     writeFileSync(webAppModule, [

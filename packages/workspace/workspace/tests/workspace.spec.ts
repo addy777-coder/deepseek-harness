@@ -7,7 +7,7 @@ import Storage from '@deepseek-ai/dsh-storage'
 import type { StorageBackend } from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import type { DomainChanged } from '@deepseek-ai/dsh-storage-domain'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import { SessionPersistenceRevision } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
@@ -17,178 +17,13 @@ import WorkspaceRegistry, {
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
 } from '../src/index.ts'
-import type { SidebarSectionId, WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
+import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
+import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath } from '../src/paths.ts'
 
-const DOMAIN_VERSION = 3
-
-describe('WorkspaceRegistry sidebar sections', () => {
-  it('persists section/project order and restores projects when their section is deleted', async () => {
-    const result = await harness()
-    const a = await result.registry.create(await makeDir('section-a'))
-    const b = await result.registry.create(await makeDir('section-b'))
-    const c = await result.registry.create(await makeDir('section-c'))
-    const first = await result.registry.createSection('  Work  ')
-    const second = await result.registry.createSection('Personal')
-    expect(first.layout.sections[0]?.title).toBe('Work')
-    expect(second.layout.revision).toBe(first.layout.revision + 1)
-    await result.registry.moveWorkspaceToSection(a.id, first.sectionId)
-    await result.registry.moveWorkspaceToSection(b.id, first.sectionId, a.id)
-    expect(result.registry.layout.sections[0]?.workspaceIds).toEqual([b.id, a.id])
-    await result.registry.moveWorkspaceToSection(a.id, second.sectionId)
-    await result.registry.insertSectionBefore(second.sectionId, first.sectionId)
-    await result.registry.renameSection(second.sectionId, 'Home')
-    const committed = structuredClone(result.registry.layout)
-    await result.ctx.fiber.dispose()
-    const reopened = await harness({ pool: result.pool })
-    expect(reopened.registry.layout).toEqual(committed)
-    await reopened.registry.moveWorkspaceToSection(a.id, null, c.id)
-    expect(reopened.registry.layout.workspaceIds).toEqual([a.id, c.id, b.id])
-    const unchanged = structuredClone(reopened.registry.layout)
-    await reopened.registry.moveWorkspaceToSection(a.id, null, a.id)
-    expect(reopened.registry.layout).toEqual(unchanged)
-    await reopened.registry.moveWorkspaceToSection(a.id, second.sectionId)
-    await reopened.registry.moveWorkspaceToSection(a.id, null)
-    await reopened.registry.moveWorkspaceToSection(a.id, first.sectionId, b.id)
-    await reopened.registry.deleteSection(first.sectionId)
-    expect(reopened.registry.layout.workspaceIds).toEqual([c.id, a.id, b.id])
-    expect(reopened.registry.layout.sections).toEqual([{ id: second.sectionId, title: 'Home', workspaceIds: [], sessionIds: [] }])
-    await reopened.ctx.fiber.dispose()
-  })
-
-  it('places sessions once while preserving cwd, project accounting, and archived placement', async () => {
-    const path = await makeDir('session-sections')
-    const result = await harness({ sessions: [header('one', path), header('two', path)] })
-    const workspace = result.registry.list()[0]!
-    const original = [...workspace.sessionIds]
-    const first = await result.registry.createSection('First')
-    const second = await result.registry.createSection('Second')
-    await result.registry.moveSessionToSection(SessionId('one'), first.sectionId)
-    await result.registry.moveSessionToSection(SessionId('two'), first.sectionId, SessionId('one'))
-    expect(result.registry.layout.sections[0]?.sessionIds).toEqual(['two', 'one'])
-    await result.registry.moveSessionToSection(SessionId('one'), second.sectionId)
-    expect(result.registry.layout.sections.map(section => section.sessionIds)).toEqual([['two'], ['one']])
-    expect(workspace.sessionIds).toEqual(original)
-    expect(workspace.path).toBe(path)
-    await result.registry.archiveSession(SessionId('one'))
-    await result.registry.moveSessionToSection(SessionId('two'), null)
-    const retained = await result.registry.create(await makeDir('retained-project'))
-    await result.registry.moveWorkspaceToSection(retained.id, second.sectionId)
-    await result.registry.moveWorkspaceToSection(workspace.id, second.sectionId)
-    await result.registry.delete(workspace.id)
-    expect(result.registry.layout.sections[1]?.workspaceIds).toEqual([retained.id])
-    expect(result.registry.layout.sections.map(section => section.sessionIds)).toEqual([[], ['one']])
-    const layout = structuredClone(result.registry.layout)
-    await result.ctx.fiber.dispose()
-    const reopened = await harness({ pool: result.pool, sessions: [header('one', path), header('two', path)] })
-    expect(reopened.registry.layout).toEqual(layout)
-    expect(reopened.registry.archivedSessionIds).toEqual(['one'])
-    await reopened.ctx.fiber.dispose()
-  })
-
-  it('rejects invalid titles, destinations, and anchors without changing the layout', async () => {
-    const result = await harness({ sessions: [header('one')] })
-    const workspace = await result.registry.create(await makeDir('invalid-sections'))
-    const first = await result.registry.createSection('First')
-    const second = await result.registry.createSection('Second')
-    const missing = 'missing' as SidebarSectionId
-    const prior = structuredClone(result.registry.layout)
-    const requests = [
-      () => result.registry.createSection('   '),
-      () => result.registry.createSection(' First '),
-      () => result.registry.renameSection(first.sectionId, 'Second'),
-      () => result.registry.renameSection(missing, 'Name'),
-      () => result.registry.deleteSection(missing),
-      () => result.registry.insertSectionBefore(first.sectionId, missing),
-      () => result.registry.moveWorkspaceToSection(workspace.id, missing),
-      () => result.registry.moveWorkspaceToSection(WorkspaceId('missing'), first.sectionId),
-      () => result.registry.moveWorkspaceToSection(workspace.id, first.sectionId, WorkspaceId('missing')),
-      () => result.registry.moveSessionToSection(SessionId('missing'), first.sectionId),
-      () => result.registry.moveSessionToSection(SessionId('one'), missing),
-      () => result.registry.moveSessionToSection(SessionId('one'), first.sectionId, SessionId('missing')),
-      () => result.registry.moveSessionToSection(SessionId('one'), null, SessionId('one')),
-    ]
-    for (const request of requests) {
-      await expect(request()).rejects.toThrow()
-      expect(result.registry.layout).toEqual(prior)
-    }
-    await result.registry.moveWorkspaceToSection(workspace.id, second.sectionId)
-    await expect(result.registry.moveWorkspaceToSection(workspace.id, null, workspace.id)).rejects.toThrow(/anchor/)
-    await result.ctx.fiber.dispose()
-  })
-
-  it('skips no-op writes and serializes competing edits after a rejected write', async () => {
-    const result = await harness({ sessions: [header('one')] })
-    const a = await result.registry.create(await makeDir('atomic-a'))
-    const b = await result.registry.create(await makeDir('atomic-b'))
-    const first = await result.registry.createSection('First')
-    const second = await result.registry.createSection('Second')
-    await result.registry.moveWorkspaceToSection(a.id, first.sectionId)
-    await result.registry.moveSessionToSection(SessionId('one'), first.sectionId)
-    const prior = structuredClone(result.registry.layout)
-    await result.registry.renameSection(first.sectionId, ' First ')
-    await result.registry.insertSectionBefore(first.sectionId, first.sectionId)
-    await result.registry.moveWorkspaceToSection(a.id, first.sectionId, a.id)
-    await result.registry.moveSessionToSection(SessionId('one'), first.sectionId, SessionId('one'))
-    expect(result.registry.layout).toEqual(prior)
-    result.pool.failNextWrites = 1
-    const changes = await Promise.allSettled([
-      result.registry.moveWorkspaceToSection(a.id, second.sectionId),
-      result.registry.moveWorkspaceToSection(b.id, second.sectionId),
-    ])
-    expect(changes.map(change => change.status)).toEqual(['rejected', 'fulfilled'])
-    expect(result.registry.layout.sections.map(section => section.workspaceIds)).toEqual([[a.id], [b.id]])
-    expect(result.registry.layout.revision).toBe(prior.revision + 1)
-    const names = await Promise.allSettled([
-      result.registry.renameSection(first.sectionId, 'Shared'),
-      result.registry.renameSection(second.sectionId, 'Shared'),
-    ])
-    expect(names.filter(value => value.status === 'fulfilled')).toHaveLength(1)
-    await result.ctx.fiber.dispose()
-  })
-
-  it('retains sections when recovering an interrupted project deletion', async () => {
-    const result = await harness()
-    const a = await result.registry.create(await makeDir('recover-section-a'))
-    const b = await result.registry.create(await makeDir('recover-section-b'))
-    const section = await result.registry.createSection('Keep')
-    await result.registry.moveWorkspaceToSection(b.id, section.sectionId)
-    const state = structuredClone(storedState(result.pool))
-    await result.ctx.fiber.dispose()
-    state.workspaceIds = state.workspaceIds.filter(id => id !== a.id)
-    state.layoutRevision++
-    state.pendingMutation = { operation: 'delete', workspaceId: a.id }
-    result.pool.media.get('workspace')!.global = state
-    const recovered = await harness({ pool: result.pool })
-    expect(recovered.registry.layout.sections[0]?.workspaceIds).toEqual([b.id])
-    expect(recovered.registry.layout.revision).toBe(state.layoutRevision)
-    expect(recovered.registry.get(a.id)).toBeUndefined()
-    expect(storedState(result.pool).pendingMutation).toBeUndefined()
-    await recovered.ctx.fiber.dispose()
-  })
-
-  it('rejects version 2 and corrupt section references on startup', async () => {
-    const empty = { initialized: true, workspaceIds: [] }
-    const old = storedPool([], empty)
-    old.versions.set('workspace', 2)
-    await expect(harness({ pool: old })).rejects.toThrow(/stamped v2.*v3/)
-    const entry = { id: 'one' as SidebarSectionId, title: 'One', workspaceIds: [], sessionIds: [] }
-    const corrupt: WorkspaceDomainState['sections'][] = [
-      [entry, entry],
-      [entry, { ...entry, id: 'two' as SidebarSectionId }],
-      [{ ...entry, title: '  ' }],
-      [{ ...entry, title: ' One ' }],
-      [{ ...entry, workspaceIds: [WorkspaceId('missing')] }],
-      [{ ...entry, sessionIds: [SessionId('missing')] }],
-      [{ ...entry, sessionIds: [SessionId('same'), SessionId('same')] }],
-    ]
-    for (const sections of corrupt) {
-      await expect(harness({ pool: storedPool([], { ...empty, sections }) })).rejects.toThrow()
-    }
-  })
-})
+const DOMAIN_VERSION = 2
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
-  version: 0,
+  version: SESSION_FORMAT_VERSION,
   id: SessionId(id),
   createdAt,
   isSeeded: false,
@@ -309,8 +144,12 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
   }
 }
 
-type StoredDomainState = Omit<WorkspaceDomainState, 'archivedSessionIds' | 'sections' | 'layoutRevision'>
-  & Partial<Pick<WorkspaceDomainState, 'archivedSessionIds' | 'sections' | 'layoutRevision'>>
+/**
+ * Media written before archivedSessionIds existed omit the field; keeping the
+ * fixtures in that shape continuously proves the schema default upgrades them.
+ */
+type StoredDomainState = Omit<WorkspaceDomainState, 'archivedSessionIds'>
+  & Partial<Pick<WorkspaceDomainState, 'archivedSessionIds'>>
 
 function storedPool(
   entries: Array<[string, WorkspaceRecord]>,
@@ -320,7 +159,7 @@ function storedPool(
   pool.versions.set('workspace', DOMAIN_VERSION)
   pool.media.set('workspace', {
     tables: new Map([['workspaces', new Map<string, unknown>(entries)]]),
-    global: { archivedSessionIds: [], sections: [], layoutRevision: 0, ...state },
+    global: state,
   })
   return pool
 }
@@ -362,10 +201,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     await fiber.await()
     expect(ctx.workspaceRegistry.list()).toEqual([])
     expect(list).toHaveBeenCalledTimes(1)
-    expect(storedState(pool)).toEqual({
-      sections: [], layoutRevision: expect.any(Number) as number,
-      initialized: true, workspaceIds: [], archivedSessionIds: [],
-    })
+    expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [] })
   })
 
   it('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
@@ -373,7 +209,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     const newer = await makeDir('newer')
     const alias = join(base, 'older-link')
     const plain = join(base, 'plain.txt')
-    await symlink(older, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    await symlink(older, alias)
     await writeFile(plain, 'not a directory')
     const missing = join(base, 'missing')
     const result = await harness({
@@ -395,7 +231,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
       ['newer-only'],
       ['older-latest', 'older-first'],
     ])
-    expect(storedState(result.pool)).toEqual({ sections: [], layoutRevision: expect.any(Number) as number,
+    expect(storedState(result.pool)).toEqual({
       initialized: true,
       workspaceIds: result.registry.list().map(workspace => workspace.id),
       archivedSessionIds: [],
@@ -427,10 +263,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     const second = await harness({ pool, sessions: [header('late', late, 100)] })
     expect(second.list).not.toHaveBeenCalled()
     expect(second.registry.list()).toEqual([])
-    expect(storedState(pool)).toEqual({
-      sections: [], layoutRevision: expect.any(Number) as number,
-      initialized: true, workspaceIds: [], archivedSessionIds: [],
-    })
+    expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [] })
   })
 
   it('reuses partial records after a bootstrap record write fails', async () => {
@@ -524,11 +357,29 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
 })
 
 describe('WorkspaceRegistry create and lookup', () => {
+  it('accepts fully qualified roots and directories without accepting drive-relative paths', () => {
+    expect(fullyQualifiedWorkspacePath('C:\\', 'win32')).toBe(true)
+    expect(fullyQualifiedWorkspacePath('C:\\work', 'win32')).toBe(true)
+    expect(fullyQualifiedWorkspacePath('\\\\server\\share', 'win32')).toBe(true)
+    expect(defaultWorkspaceTitle('C:\\', 'win32')).toBe('C:\\')
+    expect(defaultWorkspaceTitle('C:\\work', 'win32')).toBe('work')
+    expect(defaultWorkspaceTitle('\\\\server\\share', 'win32')).toBe('share')
+    expect(fullyQualifiedWorkspacePath('C:', 'win32')).toBe(false)
+    expect(fullyQualifiedWorkspacePath('C:work', 'win32')).toBe(false)
+    expect(fullyQualifiedWorkspacePath('\\work', 'win32')).toBe(false)
+    expect(fullyQualifiedWorkspacePath('.', 'win32')).toBe(false)
+    expect(fullyQualifiedWorkspacePath('/', 'linux')).toBe(true)
+    expect(fullyQualifiedWorkspacePath('/work', 'darwin')).toBe(true)
+    expect(defaultWorkspaceTitle('/', 'linux')).toBe('/')
+    expect(defaultWorkspaceTitle('/work', 'darwin')).toBe('work')
+    expect(fullyQualifiedWorkspacePath('work', 'linux')).toBe(false)
+  })
+
   it('creates newest-first and idempotently reuses a canonical path without retitling', async () => {
     const firstDir = await makeDir('first')
     const secondDir = await makeDir('second')
     const alias = join(base, 'first-link')
-    await symlink(firstDir, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    await symlink(firstDir, alias)
     const { registry, pool } = await harness()
     const first = await registry.create(firstDir, 'Original')
     const second = await registry.create(secondDir)
@@ -572,6 +423,14 @@ describe('WorkspaceRegistry create and lookup', () => {
     await expect(registry.create(join(parent, 'missing'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(registry.create(file)).rejects.toThrow(/not a directory/)
     await expect(registry.resolveByPath(join(parent, 'missing'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(registry.list()).toEqual([])
+  })
+
+  it('rejects a resolvable relative path instead of adopting it from the Host cwd', async () => {
+    const { registry } = await harness()
+    const fromHostCwd = '.'
+    await expect(registry.create(fromHostCwd)).rejects.toThrow(/fully qualified/)
+    await expect(registry.resolveByPath(fromHostCwd)).rejects.toThrow(/fully qualified/)
     expect(registry.list()).toEqual([])
   })
 
@@ -658,10 +517,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     await expect(result.registry.delete(workspace.id)).resolves.toBe(false)
     expect(result.registry.get(workspace.id)).toBeUndefined()
     expect(result.registry.list()).toEqual([])
-    expect(storedState(result.pool)).toEqual({
-      sections: [], layoutRevision: expect.any(Number) as number,
-      initialized: true, workspaceIds: [], archivedSessionIds: [],
-    })
+    expect(storedState(result.pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [] })
     expect(result.pool.media.get('workspace')!.tables.get('workspaces')!.has(workspace.id)).toBe(false)
     await expect(realpath(dir)).resolves.toBe(dir)
     expect(result.list).toHaveBeenCalledTimes(1)
@@ -701,7 +557,7 @@ describe('WorkspaceRegistry create and lookup', () => {
 
     await expect(first.registry.delete(workspace.id)).resolves.toBe(true)
     expect(first.registry.list()).toEqual([])
-    expect(storedState(pool)).toEqual({ sections: [], layoutRevision: expect.any(Number) as number,
+    expect(storedState(pool)).toEqual({
       initialized: true,
       workspaceIds: [],
       archivedSessionIds: [],
@@ -709,7 +565,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     })
     const reregistered = await first.registry.create(dir)
     expect(reregistered.id).not.toBe(workspace.id)
-    expect(storedState(pool)).toEqual({ sections: [], layoutRevision: expect.any(Number) as number,
+    expect(storedState(pool)).toEqual({
       initialized: true,
       workspaceIds: [reregistered.id],
       archivedSessionIds: [],
@@ -992,10 +848,7 @@ describe('header-validated membership projection', () => {
     const createRecovery = await harness({ pool: interruptedCreate })
     expect(createRecovery.registry.list()).toEqual([])
     expect(interruptedCreate.media.get('workspace')!.tables.get('workspaces')!.has(createId)).toBe(false)
-    expect(storedState(interruptedCreate)).toEqual({
-      sections: [], layoutRevision: expect.any(Number) as number,
-      initialized: true, workspaceIds: [], archivedSessionIds: [],
-    })
+    expect(storedState(interruptedCreate)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [] })
 
     const interruptedDelete = storedPool(
       [[deleteId, record(deleteDir, [])]],
@@ -1008,10 +861,7 @@ describe('header-validated membership projection', () => {
     const deleteRecovery = await harness({ pool: interruptedDelete })
     expect(deleteRecovery.registry.list()).toEqual([])
     expect(interruptedDelete.media.get('workspace')!.tables.get('workspaces')!.has(deleteId)).toBe(false)
-    expect(storedState(interruptedDelete)).toEqual({
-      sections: [], layoutRevision: expect.any(Number) as number,
-      initialized: true, workspaceIds: [], archivedSessionIds: [],
-    })
+    expect(storedState(interruptedDelete)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [] })
 
     const corruptPending = storedPool(
       [[deleteId, record(deleteDir, [])]],
@@ -1088,7 +938,7 @@ describe('registry-global session archive', () => {
     expect(result.registry.archivedSessionIds).toEqual(['stray', 'live-only'])
 
     await expect(result.registry.archiveSession(SessionId('ghost')))
-      .rejects.toThrow(/unknown session 'ghost'/)
+      .rejects.toThrow(/cannot archive session 'ghost'/)
     expect(storedState(result.pool).archivedSessionIds).toEqual(['stray', 'live-only'])
   })
 
@@ -1121,5 +971,65 @@ describe('registry-global session archive', () => {
     )
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
+  })
+})
+
+describe('registry-global session unarchive', () => {
+  it('unarchives durably in order, idempotently skips absent ids, and leaves accounting untouched', async () => {
+    const dir = await makeDir('unarchive-home')
+    const result = await harness({
+      sessions: [header('one', dir, 100), header('two', dir, 200), header('three', dir, 300)],
+    })
+    const workspace = result.registry.list()[0]!
+    await result.registry.archiveSession(SessionId('one'))
+    await result.registry.archiveSession(SessionId('two'))
+    await result.registry.archiveSession(SessionId('three'))
+    expect(result.registry.archivedSessionIds).toEqual(['one', 'two', 'three'])
+
+    await result.registry.unarchiveSession(SessionId('two'))
+    // Removal keeps the survivors in archive order.
+    expect(result.registry.archivedSessionIds).toEqual(['one', 'three'])
+    // Unarchiving is a display-set write: the workspace account keeps the id.
+    expect(workspace.sessionIds).toContain('two')
+    expect(storedState(result.pool).archivedSessionIds).toEqual(['one', 'three'])
+    const changesAfterFirst = result.changes.filter(change => change.table === '').length
+
+    await result.registry.unarchiveSession(SessionId('two'))
+    expect(result.registry.archivedSessionIds).toEqual(['one', 'three'])
+    // The absent-id repeat neither rewrites the medium nor emits a change.
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesAfterFirst)
+
+    await result.registry.unarchiveSession(SessionId('never-archived'))
+    expect(result.registry.archivedSessionIds).toEqual(['one', 'three'])
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesAfterFirst)
+  })
+
+  it('unarchives an entry whose session is gone without consulting session persistence', async () => {
+    const dir = await makeDir('unarchive-vanished')
+    const result = await harness({ sessions: [header('vanished', dir, 100)] })
+    await result.registry.archiveSession(SessionId('vanished'))
+    result.setSessions([])
+    const listingsBefore = result.list.mock.calls.length
+    result.list.mockRejectedValueOnce(new Error('persistence backend down'))
+
+    // Removing an id cannot introduce an unknown one, so the archive entry
+    // resolves even though no session backs it and no listing runs.
+    await expect(result.registry.unarchiveSession(SessionId('vanished'))).resolves.toBeUndefined()
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(result.list.mock.calls.length).toBe(listingsBefore)
+  })
+
+  it('keeps the surviving archive set across restarts', async () => {
+    const dir = await makeDir('unarchive-restart')
+    const pool = new MemoryMediaPool()
+    const sessions = [header('kept', dir, 100), header('restored', dir, 200)]
+    const first = await harness({ pool, sessions })
+    await first.registry.archiveSession(SessionId('kept'))
+    await first.registry.archiveSession(SessionId('restored'))
+    await first.registry.unarchiveSession(SessionId('restored'))
+    await first.fiber.dispose()
+
+    const second = await harness({ pool, sessions })
+    expect(second.registry.archivedSessionIds).toEqual(['kept'])
   })
 })

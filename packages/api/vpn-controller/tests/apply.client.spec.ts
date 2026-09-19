@@ -31,6 +31,8 @@ describe('VPN Client plugin', () => {
     const b = await bench()
     expect(b.remote.calls).toHaveLength(0)
     expect(b.listeners.size).toBe(1)
+    b.ctx.emit('connection/reset')
+    expect(b.remote.calls).toHaveLength(0)
     for (const listener of b.listeners) listener(view('connected'))
     expect(b.service.snapshot.getSnapshot().data?.connection).toBe('connected')
     const load = b.service.load()

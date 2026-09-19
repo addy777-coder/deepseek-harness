@@ -1,15 +1,15 @@
 /** Browser-session authentication for the Host Connection carrier. */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import type { CredentialKey, CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import type {
   ConnectionIndexRequest,
   ConnectionIndexResponse,
   ConnectionTrustRequest,
 } from './rpc.ts'
 
-const AUTH_RECORD_KEY = brandString<CredentialKey>('client-connection/browser-session')
+const AUTH_RECORD_KEY = credentialKey('client-connection', 'browser-session')
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const SECRET_BYTES = 32
 const TOKEN_QUERY = 'token'

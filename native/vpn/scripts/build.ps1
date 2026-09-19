@@ -18,12 +18,12 @@ if (-not $LocalDependenciesPath) {
   $LocalDependenciesPath = Join-Path $root ".cache/dependencies/installed/$($targetInfo.Triplet)"
 }
 $prefix = (Resolve-Path -LiteralPath $LocalDependenciesPath).Path
-$provenance = Get-Content -LiteralPath (Join-Path $prefix 'dsh-vpn-dependencies.json') -Raw | ConvertFrom-Json
+$dependencyInputs = Get-Content -LiteralPath (Join-Path $prefix 'dsh-vpn-dependencies.json') -Raw | ConvertFrom-Json
 $pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
-if ($provenance.triplet -ne $targetInfo.Triplet -or $provenance.crt -ne $targetInfo.Crt `
-    -or $provenance.registryRevision -ne $pins.vcpkg.revision `
-    -or $provenance.manifestSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root 'deps/vcpkg.json') -Algorithm SHA256).Hash.ToLowerInvariant() `
-    -or $provenance.tripletSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root "deps/triplets/$($targetInfo.Triplet).cmake") -Algorithm SHA256).Hash.ToLowerInvariant()) {
+if ($dependencyInputs.triplet -ne $targetInfo.Triplet -or $dependencyInputs.crt -ne $targetInfo.Crt `
+    -or $dependencyInputs.registryRevision -ne $pins.vcpkg.revision `
+    -or $dependencyInputs.manifestSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root 'deps/vcpkg.json') -Algorithm SHA256).Hash.ToLowerInvariant() `
+    -or $dependencyInputs.tripletSha256 -ne (Get-FileHash -LiteralPath (Join-Path $root "deps/triplets/$($targetInfo.Triplet).cmake") -Algorithm SHA256).Hash.ToLowerInvariant()) {
   throw 'LocalDependenciesPath does not contain the pinned dependencies for this native VPN target.'
 }
 $build = Join-Path $root "build/$($targetInfo.Name)"

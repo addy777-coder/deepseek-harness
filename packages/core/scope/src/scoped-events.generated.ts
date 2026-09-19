@@ -8,6 +8,7 @@
 type ScopedSubjectResolver = (args: readonly unknown[]) => unknown
 
 const scopedSubjectResolvers: Readonly<Record<string, ScopedSubjectResolver | null>> = Object.freeze({
+  'agent/assistant-stream': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/created': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/disposed': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/error': args => (args[0] as Record<string, unknown>)['agent'],
@@ -16,9 +17,7 @@ const scopedSubjectResolvers: Readonly<Record<string, ScopedSubjectResolver | nu
   'agent/inbox/inserted': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/pre-step': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/request': args => (args[0] as Record<string, unknown>)['agent'],
-  'agent/request-context': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/request-error': args => (args[0] as Record<string, unknown>)['agent'],
-  'agent/session-start': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/status': args => (args[0] as Record<string, unknown>)['agent'],
   'agent/turn-stopping': args => (args[0] as Record<string, unknown>)['agent'],
   'approval/request': args => (args[0] as Record<string, unknown>)['agent'],

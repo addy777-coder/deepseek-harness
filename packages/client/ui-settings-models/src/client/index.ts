@@ -25,10 +25,6 @@ import { decodeWelcomeSection, WelcomeNoticeStore } from './welcome-store.ts'
 import { ModelsSettingsStore } from './store.ts'
 import { createModelsOperations } from './operations.ts'
 import { createSettingsSchemaOperations } from './schema-operations.ts'
-import {
-  IMAGE_RECOGNITION_NS,
-  ImageRecognitionCardController,
-} from './image-recognition-controller.ts'
 import { en, zh, type ModelsKey } from './locales.ts'
 import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
 
@@ -66,7 +62,7 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
  * constrained; registration depends on each slot through `slots.inject()`.
  */
 export const inject = [
-  'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.session', 'remote.settings',
+  'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings',
   'settingsScope', 'settingsSchema',
 ]
 
@@ -84,10 +80,6 @@ export function apply(ctx: ClientContext): void {
   // own `inject`; the cards receive callbacks and never a context.
   const operations = createModelsOperations(ctx)
   const controller = new ModelsSettingsStore(ctx, schema, ctx.settingsScope.describe())
-  const imageRecognition = new ImageRecognitionCardController(
-    ctx.settingsScope.bind({ namespace: IMAGE_RECOGNITION_NS }),
-    ctx,
-  )
   // Registration-time text (the nav label thunk) and the inject faces share
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
@@ -96,7 +88,6 @@ export function apply(ctx: ClientContext): void {
     hooks: { snapshot: controller.store },
     operations,
     schema,
-    imageRecognition,
     t,
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
@@ -126,23 +117,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     const refreshModels = (): void => { refreshIfLoaded(controller) }
     const disposers = [
-      ctx.remote.$on('settings/document-updated', () => {
-        refreshModels()
-        imageRecognition.refreshCatalog()
-      }),
+      ctx.remote.$on('settings/document-updated', () => { refreshModels() }),
       ctx.remote.$on('credentials/reference-updated', refreshModels),
-      ctx.remote.$on('llm/adapters-updated', () => {
-        refreshModels()
-        imageRecognition.refreshCatalog()
-      }),
-      ctx.on('connection/reset', () => {
-        refreshModels()
-        imageRecognition.resetConnection()
-      }),
+      ctx.remote.$on('llm/adapters-updated', refreshModels),
+      ctx.on('connection/reset', refreshModels),
     ]
     return () => {
       welcomeController.dispose()
-      imageRecognition.dispose()
       for (const dispose of disposers) dispose()
     }
   }, 'ui-settings-models: pushed invalidations')

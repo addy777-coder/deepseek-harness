@@ -1,15 +1,11 @@
 /** Host Workspace Remote owner: explicit commands and reconnect-safe state. */
 
 import { Context } from '@deepseek-ai/cordis'
-import type { WorkspaceLayout } from '@deepseek-ai/dsh-workspace/types'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkspaceCommands } from './commands.ts'
 import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed } from './feed.ts'
 import type {
-  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
-  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
-  SessionSectionMoveRequest,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -21,6 +17,7 @@ import type {
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -114,63 +111,13 @@ export class WorkspaceController extends TypertRemoteService {
   }
 
   /**
-   * Append a custom sidebar section after validating its title.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout and created section identity.
+   * Restore one archived Session to Workspace grouping surfaces.
+   * @param request - Session identity to unarchive.
+   * @returns the complete resulting archive set.
    */
-  @Remote('createSection')
-  createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue> {
-    return this.commands.createSection(request)
-  }
-
-  /**
-   * Rename a custom sidebar section.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  @Remote('renameSection')
-  renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout> {
-    return this.commands.renameSection(request)
-  }
-
-  /**
-   * Remove a section and restore its entries to their default placement.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  @Remote('deleteSection')
-  deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout> {
-    return this.commands.deleteSection(request)
-  }
-
-  /**
-   * Reorder custom sections without changing their entries.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  @Remote('insertSectionBefore')
-  insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout> {
-    return this.commands.insertSectionBefore(request)
-  }
-
-  /**
-   * Move a project into a section or back into the default project area.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  @Remote('moveWorkspaceToSection')
-  moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout> {
-    return this.commands.moveWorkspaceToSection(request)
-  }
-
-  /**
-   * Move an independent Session entry while preserving its working directory.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  @Remote('moveSessionToSection')
-  moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout> {
-    return this.commands.moveSessionToSection(request)
+  @Remote('unarchiveSession')
+  unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {
+    return this.commands.unarchiveSession(request)
   }
 
   /**

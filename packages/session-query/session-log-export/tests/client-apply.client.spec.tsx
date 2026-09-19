@@ -33,22 +33,6 @@ async function bench() {
 }
 
 describe('session-log-download browser plugin', () => {
-  it('requests desktop exports through the installed carrier instead of browser HTTP', async () => {
-    const browserFetch = vi.fn()
-    const carrierFetch = vi.fn(async () => new Response('archive unavailable', { status: 500 }))
-    vi.stubGlobal('fetch', browserFetch)
-    vi.stubGlobal('__DSH_TRANSPORT__', { fetch: carrierFetch })
-    const b = await bench()
-    try {
-      await b.ctx.sessionLogDownload.download(SID)
-      expect(browserFetch).not.toHaveBeenCalled()
-      expect(carrierFetch.mock.calls[0]).toEqual([expect.any(URL), expect.objectContaining({ method: 'GET' })])
-      expect(b.ctx.sessionLogDownload.store.getSnapshot().bySession[SID]?.error).toContain('HTTP 500')
-    } finally {
-      await b.fiber.dispose()
-    }
-  })
-
   it('provides one controller and removes its Header contribution on disposal', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 500 })))
     const b = await bench()

@@ -30,7 +30,6 @@ function admissionFixture(options: {
   llm?: boolean
   provider?: string | undefined
   model?: string | undefined
-  recognition?: boolean
 } = {}): AdmissionFixture {
   const saveImages = vi.fn(async (inputs: readonly SaveImageAttachment[]) => inputs.map((input, index) => ({
     ...REF,
@@ -46,14 +45,10 @@ function admissionFixture(options: {
   }))
   const attachments = options.attachments === false ? undefined : { saveImages }
   const llm = options.llm === false ? undefined : { resolveModelInfo }
-  const imageRecognition = options.recognition === true
-    ? { resolveTarget: () => Promise.resolve({ provider: 'mock', model: 'vision' }) }
-    : undefined
   const ctx = {
     get(name: string) {
       if (name === 'attachments') return attachments
       if (name === 'llm') return llm
-      if (name === 'imageRecognition') return imageRecognition
       return undefined
     },
   } as unknown as Context
@@ -88,26 +83,6 @@ describe('ACP rich content codec', () => {
     await expect(supportsAcpImagePrompts(absent(store, unknownLlm), 'p', 'm')).resolves.toBe(false)
     await expect(supportsAcpImagePrompts(absent(store, textLlm), 'p', 'm')).resolves.toBe(false)
     await expect(supportsAcpImagePrompts(absent(store, imageLlm), 'p', 'm')).resolves.toBe(true)
-    const recognized = {
-      get: (name: string) => name === 'attachments'
-        ? store
-        : name === 'llm'
-          ? textLlm
-          : name === 'imageRecognition'
-            ? { resolveTarget: () => Promise.resolve({ provider: 'p', model: 'vision' }) }
-            : undefined,
-    } as unknown as Context
-    await expect(supportsAcpImagePrompts(recognized, 'p', 'm')).resolves.toBe(true)
-    const unknownWithRecognition = {
-      get: (name: string) => name === 'attachments'
-        ? store
-        : name === 'llm'
-          ? unknownLlm
-          : name === 'imageRecognition'
-            ? { resolveTarget: () => Promise.resolve({ provider: 'p', model: 'vision' }) }
-            : undefined,
-    } as unknown as Context
-    await expect(supportsAcpImagePrompts(unknownWithRecognition, 'p', 'm')).resolves.toBe(false)
   })
 
   it('validates every rich wire block before any image write', async () => {
@@ -167,28 +142,6 @@ describe('ACP rich content codec', () => {
     })
     await expect(admitAcpPrompt(textOnly.ctx, textOnly.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/does not declare image input/)
-    const textWithRecognition = admissionFixture({ recognition: true })
-    textWithRecognition.resolveModelInfo.mockResolvedValueOnce({
-      provider: 'mock', id: 'vision', name: 'vision', inputModalities: ['text'],
-    })
-    await expect(admitAcpPrompt(
-      textWithRecognition.ctx,
-      textWithRecognition.route,
-      prompt,
-      true,
-      new AbortController().signal,
-    )).resolves.toHaveLength(1)
-    const unknownWithRecognition = admissionFixture({ recognition: true })
-    unknownWithRecognition.resolveModelInfo.mockResolvedValueOnce({
-      provider: 'mock', id: 'vision', name: 'vision',
-    })
-    await expect(admitAcpPrompt(
-      unknownWithRecognition.ctx,
-      unknownWithRecognition.route,
-      prompt,
-      true,
-      new AbortController().signal,
-    )).rejects.toThrow(/does not declare image input/)
 
     const routed = admissionFixture({ provider: 'live', model: 'vision-2' })
     await expect(admitAcpPrompt(routed.ctx, routed.route, prompt, true, new AbortController().signal)).resolves.toHaveLength(1)

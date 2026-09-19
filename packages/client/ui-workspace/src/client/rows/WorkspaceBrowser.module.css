@@ -14,26 +14,6 @@
   padding-right: 0;
 }
 
-.customSection { position: relative; }
-.sectionList { position: relative; }
-.emptySection {
-  padding: 12px 8px;
-  color: var(--dsw-alias-label-tertiary);
-  border-radius: 8px;
-}
-.sectionDropActive {
-  outline: 1px dashed var(--dsw-alias-label-secondary);
-  outline-offset: -1px;
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-.layoutError {
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--dsw-alias-label-primary);
-}
-
 .iconButton {
   flex: none;
   display: inline-flex;
@@ -54,7 +34,7 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* Section header: title, an inline search control, and the three trailing
+/* Section header: title, an inline search control, and the two trailing
    actions. Expanding search collapses the action cluster and takes its room. */
 .sectionHeader {
   flex: none;
@@ -126,10 +106,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  /* Three 28px controls with two 4px gaps. This cap is also the clip that
-     hides the cluster, so it must cover every action the wide header renders:
-     a smaller value silently cuts the trailing one out of the header. */
-  max-width: 92px;
+  max-width: 60px;
   opacity: 1;
   overflow: hidden;
   visibility: visible;
@@ -278,6 +255,8 @@
 .rail .iconButton {
   width: 36px;
   height: 36px;
+  /* Rail hovers share the shell rail's 12px rounding. */
+  border-radius: 12px;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -287,6 +266,9 @@
   padding: 0;
   margin: 0 0 12px;
   gap: 0;
+  /* The collapsed search frame clips its button's hover, so it must carry the
+     rail's 12px rounding itself. */
+  border-radius: 12px;
   border-color: transparent;
   background: transparent;
 }
@@ -294,6 +276,7 @@
 .rail .searchButton {
   width: 36px;
   height: 36px;
+  border-radius: 12px;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -340,6 +323,12 @@
   height: 24px;
   background: linear-gradient(to bottom, transparent, var(--dsw-specific-sidebar-fill));
   pointer-events: none;
+}
+
+/* macOS desktop: the sidebar is translucent over window vibrancy, so the
+   opaque fill gradient would paint a solid smear instead of a fade. */
+:global([data-platform='darwin']) .fade {
+  display: none;
 }
 
 /* Wide-only content fades back in on expand remount (mirrors the shell). */
@@ -453,7 +442,7 @@
   height: 28px;
   border: none;
   border-radius: 8px;
-  padding: 0 12px 0 28px;
+  padding: 0 12px 0 calc(28px + var(--dsh-workspace-indent, 0px));
   background: transparent;
   cursor: pointer;
   text-align: left;

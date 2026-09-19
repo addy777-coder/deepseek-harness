@@ -107,7 +107,10 @@ export type ConnectionRpcHandler = (
 export type ConnectionRpcEndpointMatcher = (endpoint: string) => boolean
 
 /** HTTP methods supported by exact Fetch routes on the shared API channel. */
-export type ConnectionFetchMethod = 'GET' | 'HEAD'
+export type ConnectionFetchMethod = 'GET' | 'HEAD' | 'POST'
+
+/** How the node:http bridge presents one request body to its Fetch route. */
+export type ConnectionRequestBodyMode = 'buffered' | 'streaming'
 
 /** One exact, transport-independent Fetch route owned by a Host feature. */
 export interface ConnectionFetchRoute {
@@ -115,6 +118,8 @@ export interface ConnectionFetchRoute {
   readonly path: string
   /** Methods this route owns. Other methods continue through normal shared-channel dispatch. */
   readonly methods: readonly ConnectionFetchMethod[]
+  /** Buffered requests obey the configured JSON cap; streaming requests arrive with backpressure and no aggregate cap. */
+  readonly requestBody: ConnectionRequestBodyMode
   /** Handle one request after the physical carrier has applied its trust and authentication policy. */
   readonly fetch: (request: Request) => Promise<Response>
 }
@@ -171,23 +176,38 @@ export interface HostConnectionHandle {
   createSharedFetchHandler(channel: '/api'): ConnectionFetchHandler
 
   /**
-   * Compose one registered logical channel as a Fetch handler.
-   * @param channel - absolute channel registered through {@link HostConnectionRpc.handle}.
-   * @returns Fetch handler that dispatches the channel or returns 404.
+   * Apply Connection's Host/Origin checks and browser authentication to
+   * another Web route.
+   * @param request - request headers from the HTTP or upgrade request.
+   * @returns rejection status, or undefined when the route may accept the request.
    */
-  createFetchHandler(channel: string): ConnectionFetchHandler
+  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection
 
   /**
-   * Observe logical channel registration for a physical carrier adapter.
-   * @param listener - receives the channel and whether it became active.
-   * @returns unsubscriber.
+   * Authenticate one frontend index request, owning a token redirect or 401.
+   * @param request - root or configured-index HTTP request.
+   * @param response - response owned when the result is false.
+   * @returns true only when the frontend may serve index.html.
    */
-  observeRpcChannels(listener: (channel: string, active: boolean) => void): () => void
+  authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean
 
+  /**
+   * Add the fresh process token to an ordinary Web application URL.
+   * @param baseUrl - clean canonical browser origin.
+   * @returns root URL accepted by {@link authorizeIndex} for initial login.
+   */
+  authenticatedUrl(baseUrl: string): string
 }
 
 /** Transport-independent Fetch handler used by HTTP and worker carriers. */
 export interface ConnectionFetchHandler {
+  /**
+   * Resolve body handling before the bridge reads any request bytes.
+   * @param request - request method and URL available from node:http headers.
+   * @returns the registered route's body handling mode.
+   */
+  requestBodyMode(request: { readonly method: string; readonly url: URL }): ConnectionRequestBodyMode
+
   /**
    * Dispatch one already-authenticated request.
    * @param request - Fetch request below the shared channel.

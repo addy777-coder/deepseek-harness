@@ -7,6 +7,7 @@ import type { SubprocessHandle, SubprocessOutcome, SubprocessSpawnSpec, Subproce
 /** Native helper streams whose stdin EOF and process-tree exit can be held independently. */
 export class ScriptedChild implements SubprocessHandle {
   readonly pid = 12345
+  readonly control = undefined
   readonly collected = {}
   readonly stdout = new PassThrough()
   readonly stderr = new PassThrough()
@@ -68,6 +69,8 @@ export class ScriptedProcesses extends SubprocessRuntime {
   }
 
   resolveExecutable(command: string): Promise<string> { return Promise.resolve(command) }
+
+  terminalEnvironment(): Promise<never> { return Promise.reject(new Error('unexpected terminal environment request')) }
 
   spawn(spec: SubprocessSpawnSpec): ScriptedChild {
     const child = new ScriptedChild()

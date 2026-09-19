@@ -72,9 +72,9 @@ export interface TurnTokenUsage {
   readonly outputTokens: number
   /** Exact aggregate prompt plus output total across all attempts. */
   readonly totalTokens: number
-  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
+  /** Present only when every attempt reported the bucket. */
   readonly cacheReadTokens?: number
-  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
+  /** Present only when every attempt reported the bucket. */
   readonly cacheWriteTokens?: number
   /** Output subset, present only when every attempt reported it. */
   readonly reasoningTokens?: number

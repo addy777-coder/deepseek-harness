@@ -233,9 +233,11 @@ describe('UsageController history reads', () => {
     const seed = turn(user(), message(usage(100)))
     await persist(ctx, header('parent'), seed)
     await persist(ctx, header('fork', { isSeeded: true, parentSession: header('parent').id }), [
-      ...seed, event('session/end-seed', {}), user(),
+      ...seed, event('session/end-seed', { inherited: true }), user(),
     ], seed.length)
-    expect((await controller.get(request, signal())).summary).toMatchObject({ totalTokens: 100, sessionCount: 2, messageCount: 2 })
+    const result = await controller.get(request, signal())
+    expect(result.coverage).toEqual({ unreadableSessions: 0, missingUsageAttempts: 0 })
+    expect(result.summary).toMatchObject({ totalTokens: 100, sessionCount: 2, messageCount: 2 })
   })
 })
 

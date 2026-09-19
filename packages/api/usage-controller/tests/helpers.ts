@@ -2,6 +2,7 @@
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { AssistantStreamRecord } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { SessionId, SessionLogOffset, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -23,12 +24,17 @@ export function usage(totalTokens = 100): TokenUsage {
 }
 
 export function chunk(value: TokenUsage, time = NOW): SessionEvent {
-  return event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'usage', usage: value } }, time)
+  return attempt([{ type: 'chunk', time, chunk: { type: 'usage', usage: value } }], time)
 }
 
-export function message(value?: TokenUsage, time = NOW, model = 'flash', provider = 'deepseek'): SessionEvent {
+export function attempt(stream: AssistantStreamRecord[], time = NOW): SessionEvent {
+  return event('assistant/attempt', { turn: 1, step: 1, stream }, time)
+}
+
+export function message(value?: TokenUsage, time = NOW, model = 'flash', provider = 'deepseek', stream: AssistantStreamRecord[] = []): SessionEvent {
   return event('assistant/message', {
     turn: 1, step: 1,
+    stream,
     message: { id: 'assistant', role: 'assistant', content: [{ type: 'text', text: 'done' }], source: { kind: 'model', provider, model } },
     ...value === undefined ? {} : { usage: value },
   }, time)

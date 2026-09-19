@@ -1,12 +1,12 @@
 /**
  * Workspace browser tree row components (figma Cell set 14:3080): pure presentational —
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
- * time->ellipsis, action buttons) are CSS-only. Row menus expose section placement,
- * ordering, rename, fork, archive, and project deletion callbacks. Hover cards
- * stay suppressed while a menu is open.
+ * time->ellipsis, action buttons) are CSS-only, and a session row's clipped
+ * title is scrolled programmatically while the row is hovered. Row ... menus are
+ * visual-only except workspace Rename/Delete and session Rename/Fork/Archive; the
+ * session and workspace hover cards are suppressed while a menu is open.
  */
-import { useState } from 'react'
-import type { SidebarSection, SidebarSectionId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
@@ -17,7 +17,7 @@ import {
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { SearchResultNode, SessionNode, WorkspaceGroupNode } from '../tree.ts'
+import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -26,6 +26,30 @@ type RowTranslate = WorkspaceBrowserProps['t']
 /** Row display title: blank rows show the localized New Session label. */
 function displayTitle(node: SessionNode, t: RowTranslate): string {
   return node.blank ? t('session.new') : node.title
+}
+
+/**
+ * Reveal a title wider than its one-line cell while its row is hovered: the
+ * title clips its own text, so the far edge (a fork's incremented title, for
+ * example) is reachable by scrolling the element to its end. Leaving returns it
+ * to the start in one step, because the resting ellipsis and the narrowed cell
+ * would otherwise meet the text while it travelled back. A title that fits has
+ * no scroll range to move, and the stylesheet decides whether either move
+ * glides or jumps.
+ * @param title - the row's clipping title element.
+ * @param revealed - whether the pointer is on the row.
+ */
+function revealClippedTitle(title: HTMLSpanElement | null, revealed: boolean): void {
+  /* v8 ignore next -- defensive: the title span renders unconditionally. */
+  if (title === null) return
+  if (revealed) {
+    title.scrollLeft = title.scrollWidth - title.clientWidth
+    return
+  }
+  // jsdom implements no scrollTo; the lane's direct assignment is instant there
+  // anyway, so both paths land on the same resting position.
+  if (typeof title.scrollTo === 'function') title.scrollTo({ left: 0, behavior: 'instant' })
+  else title.scrollLeft = 0
 }
 
 /** Localized compact relative time ("刚刚"/"5分钟" in zh, "now"/"5min" in en). */
@@ -86,43 +110,9 @@ export interface RowDragProps {
 }
 
 /** Drag lifecycle owned by a workspace row; its enclosing group owns hit testing. */
-export interface WorkspaceRowDragProps {
+interface WorkspaceRowDragProps {
   start: () => void
   end: () => void
-}
-
-/** Section placement and keyboard reordering supplied by the browsing owner. */
-export interface PlacementActions {
-  sections: readonly SidebarSection[]
-  current: SidebarSectionId | null
-  move: (sectionId: SidebarSectionId | null) => void
-  up?: (() => void) | undefined
-  down?: (() => void) | undefined
-}
-
-function placementItems(placement: PlacementActions | undefined, t: RowTranslate) {
-  if (placement === undefined) return []
-  return [
-    { id: 'section-move', label: t('section.move'), disabled: placement.sections.length === 0,
-      submenu: placement.sections.map(section => ({
-        id: `section:${section.id}`, label: section.title, disabled: section.id === placement.current,
-      })) },
-    { id: 'section-restore', label: t('section.restore'), disabled: placement.current === null },
-    { id: 'section-up', label: t('section.moveUp'), disabled: placement.up === undefined },
-    { id: 'section-down', label: t('section.moveDown'), disabled: placement.down === undefined },
-  ]
-}
-
-function selectPlacement(id: string, placement: PlacementActions | undefined): void {
-  if (placement === undefined) return
-  if (id === 'section-restore') placement.move(null)
-  // Menu emits ordering keys only while their callbacks are present and enabled.
-  else if (id === 'section-up') (placement.up as () => void)()
-  else if (id === 'section-down') (placement.down as () => void)()
-  else {
-    const section = placement.sections.find(candidate => `section:${candidate.id}` === id)
-    if (section !== undefined) placement.move(section.id)
-  }
 }
 
 /** Pointer-position half of a row (insert line above or below). */
@@ -133,10 +123,11 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
 
 /**
  * Project (workspace) header row: folder + title;
- * hover reveals the chevron and create button, and dwelling shows the
- * Workspace hover card. `containsCurrent` arrives on the node (derivation
- * fact, no renderer scan).
- * @param props.group - derived real-Workspace group node.
+ * hover reveals the chevron and create button, and dwelling on a real
+ * Workspace shows its hover card (the ungrouped bucket has none).
+ * `containsCurrent` arrives on the node (derivation fact, no renderer scan).
+ * @param props.group - derived group node.
+ * @param props.containsCurrentDescendant - highlight an ancestor even when its subtree is collapsed.
  * @param props.onToggle - expand/collapse the group.
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
@@ -144,82 +135,82 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, placement, home, t }: {
-  group: WorkspaceGroupNode
+export function ProjectRowItem({ group, containsCurrentDescendant = false, onToggle, onCreate, actions, drag, home, t }: {
+  group: GroupNode
+  containsCurrentDescendant?: boolean
   onToggle: () => void
   onCreate: () => void
-  /** Real-Workspace row verbs (rename / delete). */
-  actions: { rename: () => void; delete: () => void }
+  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
+  actions?: { rename: () => void; delete: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
-  placement?: PlacementActions | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
   t: RowTranslate
 }) {
-  const label = group.label
-  const active = group.expanded && group.containsCurrent
+  const row = group
+  // The ungrouped bucket has no workspace title: its label is dictionary copy.
+  const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
+  const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
-    ...placementItems(placement, t),
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
   const ownRow = (
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
       role="treeitem"
-      aria-expanded={group.expanded}
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onToggle() } }}
+      aria-expanded={row.expanded}
       onClick={onToggle}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
         ? undefined
         : (e) => {
           e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/plain', group.key)
+          e.dataTransfer.setData('text/plain', row.key)
           drag.start()
         }}
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {group.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
+        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
-        <IconTriangleRightFill14 className={clsx(css.arrow, group.expanded && css.arrowOpen)} />
+        <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
       </span>
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
       </span>
       <span className={css.rowActions}>
-        <Menu
-          open={menuOpen}
-          onClose={() => { setMenuOpen(false) }}
-          items={workspaceMenuItems}
-          onSelect={(id) => {
-            setMenuOpen(false)
-            selectPlacement(id, placement)
-            // Unknown ids leave before the dispatch: a future menu row must
-            // not inherit the destructive branch as an else fallback.
-            /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
-            if (id !== 'rename' && id !== 'delete') return
-            if (id === 'rename') actions.rename()
-            else actions.delete()
-          }}
-          portal
-          closeOnPointerLeave
-          anchor={(
-            <button
-              type="button"
-              className={css.iconButton}
-              aria-label={t('actions.workspace.aria', { name: label })}
-              onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
-            >
-              <IconEllipsisOutline16 />
-            </button>
-          )}
-        />
+        {actions !== undefined && (
+          <Menu
+            open={menuOpen}
+            onClose={() => { setMenuOpen(false) }}
+            items={workspaceMenuItems}
+            onSelect={(id) => {
+              setMenuOpen(false)
+              // Unknown ids leave before the dispatch: a future menu row must
+              // not inherit the destructive branch as an else fallback.
+              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
+              if (id !== 'rename' && id !== 'delete') return
+              if (id === 'rename') actions.rename()
+              else actions.delete()
+            }}
+            portal
+            closeOnPointerLeave
+            anchor={(
+              <button
+                type="button"
+                className={css.iconButton}
+                aria-label={t('actions.workspace.aria', { name: label })}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
+              >
+                <IconEllipsisOutline16 />
+              </button>
+            )}
+          />
+        )}
         <button
           type="button"
           className={css.iconButton}
@@ -231,17 +222,19 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, place
       </span>
     </div>
   )
+  // The ungrouped bucket has no backing Workspace: no card to show.
+  if (row.createdAt === undefined) return ownRow
   return (
     <HoverCard
       anchor={ownRow}
       content={<WorkspaceHoverContent
-        label={group.label}
-        cwd={group.cwd === undefined ? undefined : abbreviateHomePath(group.cwd, home)}
-        createdAt={group.createdAt}
+        label={row.label}
+        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+        createdAt={row.createdAt}
         t={t}
       />}
       disabled={menuOpen}
-      copyText={group.cwd}
+      copyText={row.cwd}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}
     />
@@ -404,12 +397,15 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.onRename - open the session rename dialog (id + current title).
  * @param props.onFork - fork a session at its last completed turn.
  * @param props.onArchive - archive a session by id.
- * @param props.drag - optional draggable-row wiring.
+ * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
+ * @param props.drag - optional row-drag target wiring; blank rows cannot start a drag.
  * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, placement, flat = false, t }: {
+export function SessionNodeItem({
+  node, currentId, now, onOpen, onRename, onFork, onArchive, onReveal, drag, flat = false, t,
+}: {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -420,9 +416,10 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
-  /** Present only on draggable rows (workspace-group sessions outside search). */
+  /** Scroll this row into view after search navigation, then acknowledge it. */
+  onReveal?: (() => void) | undefined
+  /** Present on reorderable-list rows so every row can remain a drop target. */
   drag?: RowDragProps | undefined
-  placement?: PlacementActions | undefined
   /** The row is rendered without a parent Workspace header. */
   flat?: boolean | undefined
   t: RowTranslate
@@ -433,20 +430,28 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
   const showStatus = primaryStatus.state !== 'done' || row.completed
+  const draggable = drag !== undefined && !row.blank
   const [menuOpen, setMenuOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (onReveal === undefined) return
+    rowRef.current?.scrollIntoView({ block: 'nearest' })
+    onReveal()
+  }, [onReveal])
   // Archive hides the row through the registry-global archive set and never
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
   const sessionMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
-    ...placementItems(placement, t),
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
   ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
     <div
+      ref={rowRef}
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
         flat && !showStatus && css.flatSessionRowWithoutStatus,
@@ -454,25 +459,23 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       )}
       role="treeitem"
       aria-selected={selected}
-      data-session-id={node.id}
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(node.id) } }}
       onClick={() => { onOpen(node.id) }}
-      draggable={drag !== undefined}
-      onDragStart={drag === undefined
+      onPointerEnter={() => { revealClippedTitle(titleRef.current, true) }}
+      onPointerLeave={() => { revealClippedTitle(titleRef.current, false) }}
+      draggable={draggable}
+      onDragStart={drag === undefined || row.blank
         ? undefined
         : (e) => {
           e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('text/plain', node.id)
           drag.start()
         }}
-      onDragEnd={drag?.end}
+      onDragEnd={drag === undefined || row.blank ? undefined : drag.end}
       onDragOver={drag === undefined
         ? undefined
         : (e) => {
           if (!drag.active) return
           e.preventDefault()
-          e.stopPropagation()
           e.dataTransfer.dropEffect = 'move'
           drag.hover(rowHalf(e))
         }}
@@ -481,7 +484,6 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
         : (e) => {
           if (!drag.active) return
           e.preventDefault()
-          e.stopPropagation()
           drag.drop(rowHalf(e))
         }}
     >
@@ -493,7 +495,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
           {showStatus && <SessionStatusDots statuses={statuses} />}
         </span>
       )}
-      <span className={css.title}>{title}</span>
+      <span ref={titleRef} className={css.title}>{title}</span>
       {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
@@ -511,7 +513,6 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
-              selectPlacement(id, placement)
             }}
             portal
             closeOnPointerLeave

@@ -30,11 +30,11 @@ pwsh -File native/vpn/scripts/build.ps1
 
 构建会获取[依赖版本固定清单](deps/pins.json)指定的修订，检查源码检出未被修改，并静态链接第三方库。Windows 还会静态链接 Microsoft C/C++ 运行库。下载内容和中间产物保存在辅助进程目录内被忽略的 `.cache/` 和 `build/<target>/` 树中。[目标 triplet](deps/triplets/)定义链接方式；[共享构建脚本](scripts/build.ps1)在打包前运行 CTest 和离线进程测试，打包后验证源码恢复。测试使用合成数据包和测试独占的本机回环监听器，不会向公司服务器发起认证。
 
-输出目录为 `dist/<target>/`，其中 target 为 `windows-x64`、`darwin-arm64`、`darwin-x64` 或 `linux-x64`。目录包含 Windows 上的 `dsh-vpn.exe` 或 POSIX 上的 `dsh-vpn`、对应 SHA-256 文件、资源清单、许可证、已编译 OpenVPN 源码审计结果和对应源码 ZIP。清单列出其他每个资源的相对路径、SHA-256 和大小。分发方保留完整目录，并在将其放入桌面资源前校验清单。打包会拒绝预期之外的非系统库导入。`-Target` 要求匹配的原生主机；`-SkipPackage` 不生成分发产物，`-Fresh` 重置目标 CMake 缓存，`-LocalDependenciesPath` 可复用来源记录匹配的依赖安装目录。
+输出目录为 `dist/<target>/`，其中 target 为 `windows-x64`、`darwin-arm64`、`darwin-x64` 或 `linux-x64`。目录包含 Windows 上的 `dsh-vpn.exe` 或 POSIX 上的 `dsh-vpn`、对应 SHA-256 文件、资源清单、许可证、已编译 OpenVPN 源码审计结果和对应源码 ZIP。清单列出其他每个资源的相对路径、SHA-256 和大小。分发方保留完整目录，并在配置应用的辅助程序路径前校验清单。打包会拒绝预期之外的非系统库导入。`-Target` 要求匹配的原生主机；`-SkipPackage` 不生成分发产物，`-Fresh` 重置目标 CMake 缓存，`-LocalDependenciesPath` 可复用已记录构建输入匹配的依赖安装目录。
 
-macOS 打包先为辅助进程添加 ad-hoc 签名，再计算 SHA-256 和资源清单。该签名不等同于 Developer ID 签名或公证。桌面打包必须保留辅助进程字节和 POSIX 可执行权限；最终安装包验证检查相同摘要。原生发布矩阵负责 macOS/Linux 构建和打包后进程验证。真实 VPN 兼容性需要在各目标上使用已保存的公司凭据显式执行[真实连接验收](tests/README.zh.md)。
+macOS 打包先为辅助进程添加 ad-hoc 签名，再计算 SHA-256 和资源清单。该签名不等同于 Developer ID 签名或公证。分发方保留辅助进程字节和 POSIX 可执行权限，并验证相同摘要。发布维护者负责 macOS/Linux 构建和打包后进程验证。真实 VPN 兼容性需要在各目标上使用已保存的公司凭据显式执行[真实连接验收](tests/README.zh.md)。
 
-依赖安装对临时下载错误最多尝试三次，重试前分别等待五秒和十秒。编译错误、永久 HTTP 错误和校验和不匹配会立即失败。Desktop 工作流按原生目标缓存下载归档及以 ABI 为键的 vcpkg 库；固定哈希和源码检查仍为必需步骤。
+依赖安装对临时下载错误最多尝试三次，重试前分别等待五秒和十秒。编译错误、永久 HTTP 错误和校验和不匹配会立即失败。原生构建可以按目标缓存下载归档及以 ABI 为键的 vcpkg 库；固定哈希和源码检查仍为必需步骤。
 
 源码 ZIP 包含辅助进程、精确的上游源码归档、库源码归档，以及所有选定的 vcpkg port 补丁。要使用随附源码，将 ZIP 解压到新目录后运行：
 

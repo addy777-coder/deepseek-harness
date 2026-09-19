@@ -125,7 +125,7 @@ describe('VPN provider dispatch', () => {
     expect(result.message.content).toContainEqual({ type: 'tool-call', id: 'tool_company', name: 'lookup', arguments: '{"query":"private"}' })
     expect(tunnel!.dispatch).toHaveBeenCalledTimes(1)
     const [input, init] = tunnel!.dispatch.mock.calls[0]!
-    expect(input instanceof Request ? input.url : input.toString()).toBe(`${BASE}/v1/messages`)
+    expect(input instanceof Request ? input.url : input.toString()).toBe(`${BASE}/v1/messages?beta=true`)
     expect(new Headers(init?.headers).get('x-api-key')).toBe('company-key')
     expect(init?.signal).toBeInstanceOf(AbortSignal)
     expect(globalThis.fetch).not.toHaveBeenCalled()
@@ -149,7 +149,7 @@ describe('VPN provider dispatch', () => {
     })
     expect(models).toEqual([{ id: 'company-model', name: 'Company Model' }])
     const [url, init] = tunnel!.dispatch.mock.calls[0]!
-    expect(url).toBe(`${BASE}/v1/models`)
+    expect(url).toBe(`${BASE}/v1/models?limit=1000`)
     expect(new Headers(init?.headers).get('x-api-key')).toBe('company-key')
     expect(new Headers(init?.headers).get('anthropic-version')).toBe('2023-06-01')
     expect(globalThis.fetch).not.toHaveBeenCalled()

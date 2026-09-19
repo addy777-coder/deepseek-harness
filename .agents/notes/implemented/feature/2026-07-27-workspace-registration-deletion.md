@@ -32,7 +32,7 @@ The delete confirmation remains pending until the React Workspace projection has
 
 ## Confirmation interaction
 
-The existing Workspace row menu opens a shared `Modal` before deletion. The text states all three consequences: the Workspace leaves the list, the folder and session logs remain, and its Sessions keep their sidebar rows. While the request is pending, the confirm and Cancel controls are disabled, duplicate confirmation is ignored, and Escape or Close cannot dismiss the operation. Failure keeps the Modal open with the error; Cancel, Escape, and Close before submission never delete.
+The existing Workspace row menu opens a shared `Modal` before deletion. The text states all three consequences: the Workspace leaves the list, the folder and session logs remain, and its Sessions appear under Ungrouped. While the request is pending, the confirm and Cancel controls are disabled, duplicate confirmation is ignored, and Escape or Close cannot dismiss the operation. Failure keeps the Modal open with the error; Cancel, Escape, and Close before submission never delete.
 
 The menu, Modal, and buttons retain their existing structure and design tokens. Session deletion remains visual-only and outside this decision.
 
@@ -52,7 +52,7 @@ The menu, Modal, and buttons retain their existing structure and design tokens. 
 
 Workspace package tests pin successful metadata-only deletion, same-path re-registration, unknown-id idempotence, table-failure rollback, explicit-marker restart recovery, unexplained-corruption rejection, and cache/table invariant behavior. Apiproxy and carrier tests pin the schema, handler, `workspace-not-found`, retained Session/folder, fresh-id re-registration, and committed `host/workspace-removed` frame. Client tests pin unary direct echo, duplicate removal, late changed frames, and deletion racing an in-flight baseline. Component tests pin confirmation, projection-settled closing, success-frame-before-unary ordering, failure, Cancel, Escape, and Close. The browser scenario observes every transient alert, slot error, console error, and page error while reusing a deleted title for a different directory.
 
-The assembled keyless Web scenario registers an existing temporary project directory, accounts a persisted Session, makes that Session current, confirms deletion in Chromium, and verifies the Workspace group disappears while the Session keeps its own sidebar row in the trailing Ungrouped run. It checks the user file and JSONL log before and after deletion and repeats the UI, directory, and log assertions after reload.
+The assembled keyless Web scenario registers an existing temporary project directory, accounts a persisted Session, makes that Session current, confirms deletion in Chromium, and verifies the Workspace group disappears while Ungrouped retains the current Session. It checks the user file and JSONL log before and after deletion and repeats the UI, directory, and log assertions after reload. The scenario holds the seeded attachment frame until the browser selects the adoption-created New Session, proves that the seed is absent from the group, then delivers the frame and selects the only non-blank Session. Host attachment completion and a two-row count cannot prove browser membership: the group header plus New Session already satisfy that count, and the arriving seed can replace the positional locator between click and assertion.
 
 ## Consequences
 

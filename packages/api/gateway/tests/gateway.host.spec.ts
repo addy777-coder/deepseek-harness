@@ -4,11 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { Context, Service, symbols } from '@deepseek-ai/cordis'
 import { z } from 'zod'
 import { apply as applyConnection, inject as connectionInject } from '@deepseek-ai/dsh-client-connection'
-import {
-  apply as applyWebConnection,
-  inject as webConnectionInject,
-  type WebConnectionHandle,
-} from '@deepseek-ai/dsh-client-connection/web'
+import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import type { WebServer, WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import {
   bindTypertRemote,
@@ -179,7 +175,7 @@ async function serveRoute(route: WebRoute): Promise<{ readonly origin: string; c
 }
 
 /** Exchange a Connection launch token without mounting the frontend fallback. */
-function browserCookie(connection: WebConnectionHandle, origin: string): string {
+function browserCookie(connection: HostConnectionHandle, origin: string): string {
   const target = new URL(connection.authenticatedUrl(origin))
   let setCookie: string | undefined
   connection.authorizeIndex({
@@ -1183,8 +1179,6 @@ describe('TypertGatewayService', () => {
     ctx.provide('webServer', fakeHttpServer(routes) as WebServer)
     const connectionFiber = ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
     await connectionFiber
-    const webConnectionFiber = ctx.plugin({ inject: [...webConnectionInject], apply: applyWebConnection })
-    await webConnectionFiber
     await ctx.plugin(TypertRegistry)
     const gatewayFiber = ctx.plugin(TypertGatewayService)
     await gatewayFiber
@@ -1195,7 +1189,7 @@ describe('TypertGatewayService', () => {
     let strictActive = true
     expect(routes).toHaveLength(1)
     const server = await serveRoute(routes[0]!)
-    const cookie = browserCookie(ctx.webConnection, server.origin)
+    const cookie = browserCookie(ctx.connection, server.origin)
 
     try {
       const response = await fetch(`${server.origin}/api/goals/create`, {
@@ -1350,13 +1344,12 @@ function contextProvider(context: Context) {
   return {
     wire: 'agentId',
     wireTypeSymbol: '@fixture/domain#AgentId',
-    identity: (candidate: Context) => candidate === context ? 'agent-1' : undefined,
     resolve: (id: string) => id === 'agent-1' ? context : undefined,
   }
 }
 
 function strictCodec(typeSymbol: string, schema: z.ZodType): InvocationDescriptor['result'] {
-  return { mode: 'strict', typeSymbol, schema }
+  return { mode: 'strict', typeSymbol, create: () => schema }
 }
 
 function createDescriptor(): InvocationDescriptor {

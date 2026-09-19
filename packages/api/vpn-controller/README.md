@@ -25,7 +25,7 @@ Save a company VPN profile and account, connect or disconnect the application tu
 <a id="use-this-package"></a>
 ## Use this package
 
-The desktop composition mounts this controller beside the application network provider and exposes the generated `vpn` Remote namespace to the [VPN settings page](../../client/ui-vpn/README.md). A deployment without a network provider returns an unsupported status and rejects connection commands.
+The shared Web and Desktop composition mounts this controller beside the application network provider and exposes the generated `vpn` Remote namespace to the [VPN settings page](../../client/ui-vpn/README.md). A deployment without a network provider returns an unsupported status and rejects connection commands.
 
 ### Configuration
 
@@ -47,7 +47,7 @@ A newer disconnect prevents a pending save or reconnect from starting a late con
 
 ### Client lifecycle
 
-The Client `vpn` service exposes an observable snapshot and load, save, connect, and disconnect commands. Host lifecycle events update the snapshot without polling; transport recovery triggers a fresh read. New commands invalidate pending reads, and superseded replies cannot overwrite later commands or events. Save returns whether persistence succeeded, independently of connection success. Disposal aborts outstanding calls, removes listeners, suppresses publications, and waits for every owned call to settle.
+The Client `vpn` service exposes an observable snapshot and load, save, connect, and disconnect commands. Opening VPN settings starts the first read. Host lifecycle events update the snapshot without polling; transport recovery refreshes an already observed or loaded view and leaves an unused service idle. New commands invalidate pending reads, and superseded replies cannot overwrite later commands or events. Save returns whether persistence succeeded, independently of connection success. Disposal aborts outstanding calls, removes listeners, suppresses publications, and waits for every owned call to settle.
 
 -----
 
@@ -91,7 +91,7 @@ No effect; settings operations do not construct or send model requests.
 
 This controller exposes one application VPN configuration:
 
-- VPN support depends on the mounted provider; the desktop implementation supports Windows/Linux x64 and macOS x64/arm64.
+- VPN support depends on the mounted provider; the native implementation supports Windows/Linux x64 and macOS x64/arm64.
 - Provider selection and credential persistence are separate writes. A provider-selection failure after persistence requires correcting that provider's settings.
 - Native compatibility, DNS, retries, request routing, and process cleanup belong to the network provider.
 

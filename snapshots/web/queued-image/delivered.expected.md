@@ -3,8 +3,9 @@
     - button "Reply with a one-sentence description" [disabled]
   - img
   - text: Standard mode
-  - button "Session log":
-    - text: Session log
+  - button "More actions":
+    - img
+  - button "Open right sidebar":
     - img
   - tablist:
     - tab "Chat" [selected]
@@ -20,8 +21,8 @@
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
-- button "Ran for {{duration}}":
-  - text: Ran for {{duration}}
+- button "Thought for a while":
+  - text: Thought for a while
   - img
 - paragraph: partial
 - text: Stopped
@@ -42,8 +43,8 @@
 - text: Compare with this screenshot {{clock}}
 - button "Copy":
   - img
-- button "Ran for {{duration}}":
-  - text: Ran for {{duration}}
+- button "Thought for a while":
+  - text: Thought for a while
   - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy":
@@ -60,8 +61,8 @@
 - text: {{clock}} Continue with the queued comparison {{clock}}
 - button "Copy":
   - img
-- button "Ran for {{duration}}":
-  - text: Ran for {{duration}}
+- button "Thought for a while":
+  - text: Thought for a while
   - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy":
@@ -76,13 +77,18 @@
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
-- button "Commands":
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
-- button "6% of context used"
 - button "Send message" [disabled]
-- text: 3 turns · 3 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok
+- button "3 turns 3 steps · {{throughput}} tok/s":
+  - img
+  - text: 3 turns 3 steps{{throughput}} tok/s
+- button "15.7K tok · Cache hit 99%":
+  - img
+  - text: 15.7K tokCache hit 99%
+- button "6% of context used": 6%

@@ -6,10 +6,6 @@
 
 源码：[`packages/session-query/session-query/src/types.ts`](../../packages/session-query/session-query/src/types.ts)
 
-## 使用统计
-
-[用量控制器](../../packages/api/usage-controller/README.zh.md)汇总此语料库，为[设置中的使用统计页](../../packages/client/ui-usage/README.zh.md)提供数据。它的 `usage.get` Remote 接受包含 7 天或 30 天区间及 IANA 时区的 `UsageRequest`；`UsageSnapshot` 返回已记录的 token 总量、主会话用户活动、每日模型用量、365 天热力图和历史数据缺失计数。[用量类型](../../packages/api/usage-controller/src/types.ts)拥有响应字段。只读观测使归档和冷会话无需激活 Agent 即可参与统计。
-
 ## 逻辑记录
 
 `SessionRecord` 由全语料库列表返回。它除了克隆的、优先取自 live 源的 header 外，还单独公开各源的可用性。`SessionEventRecord` 是轻量的原始日志投影；分类使用与模型历史推导相同的 `foldSurface()` 状态转换。
@@ -365,6 +361,18 @@ type SessionQueryErrorCode =
   | 'SESSION_QUERY_STALE_CURSOR'
   | 'SESSION_QUERY_SOURCE_CONFLICT'
 ```
+
+## 历史用量
+
+[用量控制器](../../packages/api/usage-controller/README.zh.md)聚合已记录活动和精确上报的 token，无需启动 Agent 或返回原始历史。
+
+### UsageRequest
+
+请求选择 7 或 30 个本地日历日及 IANA 时区。区间包含今天；活动热力图独立覆盖 365 天。
+
+### UsageSnapshot
+
+快照包含总量、每日计数、提供方/模型占比、活动热力图，以及明确的不可读历史和缺失用量计数。继承的分叉事件根据已存储分界排除，当前格式的 Assistant 结算记录拥有 token 采样。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

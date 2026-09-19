@@ -24,7 +24,6 @@ const requiredArtifacts = [
   'packages/goal/goal/lib/typert.host.js',
   'packages/api/gateway/lib/client.js',
   'packages/api/gateway/lib/index.js',
-  'packages/client/connection/lib/web.js',
   'packages/typert/registry/lib/client.js',
   'packages/typert/registry/lib/index.js',
   'packages/session/session-projection/lib/index.js',
@@ -38,7 +37,6 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       apiGatewayHost: 'packages/api/gateway/lib/index.js',
       connectionClient: 'packages/client/connection/lib/client.js',
       connectionHost: 'packages/client/connection/lib/index.js',
-      connectionWeb: 'packages/client/connection/lib/web.js',
       goal: 'packages/goal/goal/lib/index.js',
       goalTypert: 'packages/goal/goal/lib/typert.host.js',
       registryClient: 'packages/typert/registry/lib/client.js',
@@ -50,12 +48,12 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
     const script = `
       import { createServer } from 'node:http'
       import * as cordis from '@deepseek-ai/cordis'
+      import * as zod from 'zod'
 
       const urls = ${JSON.stringify(urls)}
       const { Context } = cordis
       const { default: AgentRegistry } = await import(urls.agent)
       const connectionHost = await import(urls.connectionHost)
-      const connectionWeb = await import(urls.connectionWeb)
       const { default: TypertRemoteService } = await import(urls.apiGatewayHost)
       const { default: GoalService } = await import(urls.goal)
       const { default: SessionProjectionRegistry } = await import(urls.sessionProjections)
@@ -84,7 +82,6 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         },
       })
       await host.plugin({ inject: connectionHost.inject, apply: connectionHost.apply })
-      await host.plugin({ inject: connectionWeb.inject, apply: connectionWeb.apply })
       await host.plugin(TypertRegistry)
       await host.plugin(AgentRegistry)
       await host.plugin(TypertRemoteService)
@@ -121,7 +118,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       }
       const server = createServer((request, response) => {
         if ((request.url ?? '/').startsWith('/?')) {
-          if (host.webConnection.authorizeIndex(request, response)) {
+          if (host.connection.authorizeIndex(request, response)) {
             response.writeHead(200, { 'content-type': 'text/html' })
             response.end('<body>shell</body>')
           }
@@ -133,7 +130,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       const address = server.address()
       if (address === null || typeof address === 'string') throw new Error('HTTP server has no TCP address')
       const origin = 'http://127.0.0.1:' + String(address.port)
-      const login = await fetch(host.webConnection.authenticatedUrl(origin), { redirect: 'manual' })
+      const login = await fetch(host.connection.authenticatedUrl(origin), { redirect: 'manual' })
       const setCookie = login.headers.get('set-cookie')
       if (login.status !== 303 || setCookie === null) throw new Error('browser token exchange failed')
       const cookie = setCookie.split(';', 1)[0]
@@ -161,6 +158,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         if (handoff === undefined) throw new Error('missing Client bundle handoff ' + id)
         return handoff.factory(specifier => {
           if (specifier === '@deepseek-ai/cordis') return cordis
+          if (specifier === 'zod') return zod
           throw new Error('unexpected Client external ' + specifier)
         })
       }
@@ -178,12 +176,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         identity: candidate => candidate.builtAgentId,
       })
 
-      let invalidRejected = false
-      try {
-        await client.remote.goals.create(rootAgent.id, { objective: 1 })
-      } catch {
-        invalidRejected = true
-      }
+      const invalidResult = await client.remote.goals.create(rootAgent.id, { objective: 1 })
       // Every generated method resolves to the RemoteResult envelope; the
       // business values below are what the assertions pin.
       const rootResult = await client.remote.goals.create(rootAgent.id, { objective: 'root goal' })
@@ -195,7 +188,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       const agentContext = client.extend({ builtAgentId: scopedAgent.id })
       const scopedResult = await agentContext.remote.goals.create({ objective: 'scoped goal', maxGoalRounds: 3 })
       const result = {
-        invalidRejected,
+        invalidResult,
         rootResult: rootResult.value,
         rootEdit: rootEdit.value,
         scopedResult: scopedResult.value,
@@ -217,7 +210,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
     const result = await runPlainNode(script)
     expect(result.exitCode, `stderr:\n${result.stderr}`).toBe(0)
     const output = JSON.parse(result.stdout.trim().split('\n').at(-1) ?? '{}') as {
-      invalidRejected: boolean
+      invalidResult: { ok: boolean; error?: { code: string } }
       rootResult: { ref: { id: string; revision: number } }
       rootEdit: { objective: string; revision: number }
       scopedResult: { ref: { id: string; revision: number } }
@@ -227,7 +220,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       scopedEvents: number
     }
     expect(output).toMatchObject({
-      invalidRejected: true,
+      invalidResult: { ok: false, error: { code: 'gateway/input-invalid' } },
       rootResult: { ref: { revision: 1 } },
       rootEdit: { objective: 'edited root goal', revision: 2 },
       scopedResult: { ref: { revision: 1 } },

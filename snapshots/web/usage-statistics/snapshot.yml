@@ -6,4 +6,4 @@ recording: authored
 header:
   class: web-default
 session:
-  source: ../turn-tail-actions/session.jsonl
+  source: ../turn-tail-actions/session.v3.jsonl

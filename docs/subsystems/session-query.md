@@ -6,10 +6,6 @@ Query vocabulary over the live-preferred logical session corpus. The [Service De
 
 Source: [`packages/session-query/session-query/src/types.ts`](../../packages/session-query/session-query/src/types.ts)
 
-## Usage statistics
-
-The [usage controller](../../packages/api/usage-controller/README.md) aggregates this corpus for the [Settings usage page](../../packages/client/ui-usage/README.md). Its `usage.get` Remote accepts `UsageRequest` with a 7-day or 30-day interval and an IANA time zone; `UsageSnapshot` returns recorded token totals, main-session user activity, daily model totals, a 365-day heatmap, and incomplete-history counts. [Usage types](../../packages/api/usage-controller/src/types.ts) own the response fields. Read-only observations keep archived and cold sessions available without activating their Agents.
-
 ## Logical records
 
 `SessionRecord` is returned by the cross-corpus list. It exposes source availability independently from the cloned live-preferred header. `SessionEventRecord` is a lightweight raw-log projection; classification uses the same `foldSurface()` transitions as model-history derivation.
@@ -365,6 +361,18 @@ type SessionQueryErrorCode =
   | 'SESSION_QUERY_STALE_CURSOR'
   | 'SESSION_QUERY_SOURCE_CONFLICT'
 ```
+
+## History usage
+
+The [usage controller](../../packages/api/usage-controller/README.md) aggregates recorded activity and exact reported tokens without starting Agents or returning raw histories.
+
+### UsageRequest
+
+A request selects 7 or 30 local calendar days and an IANA time zone. The interval includes today; the activity heatmap independently covers 365 days.
+
+### UsageSnapshot
+
+A snapshot contains totals, daily counters, provider/model shares, the activity heatmap, and explicit unreadable-history and missing-usage counts. Inherited fork events are excluded using the stored cut, and current-format Assistant settlements own token samples.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

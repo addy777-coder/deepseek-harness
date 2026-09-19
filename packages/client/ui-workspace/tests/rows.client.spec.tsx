@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
-import type { SidebarSectionId, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { RowDragProps } from '../src/client/rows/Rows.tsx'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from '../src/client/rows/Rows.tsx'
-import type { SearchResultNode, SessionNode, WorkspaceGroupNode } from '../src/client/tree.ts'
+import type { GroupNode, SearchResultNode, SessionNode } from '../src/client/tree.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -16,57 +16,6 @@ const t = makeTranslate(zh, commonZh) as never
 
 const sid = (id: string) => id as SessionId
 const wid = (id: string) => id as WorkspaceId
-
-describe('sidebar row keyboard and placement actions', () => {
-  const node: SessionNode = { id: sid('session'), title: 'Session', blank: false, running: false,
-    runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0 }
-  const group: WorkspaceGroupNode = { key: 'project', workspaceId: wid('project'), cwd: '/project', createdAt: 0,
-    label: 'Project', sessionCount: 0, expanded: true, containsCurrent: false, sessions: [] }
-
-  it('opens rows from Enter/Space while leaving child controls and other keys independent', () => {
-    const onOpen = vi.fn()
-    const onToggle = vi.fn()
-    render(<><ProjectRowItem group={group} onToggle={onToggle} onCreate={vi.fn()} t={t}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} />
-    <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen} onRename={vi.fn()}
-      onFork={vi.fn()} onArchive={vi.fn()} t={t} /></>)
-    const rows = screen.getAllByRole('treeitem')
-    for (const row of rows) {
-      fireEvent.keyDown(row, { key: 'Enter' })
-      fireEvent.keyDown(row, { key: ' ' })
-      fireEvent.keyDown(row, { key: 'ArrowDown' })
-      fireEvent.keyDown(row.querySelector('button') as HTMLButtonElement, { key: 'Enter' })
-    }
-    expect(onOpen).toHaveBeenCalledTimes(2)
-    expect(onToggle).toHaveBeenCalledTimes(2)
-  })
-
-  it('moves to a chosen section, restores default placement, and orders through the row menu', () => {
-    const move = vi.fn()
-    const up = vi.fn()
-    const down = vi.fn()
-    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
-      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} placement={{
-        sections: [
-          { id: 'first' as SidebarSectionId, title: 'First', workspaceIds: [], sessionIds: [] },
-          { id: 'second' as SidebarSectionId, title: 'Second', workspaceIds: [], sessionIds: [] },
-        ],
-        current: 'first' as SidebarSectionId, move, up, down,
-      }} />)
-    const open = (): void => { fireEvent.click(screen.getByRole('button', { name: '会话“Session”的操作' })) }
-    open()
-    fireEvent.focus(screen.getByRole('menuitem', { name: '移动到分区' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Second' }))
-    expect(move).toHaveBeenCalledWith('second')
-    for (const name of ['恢复默认位置', '上移', '下移']) {
-      open()
-      fireEvent.click(screen.getByRole('menuitem', { name }))
-    }
-    expect(move).toHaveBeenLastCalledWith(null)
-    expect(up).toHaveBeenCalledOnce()
-    expect(down).toHaveBeenCalledOnce()
-  })
-})
 
 /** Half detection reads the row rect; jsdom rects are all-zero by default. */
 function stubRect(row: HTMLElement): void {
@@ -187,12 +136,11 @@ describe('workspace browser rows', () => {
   it('renders an active Workspace and keeps its create action separate from toggling', () => {
     const onToggle = vi.fn()
     const onCreate = vi.fn()
-    const group: WorkspaceGroupNode = {
+    const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
       sessionCount: 1, expanded: true, containsCurrent: true, sessions: [],
     }
-    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t}
-      actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={onCreate} t={t} />)
 
     expect(screen.getByRole('treeitem').getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '在“Project”中新建会话' }))
@@ -219,6 +167,56 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('button', { name: /展开|收起/ })).toBeNull()
     fireEvent.click(row)
     expect(onOpen).toHaveBeenCalledWith(node.id)
+  })
+
+  it('reveals a clipped session title by scrolling it while the row is hovered', () => {
+    const node: SessionNode = {
+      id: sid('clipped'), title: 'A Session Title Long Enough To Be Clipped (1)', blank: false,
+      running: false, runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
+    }
+    render(
+      <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />,
+    )
+    const row = screen.getByRole('treeitem')
+    const title = screen.getByText(node.title)
+    // jsdom lays out nothing: the title's clipped geometry is stated outright.
+    const geometry = (scrollWidth: number, clientWidth: number): void => {
+      Object.defineProperty(title, 'scrollWidth', { value: scrollWidth, configurable: true })
+      Object.defineProperty(title, 'clientWidth', { value: clientWidth, configurable: true })
+    }
+
+    geometry(320, 180)
+    fireEvent.pointerEnter(row)
+    expect(title.scrollLeft).toBe(140)
+    fireEvent.pointerLeave(row)
+    expect(title.scrollLeft).toBe(0)
+
+    // A title that fits has no scroll range: hovering leaves it at its start.
+    geometry(180, 180)
+    fireEvent.pointerEnter(row)
+    expect(title.scrollLeft).toBe(0)
+  })
+
+  it('returns a revealed title to its start in one step', () => {
+    const node: SessionNode = {
+      id: sid('instant-return'), title: 'A Session Title Long Enough To Be Clipped (1)', blank: false,
+      running: false, runningSubagentCount: 0, completed: false, hasActiveSchedule: false, updatedAt: 0,
+    }
+    render(
+      <SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />,
+    )
+    const row = screen.getByRole('treeitem')
+    const title = screen.getByText(node.title)
+    const scrollTo = vi.fn()
+    Object.defineProperty(title, 'scrollTo', { value: scrollTo, configurable: true })
+
+    fireEvent.pointerEnter(row)
+    fireEvent.pointerLeave(row)
+    // Browsers receive the explicit instant behavior that the stylesheet's
+    // smooth scroll-behavior would otherwise override.
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'instant' })
   })
 
   it('keeps the active-Schedule marker between the title and time in grouped and flat rows', () => {
@@ -359,7 +357,7 @@ describe('workspace browser rows', () => {
     const onRename = vi.fn()
     const onDelete = vi.fn()
     const onToggle = vi.fn()
-    const group: WorkspaceGroupNode = {
+    const group: GroupNode = {
       key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
       sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
     }
@@ -390,12 +388,11 @@ describe('workspace browser rows', () => {
     const writeText = vi.fn(async () => {})
     const restoreClipboard = installClipboard(writeText)
     try {
-      const group: WorkspaceGroupNode = {
+      const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t}
-        actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+      render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       // Card body: full title + cwd + absolute creation time.
@@ -416,12 +413,11 @@ describe('workspace browser rows', () => {
     const writeText = vi.fn(async () => {})
     const restoreClipboard = installClipboard(writeText)
     try {
-      const group: WorkspaceGroupNode = {
+      const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: '/home/u/Documents/project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t}
-        actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('~/Documents/project')).toBeTruthy()
@@ -437,12 +433,11 @@ describe('workspace browser rows', () => {
   it('workspace hover card without a directory omits the path and copy action', async () => {
     vi.useFakeTimers()
     try {
-      const group: WorkspaceGroupNode = {
+      const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: undefined, createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t}
-        actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+      render(<ProjectRowItem group={group} home="/home/u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getAllByText('Project')).toHaveLength(2)
@@ -456,18 +451,26 @@ describe('workspace browser rows', () => {
   it('workspace hover card leaves a Windows path verbatim', async () => {
     vi.useFakeTimers()
     try {
-      const group: WorkspaceGroupNode = {
+      const group: GroupNode = {
         key: 'project', workspaceId: wid('project'), cwd: 'C:\\Users\\u\\project', createdAt: 0, label: 'Project',
         sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
       }
-      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t}
-        actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+      render(<ProjectRowItem group={group} home="C:\\Users\\u" onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
       fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
       act(() => { vi.advanceTimersByTime(500) })
       expect(screen.getByText('C:\\Users\\u\\project')).toBeTruthy()
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('ungrouped bucket renders no workspace menu', () => {
+    const group: GroupNode = {
+      key: '', workspaceId: undefined, cwd: undefined, createdAt: undefined, label: 'Ungrouped',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t} />)
+    expect(screen.queryByRole('button', { name: /工作区/ })).toBeNull()
   })
 
   it('blank New Session rows carry no menu, no time label, and no hover-card time', () => {

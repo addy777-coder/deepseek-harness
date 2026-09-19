@@ -15,7 +15,7 @@ import {
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.jsonl', import.meta.url))
+const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/sidebar-scrollbar', import.meta.url))
 /** Geometry and resolved style are absent from ARIA snapshots, so this scenario records them directly. */
 const GEOMETRY_EXPECTED = join(SNAPSHOT_DIR, 'geometry.expected.md')
@@ -83,7 +83,7 @@ function measureList(page: Page): Promise<ListMetrics> {
       })
       .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule)
       .filter(rule => rule.selectorText === '::-webkit-scrollbar-thumb:hover')
-      .map(rule => rule.style.getPropertyValue('background'))
+      .map(rule => rule.style.getPropertyValue('background-color'))
     const style = getComputedStyle(list)
     const pseudoWidth = getComputedStyle(list, '::-webkit-scrollbar').width
     const barWidth = pseudoWidth === 'auto' ? 15 : Number.parseFloat(pseudoWidth)
@@ -246,21 +246,30 @@ async function pointAt(page: Page, where: 'list' | 'away'): Promise<void> {
 
 /**
  * Reveal the seeded rows: every seeded session is unattached, so they all sit
- * in the trailing Ungrouped run, which renders its first five rows and a
- * transient Show-more control because an open group folds by default.
- * Hand-rolled polling because `expect.poll` is test-scoped and this runs in
- * `beforeAll`.
+ * in the collapsed Ungrouped bucket. Open the bucket, then use its transient
+ * Show-more control because an open group intentionally renders only five
+ * rows by default. Hand-rolled polling because
+ * `expect.poll` is test-scoped and this runs in `beforeAll`.
  * @param page - the page under test.
  */
 async function expandSeededSessions(page: Page): Promise<void> {
+  const bucket = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
+  await bucket.waitFor({ timeout: 15_000 })
   const rows = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"]')
-  const showMore = page.getByRole('button', { name: /Show \d+ more sessions/ })
   const deadline = Date.now() + 30_000
   for (;;) {
-    if (await rows.count() > SEED_COUNT / 2) return
-    if (await showMore.count() > 0) await showMore.click()
+    if (await bucket.getAttribute('aria-expanded') !== 'true') {
+      await page.getByText('Ungrouped', { exact: true }).click()
+    }
+    const showMore = page.getByRole('button', { name: /Show \d+ more sessions/ })
+    if (await bucket.getAttribute('aria-expanded') === 'true'
+      && await rows.count() <= SEED_COUNT / 2
+      && await showMore.count() > 0) {
+      await showMore.click()
+    }
+    if (await bucket.getAttribute('aria-expanded') === 'true' && await rows.count() > SEED_COUNT / 2) return
     if (Date.now() > deadline) {
-      throw new Error(`Ungrouped run never revealed more than ${SEED_COUNT / 2} rows`)
+      throw new Error(`Ungrouped bucket never revealed more than ${SEED_COUNT / 2} rows`)
     }
     await page.waitForTimeout(200)
   }
@@ -346,9 +355,8 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
   it('keeps the row background inset when overflow disappears', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-stable-inset'))
     expect(await measureRowInset(page)).toEqual({ overflows: true, rowEdgeInset: 12 })
-    // The five-row fold is the run's own collapse: it is the only control that
-    // takes rows out of this list in a scaffold without custom sections.
-    await page.getByRole('button', { name: 'Show less' }).click()
+    const bucket = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
+    await bucket.click()
     try {
       await expect.poll(async () => (await measureRowInset(page)).overflows, { timeout: 10_000 }).toBe(false)
       expect(await measureRowInset(page)).toEqual({ overflows: false, rowEdgeInset: 12 })
@@ -404,7 +412,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
   }, 60_000)
 
   it('commits exactly the fixtures it reads', async () => {
-    // The scenario borrows seeded-history's session.jsonl rather than committing a
+    // The scenario borrows seeded-history's session.v3.jsonl rather than committing a
     // second copy, so this directory holds the golden alone.
     await assertFixtureInventory(SNAPSHOT_DIR, ['geometry.expected.md'])
   })

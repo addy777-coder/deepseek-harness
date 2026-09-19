@@ -14,7 +14,7 @@ $directories = @($deps, (Join-Path $deps 'registries'), (Join-Path $deps 'binary
 New-Item -ItemType Directory -Force -Path $directories | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'deps/vcpkg.json') -Destination (Join-Path $deps 'vcpkg.json')
 $pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
-$restoredSources = Test-Path -LiteralPath (Join-Path $root '.cache/source-provenance.json') -PathType Leaf
+$restoredSources = Test-Path -LiteralPath (Join-Path $root '.cache/source-build-record.json') -PathType Leaf
 $configuration = if ($restoredSources) { @{ 'default-registry' = $null } }
   else { @{ 'default-registry' = @{ kind = 'git'; repository = $registry; baseline = $pins.vcpkg.revision } } }
 $ports = if ($restoredSources) { Join-Path $root '.cache/source-ports' }
@@ -36,14 +36,14 @@ try {
     "--x-packages-root=$deps/packages", "--downloads-root=$deps/downloads",
     "--overlay-triplets=$root/deps/triplets", "--overlay-ports=$ports"
   )
-  $provenance = @{
+  $dependencyInputs = @{
     triplet = $targetInfo.Triplet
     crt = $targetInfo.Crt
     registryRevision = $pins.vcpkg.revision
     manifestSha256 = (Get-FileHash -LiteralPath (Join-Path $root 'deps/vcpkg.json') -Algorithm SHA256).Hash.ToLowerInvariant()
     tripletSha256 = (Get-FileHash -LiteralPath (Join-Path $root "deps/triplets/$($targetInfo.Triplet).cmake") -Algorithm SHA256).Hash.ToLowerInvariant()
   }
-  $provenance | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $deps "installed/$($targetInfo.Triplet)/dsh-vpn-dependencies.json") -Encoding utf8
+  $dependencyInputs | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $deps "installed/$($targetInfo.Triplet)/dsh-vpn-dependencies.json") -Encoding utf8
 } finally {
   foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name]) }
 }

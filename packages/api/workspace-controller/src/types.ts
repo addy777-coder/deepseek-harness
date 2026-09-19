@@ -6,9 +6,9 @@
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { SidebarSectionId, WorkspaceLayout, WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 
-export type { SidebarSection, SidebarSectionId, WorkspaceLayout, WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+export type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 export type { DirectoryEntry, DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 
 /** One durable Workspace projected for browser consumers. */
@@ -58,7 +58,6 @@ export interface WorkspaceCreateRequest {
 export interface WorkspaceCreateValue {
   readonly workspace: WorkspaceView
   readonly created: boolean
-  readonly layout: WorkspaceLayout
 }
 
 /** Workspace title mutation. */
@@ -80,7 +79,6 @@ export interface WorkspaceDeleteRequest {
 /** Receipt after one Workspace registration is deleted. */
 export interface WorkspaceDeleteValue {
   readonly deleted: true
-  readonly layout: WorkspaceLayout
 }
 
 /** DOM-insertBefore-like Workspace order mutation. */
@@ -90,46 +88,8 @@ export interface WorkspaceInsertBeforeRequest {
 }
 
 /** Complete Workspace registry order after a mutation. */
-export type WorkspaceOrderValue = WorkspaceLayout
-
-/** Proposed unique sidebar section title. */
-export interface SidebarSectionCreateRequest {
-  readonly title: string
-}
-
-/** Created section identity and complete committed layout. */
-export interface SidebarSectionCreateValue {
-  readonly sectionId: SidebarSectionId
-  readonly layout: WorkspaceLayout
-}
-
-/** Existing custom section identity. */
-export interface SidebarSectionRequest {
-  readonly sectionId: SidebarSectionId
-}
-
-/** Existing section and replacement title. */
-export interface SidebarSectionRenameRequest extends SidebarSectionRequest {
-  readonly title: string
-}
-
-/** Section insertion anchor; omission appends. */
-export interface SidebarSectionInsertBeforeRequest extends SidebarSectionRequest {
-  readonly beforeSectionId?: SidebarSectionId
-}
-
-/** Project placement; null restores the default project area. */
-export interface WorkspaceSectionMoveRequest {
-  readonly workspaceId: WorkspaceId
-  readonly sectionId: SidebarSectionId | null
-  readonly beforeWorkspaceId?: WorkspaceId
-}
-
-/** Independent Session placement; null restores its existing Workspace or Ungrouped position. */
-export interface SessionSectionMoveRequest {
-  readonly sessionId: SessionId
-  readonly sectionId: SidebarSectionId | null
-  readonly beforeSessionId?: SessionId
+export interface WorkspaceOrderValue {
+  readonly workspaceIds: readonly WorkspaceId[]
 }
 
 /** DOM-insertBefore-like Session membership order mutation. */
@@ -144,6 +104,11 @@ export interface WorkspaceArchiveSessionRequest {
   readonly sessionId: SessionId
 }
 
+/** Session requested for restoration from the archived Session list. */
+export interface WorkspaceUnarchiveSessionRequest {
+  readonly sessionId: SessionId
+}
+
 /** Complete archived Session set after a mutation. */
 export interface WorkspaceArchiveValue {
   readonly archivedSessionIds: readonly SessionId[]
@@ -153,14 +118,13 @@ export interface WorkspaceArchiveValue {
 export interface WorkspaceBaseline {
   readonly items: readonly WorkspaceView[]
   readonly archivedSessionIds: readonly SessionId[]
-  readonly layout: WorkspaceLayout
 }
 
 /** One ordered Workspace change after a generation's baseline. */
 export type WorkspaceFollowIncrement =
   | { readonly type: 'upsert'; readonly workspace: WorkspaceView }
   | { readonly type: 'remove'; readonly workspaceId: WorkspaceId }
-  | { readonly type: 'layout'; readonly layout: WorkspaceLayout }
+  | { readonly type: 'order'; readonly workspaceIds: readonly WorkspaceId[] }
   | { readonly type: 'archived'; readonly archivedSessionIds: readonly SessionId[] }
 
 /** Workspace state stream; every generation starts with exactly one baseline. */

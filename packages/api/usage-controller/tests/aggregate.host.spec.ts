@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { aggregateUsage, foldSessionUsage } from '../src/aggregate.ts'
 import { dateFormatter, dateOf, shiftDate } from '../src/calendar.ts'
-import { chunk, event, header, message, NOW, observation, turn, usage, user } from './helpers.ts'
+import { attempt, chunk, event, header, message, NOW, observation, turn, usage, user } from './helpers.ts'
 
 const utc = dateFormatter('UTC')
+const sample = (tokens: number, time = NOW) => ({ type: 'chunk' as const, time, chunk: { type: 'usage' as const, usage: usage(tokens) } })
+const failed = { type: 'chunk' as const, time: NOW, chunk: { type: 'finish' as const, reason: { kind: 'error' as const, failure: { code: 'HTTP', message: 'retry' } } } }
+const aborted = { type: 'chunk' as const, time: NOW, chunk: { type: 'finish' as const, reason: { kind: 'aborted' as const, failure: { code: 'ABORTED', message: 'cancelled' } } } }
 
 function snapshot(...observations: ReturnType<typeof observation>[]) {
   return aggregateUsage(observations.map(value => foldSessionUsage(value, utc)), { days: 7, timeZone: 'UTC' }, NOW, utc, 0)
 }
 
 describe('usage accounting', () => {
-  it('keeps the last valid reported sample and assigns it to its own local date', () => {
+  it('reads the last embedded sample and assigns it to its original local date', () => {
     const dayBefore = NOW - 86_400_000
     const result = snapshot(observation(turn(
-      user(), chunk(usage(120), dayBefore), chunk(usage(150)), message({ inputTokens: 90, outputTokens: 20 }),
+      user(), message(undefined, NOW, 'flash', 'deepseek', [sample(120, dayBefore), sample(150)]),
     )))
     expect(result.summary).toMatchObject({ totalTokens: 150, sessionCount: 1, messageCount: 1, activeDays: 1, currentStreak: 1 })
     expect(result.daily.at(-1)).toMatchObject({ tokens: 150, sessions: 1, messages: 1 })
@@ -24,20 +27,18 @@ describe('usage accounting', () => {
 
   it('lets final usage replace a stream sample and retains failure/cancellation samples across retries', () => {
     const result = snapshot(observation(turn(
-      chunk(usage(100)),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'error', failure: { code: 'HTTP', message: 'retry' } } } }),
+      attempt([sample(100), failed]),
       event('llm/retry', { turn: 1, step: 1 }),
       event('llm/retry-started', { turn: 1, step: 1 }),
-      chunk(usage(200)), message(usage(250)),
+      message(usage(250), NOW, 'flash', 'deepseek', [sample(200)]),
     )), observation(turn(
-      chunk(usage(80)),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'aborted' } } }),
+      attempt([sample(80), aborted]),
     ), header('cancelled')))
     expect(result.summary.totalTokens).toBe(430)
     expect(result.coverage.missingUsageAttempts).toBe(0)
   })
 
-  it('does not count a scheduled retry that never starts and retains an in-progress sample', () => {
+  it('does not count a scheduled retry that never starts', () => {
     const result = snapshot(observation([
       ...turn(chunk(usage(80)), event('llm/retry', { turn: 1, step: 1 })).slice(0, -2),
     ]))
@@ -47,21 +48,17 @@ describe('usage accounting', () => {
 
   it('counts context-overflow recovery attempts without a retry-started event', () => {
     const result = snapshot(observation(turn(
-      chunk(usage(100)),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED', message: 'full' } } } }),
+      attempt([sample(100), failed]),
       event('compaction/summary', { provider: 'deepseek', model: 'small', usage: usage(60), llmStreamCall: true }),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', text: 'retried' } }),
-      chunk(usage(200)), message(usage(250)),
+      message(usage(250), NOW, 'flash', 'deepseek', [sample(200)]),
     )))
     expect(result.summary.totalTokens).toBe(410)
     expect(result.coverage.missingUsageAttempts).toBe(0)
   })
 
-  it('does not add an interrupted final message again after an aborted finish', () => {
+  it('counts an interrupted message and its aborted stream as one attempt', () => {
     const result = snapshot(observation(turn(
-      chunk(usage(80)),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'aborted' } } }),
-      message(),
+      message(undefined, NOW, 'flash', 'deepseek', [sample(80), aborted]),
     )))
     expect(result.summary.totalTokens).toBe(80)
     expect(snapshot(observation(turn(message()))).coverage.missingUsageAttempts).toBe(1)
@@ -69,8 +66,7 @@ describe('usage accounting', () => {
 
   it('records a recovery retry whose new request header is followed by no usage chunks', () => {
     const result = snapshot(observation(turn(
-      chunk(usage(100)),
-      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED', message: 'full' } } } }),
+      attempt([sample(100), failed]),
       event('compaction/summary', { provider: 'deepseek', model: 'small', usage: usage(60), llmStreamCall: true }),
       event('request/header', { reason: 'series', header: { config: { provider: 'deepseek', model: 'flash' } } }),
     )))
@@ -86,6 +82,20 @@ describe('usage accounting', () => {
       observation(turn(message({ inputTokens: 100, outputTokens: 20, totalTokens: 170 })), header('authoritative')),
     )
     expect(result.summary.totalTokens).toBe(335)
+    expect(result.coverage.missingUsageAttempts).toBe(1)
+  })
+
+  it('keeps invalid final usage visible instead of substituting an earlier stream sample', () => {
+    const result = snapshot(observation(turn(message(
+      { inputTokens: 90, outputTokens: 20 }, NOW, 'flash', 'deepseek', [sample(150)],
+    ))))
+    expect(result.summary.totalTokens).toBe(0)
+    expect(result.coverage.missingUsageAttempts).toBe(1)
+  })
+
+  it('keeps an unsettled request out of reported token totals', () => {
+    const result = snapshot(observation([event('step/start', { turn: 1, step: 1 })]))
+    expect(result.summary.totalTokens).toBe(0)
     expect(result.coverage.missingUsageAttempts).toBe(1)
   })
 

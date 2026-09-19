@@ -44,7 +44,8 @@
  * @module @deepseek-ai/dsh-sandbox-windows-acl/runner
  */
 
-import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { SUBPROCESS_CONTROL_ENV, SUBPROCESS_CONTROL_FD } from '@deepseek-ai/dsh-subprocess/control'
+import { closeSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { win32 } from './ffi.ts'
@@ -178,12 +179,13 @@ async function main(): Promise<number> {
       }
     }
 
-    delete process.env.ELECTRON_RUN_AS_NODE
     const child = sandbox.spawn({
       command: parsed.command,
       args: parsed.args,
       stdio: 'inherit',
+      ...process.env[SUBPROCESS_CONTROL_ENV] === 'pipe' ? { controlFileDescriptor: SUBPROCESS_CONTROL_FD } : {},
     })
+    if (process.env[SUBPROCESS_CONTROL_ENV] === 'pipe') closeSync(SUBPROCESS_CONTROL_FD)
     const result = await child.wait()
     return result.exitCode
   } finally {

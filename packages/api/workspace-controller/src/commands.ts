@@ -11,9 +11,6 @@ import {
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
-  SidebarSectionCreateRequest, SidebarSectionCreateValue, SidebarSectionRenameRequest,
-  SidebarSectionRequest, SidebarSectionInsertBeforeRequest, WorkspaceSectionMoveRequest,
-  SessionSectionMoveRequest, WorkspaceLayout,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -24,6 +21,7 @@ import type {
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceUnarchiveSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -44,10 +42,10 @@ export class WorkspaceCommands {
       try {
         const existing = await this.ctx.workspaceRegistry.resolveByPath(request.path)
         if (existing !== undefined) {
-          return { workspace: workspaceView(existing), created: false, layout: this.ctx.workspaceRegistry.layout }
+          return { workspace: workspaceView(existing), created: false }
         }
         const workspace = await this.ctx.workspaceRegistry.create(request.path)
-        return { workspace: workspaceView(workspace), created: true, layout: this.ctx.workspaceRegistry.layout }
+        return { workspace: workspaceView(workspace), created: true }
       } catch (error) {
         if (remoteErrorOf(error) !== undefined) throw error
         throw new RemoteError(
@@ -97,7 +95,7 @@ export class WorkspaceCommands {
       if (!await this.ctx.workspaceRegistry.delete(WorkspaceId(request.workspaceId))) {
         throw workspaceNotFound(request.workspaceId)
       }
-      return { deleted: true, layout: this.ctx.workspaceRegistry.layout }
+      return { deleted: true }
     })
   }
 
@@ -108,13 +106,13 @@ export class WorkspaceCommands {
    */
   async insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue> {
     try {
-      await this.ctx.workspaceRegistry.insertBefore(
+      const workspaceIds = await this.ctx.workspaceRegistry.insertBefore(
         WorkspaceId(request.workspaceId),
         request.beforeWorkspaceId === undefined
           ? undefined
           : WorkspaceId(request.beforeWorkspaceId),
       )
-      return this.ctx.workspaceRegistry.layout
+      return { workspaceIds: [...workspaceIds] }
     } catch (error) {
       if (!(error instanceof WorkspaceOrderInvalidError)) throw error
       throw workspaceNotFound(error.workspaceId)
@@ -164,67 +162,15 @@ export class WorkspaceCommands {
   }
 
   /**
-   * Append a custom sidebar section after validating its title.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout and created section identity.
+   * Drop one Session from the registry-global archive set. An id that is not
+   * archived is not an error: the call is idempotent, so a lost race with
+   * another surface resolves as a no-op.
+   * @param request - Session identity to unarchive.
+   * @returns the complete resulting archive set.
    */
-  createSection(request: SidebarSectionCreateRequest): Promise<SidebarSectionCreateValue> {
-    return this.ctx.workspaceRegistry.createSection(request.title)
-  }
-
-  /**
-   * Rename a custom sidebar section.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  renameSection(request: SidebarSectionRenameRequest): Promise<WorkspaceLayout> {
-    return this.ctx.workspaceRegistry.renameSection(request.sectionId, request.title)
-  }
-
-  /**
-   * Remove a section and restore its entries to their default placement.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  deleteSection(request: SidebarSectionRequest): Promise<WorkspaceLayout> {
-    return this.ctx.workspaceRegistry.deleteSection(request.sectionId)
-  }
-
-  /**
-   * Reorder custom sections without changing their entries.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  insertSectionBefore(request: SidebarSectionInsertBeforeRequest): Promise<WorkspaceLayout> {
-    return this.ctx.workspaceRegistry.insertSectionBefore(request.sectionId, request.beforeSectionId)
-  }
-
-  /**
-   * Move a project into a section or back into the default project area.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  async moveWorkspaceToSection(request: WorkspaceSectionMoveRequest): Promise<WorkspaceLayout> {
-    try {
-      return await this.ctx.workspaceRegistry.moveWorkspaceToSection(request.workspaceId, request.sectionId, request.beforeWorkspaceId)
-    } catch (error) {
-      if (!(error instanceof WorkspaceOrderInvalidError)) throw error
-      throw workspaceNotFound(error.workspaceId)
-    }
-  }
-
-  /**
-   * Move an independent Session entry while preserving its working directory.
-   * @param request - section identity, title, or destination and optional insertion anchor.
-   * @returns the committed layout.
-   */
-  async moveSessionToSection(request: SessionSectionMoveRequest): Promise<WorkspaceLayout> {
-    try {
-      return await this.ctx.workspaceRegistry.moveSessionToSection(request.sessionId, request.sectionId, request.beforeSessionId)
-    } catch (error) {
-      if (!(error instanceof WorkspaceUnknownSessionError)) throw error
-      throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
-    }
+  async unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {
+    await this.ctx.workspaceRegistry.unarchiveSession(request.sessionId)
+    return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {

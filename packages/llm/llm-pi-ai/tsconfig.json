@@ -8,7 +8,6 @@
     "src"
   ],
   "references": [
-    { "path": "../../network/network" },
     {
       "path": "../../util/launch-environment"
     },
@@ -44,6 +43,10 @@
     },
     {
       "path": "../../util/timeout"
-    }
+    },
+    {
+      "path": "../../util/http-proxy"
+    },
+    {"path":"../../network/network"}
   ]
 }

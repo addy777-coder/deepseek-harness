@@ -95,8 +95,6 @@ export interface RunnerFailureRule {
 export interface ConfinedArgv {
   /** The wrapped argv (runner, profile, separator, then the caller's argv). */
   argv: string[]
-  /** Environment additions required by the runner itself, not by the wrapped command. */
-  env?: Readonly<Record<string, string>>
   /** How completely the selected backend enforces the policy's file effects. */
   enforcement: SandboxEnforcement
   /**
@@ -171,10 +169,13 @@ export abstract class SandboxProvider extends Service {
    *   `['bash', '-c', command]`.
    * @param policy - the file-effect policy this execution runs under,
    *   carried per call (see {@link SandboxPolicy}).
+   * @param signal - cancellation while the provider resolves the policy and runner.
    * @returns the argv to spawn instead, plus the enforcement completeness
    *   the selected backend achieves for it.
    */
-  abstract confine(argv: readonly string[], policy: SandboxPolicy): ConfinedArgv
+  abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>
 }
 
 export default SandboxProvider
+
+export { classifyRunnerFailure, isRunnerSpawnFailure, matchesSignature } from './diagnostics.ts'

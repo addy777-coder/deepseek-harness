@@ -25,13 +25,6 @@ interface Route {
   model: string
 }
 
-interface Attempt {
-  time: number
-  route: Route
-  sample?: { tokens: number; time: number }
-  finished?: true
-}
-
 function addModel(models: Map<string, UsageModel>, route: Route, tokens: number): void {
   const key = JSON.stringify([route.provider, route.model])
   const existing = models.get(key)
@@ -52,7 +45,8 @@ function sortedModels(models: Map<string, UsageModel>): UsageModel[] {
 export function foldSessionUsage(observation: SessionObservation, formatter: Intl.DateTimeFormat): SessionUsage {
   const days = new Map<string, SessionUsageDay>()
   let route: Route = { provider: '', model: '' }
-  let attempt: Attempt | undefined
+  let pendingAt: number | undefined
+  let inStep = false
   const dayAt = (time: number): SessionUsageDay => {
     const date = dateOf(formatter, time)
     let day = days.get(date)
@@ -62,19 +56,9 @@ export function foldSessionUsage(observation: SessionObservation, formatter: Int
     }
     return day
   }
-  const closeAttempt = (): void => {
-    if (attempt === undefined) return
-    if (attempt.sample === undefined) dayAt(attempt.time).missing += 1
-    else addModel(dayAt(attempt.sample.time).models, attempt.route, attempt.sample.tokens)
-    attempt = undefined
-  }
-  const sample = (usage: TokenUsage | undefined, time: number, source: Route): void => {
-    attempt ??= { time, route: source }
-    attempt.route = source
-    if (usage === undefined) return
-    attempt.time = time
-    const normalized = normalizeTokenUsage(usage)
-    if (normalized !== undefined) attempt.sample = { tokens: normalized.totalTokens, time }
+  const closePending = (): void => {
+    if (pendingAt !== undefined) dayAt(pendingAt).missing += 1
+    pendingAt = undefined
   }
 
   for (const event of observation.events) {
@@ -85,10 +69,7 @@ export function foldSessionUsage(observation: SessionObservation, formatter: Int
     if (event.seq < observation.inheritedEventCount) continue
     switch (event.type) {
       case 'request/header':
-        if (attempt?.finished === true) {
-          closeAttempt()
-          attempt = { time: event.time, route }
-        }
+        if (inStep) pendingAt ??= event.time
         break
       case 'user/message':
         if (observation.header.origin !== 'subagent' && event.data.source.kind === 'user') {
@@ -96,27 +77,35 @@ export function foldSessionUsage(observation: SessionObservation, formatter: Int
         }
         break
       case 'step/start':
+        inStep = true
+        closePending()
+        pendingAt = event.time
+        break
       case 'llm/retry-started':
-        closeAttempt()
-        attempt = { time: event.time, route }
+        closePending()
+        pendingAt = event.time
         break
-      case 'assistant/chunk':
-        if (attempt?.finished === true) {
-          closeAttempt()
-          attempt = { time: event.time, route }
+      case 'assistant/attempt':
+      case 'assistant/message': {
+        let reported: { usage: TokenUsage; time: number } | undefined
+        for (const record of event.data.stream) {
+          if (record.type === 'chunk' && record.chunk.type === 'usage') {
+            reported = { usage: record.chunk.usage, time: record.time }
+          }
         }
-        if (event.data.chunk.type === 'usage') sample(event.data.chunk.usage, event.time, route)
-        if (event.data.chunk.type === 'finish'
-          && (event.data.chunk.reason.kind === 'error' || event.data.chunk.reason.kind === 'aborted')) {
-          attempt ??= { time: event.time, route }
-          attempt.finished = true
+        if (event.type === 'assistant/message' && event.data.usage !== undefined) {
+          reported = { usage: event.data.usage, time: event.time }
         }
+        const normalized = reported === undefined ? undefined : normalizeTokenUsage(reported.usage)
+        if (normalized === undefined || reported === undefined) dayAt(event.time).missing += 1
+        else addModel(dayAt(reported.time).models,
+          event.type === 'assistant/message' ? event.data.message.source : route, normalized.totalTokens)
+        pendingAt = undefined
         break
-      case 'assistant/message':
-        sample(event.data.usage, event.time, event.data.message.source)
-        break
+      }
       case 'step/end':
-        closeAttempt()
+        closePending()
+        inStep = false
         break
       case 'compaction/summary': {
         const usage = event.data.usage === undefined ? undefined : normalizeTokenUsage(event.data.usage)
@@ -129,7 +118,7 @@ export function foldSessionUsage(observation: SessionObservation, formatter: Int
         break
     }
   }
-  closeAttempt()
+  closePending()
   return { days }
 }
 

@@ -18,11 +18,9 @@ Status: implemented
 
 [VPN 设置控制器](../../../../packages/api/vpn-controller/README.zh.md)接受导入的配置内容和选中的引用文件。导入不会根据配置中的路径读取文件，原生评估会在持久化之前拒绝不支持的认证方式。提供方遵循[凭据记录所有权](2026-08-13-credential-records-and-authorization-flows.zh.md)，将完整配置与账号保存为 `network-openvpn/profile-<id>` 下的不透明 `grant`。普通设置仅包含该记录的键与启动偏好。状态查询和 `network/changed` 通知公开密码是否存在的标志与脱敏错误码，不公开密码或配置文本。
 
-应用拥有连接、重连、取消与进程树清理。私有 stdin 管道传递启动凭据，并将辅助进程绑定到 Host 的生命周期。主动断开会取消重连意图；认证错误会停止重试。[Desktop bundle](../../../../packages/bundle/desktop-app/README.zh.md)选择提供方、控制器与设置 UI。Electron 应用提供原生产物，并验证其清单和可执行文件校验和。
+应用拥有连接、重连、取消与进程树清理。私有 stdin 管道传递启动凭据，并将辅助进程绑定到 Host 的生命周期。主动断开会取消重连意图；认证错误会停止重试。[Web bundle](../../../../packages/bundle/web-app/README.zh.md)同样由 Desktop 使用，选择提供方、控制器与设置 UI。部署通过提供方配置指定原生辅助程序路径和校验和。
 
-[原生分发目录](../../../../native/vpn/README.zh.md)包含 GPL-3.0-only 辅助进程、许可证声明以及已链接可执行文件的对应源码 ZIP。Desktop 打包一并保留这些资源。子进程使协议与生命周期保持明确，但不会免除辅助进程的源码分发义务。
-
-Desktop [运行时暂存](../../../../scripts/stage-desktop-runtime.ts)先通过冻结锁文件的离线安装验证根锁文件，再由 pnpm 在离线部署中转换 workspace 路径。两项操作均禁用生命周期脚本，并保留存储完整性校验。[解析结果校验](../../../../scripts/desktop-runtime-lock.ts)要求每个 registry 包标识及完整 `resolution` 记录（包括 `integrity` 与 `tarball`）都与已验证的源锁文件完全一致。源锁文件并发变化，或 registry 解析记录新增、删除、变更时，暂存都会被拒绝。部署信任已验证的锁文件，因为 legacy hoisted 路径可能重新解析版本范围并选择未验证版本，而现代路径的元数据重复校验可能在离线模式下仍进行网络解析。
+[原生分发目录](../../../../native/vpn/README.zh.md)包含 GPL-3.0-only 辅助进程、许可证声明以及已链接可执行文件的对应源码 ZIP。部署一并分发这些资源；官方 Desktop 安装包不捆绑该辅助程序。子进程使协议与生命周期保持明确，但不会免除辅助进程的源码分发义务。
 
 ## Alternatives considered
 
@@ -36,7 +34,7 @@ Desktop [运行时暂存](../../../../scripts/stage-desktop-runtime.ts)先通过
 
 ## Consequences
 
-公司模型请求可以使用应用自有连接，普通网络流量保留原有路由。该功能增加原生构建、凭据所有方和独立管理的辅助进程生命周期。[原生发布决策](2026-09-11-cross-platform-desktop-releases.zh.md)负责 Windows x64、macOS x64/arm64 与 Linux x64 部署。网络支持 IPv4、TCP、VPN 提供的普通 UDP DNS 与 Anthropic Messages；原生和提供方 README 负责详细限制。
+公司模型请求可以使用应用自有连接，普通网络流量保留原有路由。该功能增加原生构建、凭据所有方和独立管理的辅助进程生命周期。[原生辅助程序](../../../../native/vpn/README.zh.md)负责 Windows x64、macOS x64/arm64 与 Linux x64 构建。网络支持 IPv4、TCP、VPN 提供的普通 UDP DNS 与 Anthropic Messages；原生和提供方 README 负责详细限制。
 
 VPN 配置与连接状态不增加模型输入、会话事件或请求前缀。现有模型消息仍可通过普通会话记录重建，因此传输选择不需要修改 agent-loop 或 SDK 转录。
 

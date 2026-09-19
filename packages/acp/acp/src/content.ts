@@ -5,7 +5,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
-import { hasImageRecognitionTarget } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 
 /** Raster formats shared by ACP image blocks and the core attachment vocabulary. */
@@ -60,7 +59,7 @@ function decodeImage(block: Extract<AcpContentBlock, { type: 'image' }>): SaveIm
   return { data, mediaType }
 }
 
-/** Resolve the exact current route and require direct image input or a verified recognition target. */
+/** Resolve the exact current route and require explicit image input support. */
 async function assertImageRoute(ctx: Context, route: ModelSelection | undefined, signal: AbortSignal): Promise<void> {
   const provider = route?.provider
   const model = route?.model
@@ -74,25 +73,14 @@ async function assertImageRoute(ctx: Context, route: ModelSelection | undefined,
   } catch (error: unknown) {
     throw new AcpContentError('the current model route could not be verified for image input', 'internal', { cause: error })
   }
-  if (info.inputModalities === undefined) {
+  if (info.inputModalities === undefined || !info.inputModalities.includes('image')) {
     throw new AcpContentError(`model "${model}" does not declare image input`, 'invalid')
-  }
-  if (!info.inputModalities.includes('image')) {
-    try {
-      if (await hasImageRecognitionTarget(ctx, signal)) return
-    } catch (error: unknown) {
-      throw new AcpContentError('the configured image recognition model could not be verified', 'internal', { cause: error })
-    }
-    throw new AcpContentError(
-      `model "${model}" does not declare image input; configure an image recognition model in Settings > Models`,
-      'invalid',
-    )
   }
 }
 
 /**
  * Determine whether initialization may truthfully advertise inline image prompts.
- * Unknown service, route, capability, recognition target, or deployment media support is negative.
+ * Unknown service, route, capability, or deployment media support is negative.
  * @param ctx - bridge context carrying optional attachment and model services.
  * @param provider - configured provider route used for newly created sessions.
  * @param model - configured exact model id used for newly created sessions.
@@ -109,8 +97,7 @@ export async function supportsAcpImagePrompts(
   if (!attachments.imageLimits.mediaTypes.some(mediaType => IMAGE_MEDIA_TYPES.includes(mediaType))) return false
   try {
     const info = await llm.resolveModelInfo(provider, model)
-    if (info.inputModalities === undefined) return false
-    return info.inputModalities.includes('image') || await hasImageRecognitionTarget(ctx)
+    return info.inputModalities?.includes('image') === true
   } catch {
     return false
   }

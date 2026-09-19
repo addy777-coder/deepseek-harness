@@ -28,7 +28,6 @@ const roots: string[] = []
 const dshBuildWorkflows = [
   'build-exe-for-python-sdk.yml',
   'ci.yml',
-  'e2b-e2e.yml',
   'e2e.yml',
   'release.yml',
   'release-publish.yml',
@@ -51,7 +50,6 @@ function buildFixture(environment: Record<string, string>): string {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'dsh-client-build-'))
   roots.push(fixtureRoot)
   write(join(fixtureRoot, 'apps/web/dist/index.html'), '<main></main>')
-  write(join(fixtureRoot, 'apps/desktop/dist/index.html'), '<main>Desktop</main>')
   write(join(fixtureRoot, 'packages/client/example/lib/client.js'), 'module.exports = {}\n')
   writeClientBuildRecord(fixtureRoot, environment)
   return fixtureRoot
@@ -73,6 +71,7 @@ function repositoryFixture(version = '1.2.3-rc.4'): string {
   git(fixtureRoot, ['init'])
   git(fixtureRoot, ['config', 'user.name', 'DSH test'])
   git(fixtureRoot, ['config', 'user.email', 'dsh-test@example.invalid'])
+  git(fixtureRoot, ['config', 'commit.gpgsign', 'false'])
   git(fixtureRoot, ['add', 'package.json', 'tracked.txt'])
   git(fixtureRoot, ['commit', '-m', 'fixture'])
   return fixtureRoot
@@ -260,25 +259,27 @@ describe('client build environment', () => {
     })
   })
 
-  it.each(['apps/web/dist/index.html', 'apps/desktop/dist/index.html'])(
-    'rejects a changed %s after recording the client environment', (artifact) => {
-      const officialEnvironment = {
-        DSH_CLIENT_BUILD_PROFILE: 'official',
-        DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-        DSH_CLIENT_TITLE: 'DeepSeek Harness',
-        DSH_CLIENT_VERSION: '1.2.3',
-      }
-      const official = buildFixture(officialEnvironment)
-      const defaultBuild = buildFixture({})
+  it('binds the recorded environment to a complete set of client artifacts', () => {
+    const officialEnvironment = {
+      DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
+      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_VERSION: '1.2.3',
+    }
+    const official = buildFixture(officialEnvironment)
+    const defaultBuild = buildFixture({})
 
-      expect(readClientBuildRecord(official, officialEnvironment).environment).toEqual(officialEnvironment)
-      expect(() => { readClientBuildRecord(defaultBuild, officialEnvironment) }).toThrow(/DSH_CLIENT_/)
-      expect(() => { readClientBuildRecord(join(defaultBuild, 'missing')) }).toThrow(/record.*missing/)
+    expect(readClientBuildRecord(official, officialEnvironment).environment).toEqual(officialEnvironment)
+    expect(() => { readClientBuildRecord(defaultBuild, officialEnvironment) }).toThrow(/DSH_CLIENT_/)
+    expect(() => { readClientBuildRecord(join(defaultBuild, 'missing')) }).toThrow(/record.*missing/)
 
-      write(join(official, artifact), '<main>changed</main>')
-      expect(() => { readClientBuildRecord(official) }).toThrow(/artifacts differ/)
-    },
-  )
+    write(join(official, 'apps/web/dist/index.html'), '<main>changed</main>')
+    expect(() => { readClientBuildRecord(official) }).toThrow(/artifacts differ/)
+
+    const chunked = buildFixture(officialEnvironment)
+    write(join(chunked, 'packages/client/example/lib/client.pdf.js'), 'module.exports = {}\n')
+    expect(() => { readClientBuildRecord(chunked) }).toThrow(/artifacts differ/)
+  })
 
   it('keeps public client values out of workflow-wide environments', () => {
     for (const name of dshBuildWorkflows) {

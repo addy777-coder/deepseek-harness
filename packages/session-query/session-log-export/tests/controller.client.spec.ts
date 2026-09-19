@@ -8,7 +8,6 @@ import {
 const SID = 'session-export-controller' as SessionId
 
 afterEach(() => {
-  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -100,8 +99,8 @@ describe('SessionLogDownloadController', () => {
     await controller.dispose()
   })
 
-  it.each(['null', 'file://'])('uses the %s origin fallback and default browser operations', async (origin) => {
-    vi.stubGlobal('location', { origin })
+  it('uses the null-origin fallback and default browser operations', async () => {
+    vi.stubGlobal('location', { origin: 'null' })
     const fetcher = vi.fn(async (_input: string | URL, _init?: RequestInit) => new Response('zip'))
     vi.stubGlobal('fetch', fetcher)
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -112,66 +111,6 @@ describe('SessionLogDownloadController', () => {
     expect((fetcher.mock.calls[0]?.[0] as URL).origin).toBe('http://dsh.internal')
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'HEAD' })
     expect(click).toHaveBeenCalledOnce()
-  })
-
-  it.each([false, true])('saves carrier ZIP bytes as a Blob and releases its URL (save failure: %s)', async (fails) => {
-    vi.useFakeTimers()
-    const createObjectURL = vi.fn(() => 'blob:desktop-archive')
-    const revokeObjectURL = vi.fn()
-    vi.stubGlobal('URL', class extends URL {
-      static createObjectURL = createObjectURL
-      static revokeObjectURL = revokeObjectURL
-    })
-    const fetcher = vi.fn(async () => new Response('ZIP bytes', { headers: { 'content-type': 'application/zip' } }))
-    const save = vi.fn(() => { if (fails) throw new Error('save failed') })
-    const controller = new SessionLogDownloadController(fetcher, save, 'blob')
-
-    await controller.download(SID)
-
-    expect(fetcher.mock.calls[0]).toEqual([expect.any(URL), expect.objectContaining({ method: 'GET' })])
-    const archive = (createObjectURL.mock.calls[0] as unknown as [Blob])[0]
-    expect(archive.type).toBe('application/zip')
-    expect(await archive.text()).toBe('ZIP bytes')
-    expect(save).toHaveBeenCalledWith('blob:desktop-archive', 'dsh-session-session-export-controller.zip')
-    expect(controller.store.getSnapshot().bySession[SID]?.status).toBe(fails ? 'error' : 'success')
-    expect(revokeObjectURL).not.toHaveBeenCalled()
-    await vi.runAllTimersAsync()
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:desktop-archive')
-    await controller.dispose()
-  })
-
-  it('reports a carrier archive read failure without starting a download', async () => {
-    const save = vi.fn()
-    const controller = new SessionLogDownloadController(async () => new Response(new ReadableStream({
-      start(stream) { stream.error(new Error('archive interrupted')) },
-    })), save, 'blob')
-
-    await controller.download(SID)
-
-    expect(controller.store.getSnapshot().bySession[SID]?.error).toBe('archive interrupted')
-    expect(save).not.toHaveBeenCalled()
-    await controller.dispose()
-  })
-
-  it('does not save a buffered archive that finishes reading after disposal', async () => {
-    const bytes = Promise.withResolvers<undefined>()
-    const reading = Promise.withResolvers<undefined>()
-    const save = vi.fn()
-    const controller = new SessionLogDownloadController(async () => {
-      const response = new Response('ZIP bytes')
-      vi.spyOn(response, 'blob').mockImplementation(async () => {
-        reading.resolve(undefined)
-        await bytes.promise
-        return new Blob(['ZIP bytes'])
-      })
-      return response
-    }, save, 'blob')
-    const pending = controller.download(SID)
-    await reading.promise
-    const disposal = controller.dispose()
-    bytes.resolve(undefined)
-    await Promise.all([pending, disposal])
-    expect(save).not.toHaveBeenCalled()
   })
 
   it('defaults dialog openness when state is externally cleared before settlement', async () => {

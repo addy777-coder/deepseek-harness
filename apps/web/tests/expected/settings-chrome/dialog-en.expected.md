@@ -7,15 +7,15 @@
     - button "Models":
       - img
       - text: Models
-    - button "Plugins":
+    - button "Built-in plugins":
       - img
-      - text: Plugins
+      - text: Built-in plugins
     - button "Agent presets":
       - img
       - text: Agent presets
-    - button "Usage statistics":
+    - button "Archived sessions":
       - img
-      - text: Usage statistics
+      - text: Archived sessions
   - button "Open configuration file"
   - button "Close":
     - img
@@ -47,7 +47,7 @@
   - button "Compact":
     - text: Compact
     - img
-  - text: Enter behavior while busy Busy only; Cmd/Ctrl+Enter uses the other behavior
+  - text: Send behavior while busy What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior
   - button "Queue":
     - text: Queue
     - img

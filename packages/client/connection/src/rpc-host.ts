@@ -1,15 +1,20 @@
-/** Transport-neutral Host registry for Connection RPC and Fetch channels. */
+/** Host registry and HTTP adapter for generic Connection RPC channels. */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import {
   RpcId,
   type ClientRequest,
   type RpcId as RpcIdType,
 } from './rpc.ts'
 import { clientRequestSchema } from './rpc-schema.ts'
-import type { FetchHandler } from './http-bridge.ts'
+import { bridge } from './http-bridge.ts'
+import { isTrustedApiRequest } from './api-request-trust.ts'
 import { API_PATH } from './api-path.ts'
+import type { BrowserAuth } from './browser-auth.ts'
 import type {
+  ConnectionIndexRequest,
+  ConnectionIndexResponse,
   ConnectionFetchRoute,
   ConnectionFetchHandler,
   HostConnectionFetch,
@@ -17,6 +22,8 @@ import type {
   ConnectionRpcFailure,
   ConnectionRpcHandler,
   ConnectionRpcResult,
+  ConnectionRequestRejection,
+  ConnectionTrustRequest,
   HostConnectionHandle,
   HostConnectionRpc,
 } from './rpc.ts'
@@ -27,11 +34,12 @@ const ENDPOINT_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/
 
 interface ConnectionRpcInterceptor {
   readonly matches: ConnectionRpcEndpointMatcher
-  readonly fetchHandler: FetchHandler
+  readonly fetchHandler: ConnectionFetchHandler
 }
 
 interface RegisteredFetchRoute {
   readonly methods: ReadonlySet<string>
+  readonly requestBody: ConnectionFetchRoute['requestBody']
   readonly fetch: ConnectionFetchRoute['fetch']
 }
 
@@ -52,14 +60,18 @@ declare module '@deepseek-ai/cordis' {
 export class HostConnectionService extends Service implements HostConnectionHandle {
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
-  private readonly channels = new Map<string, FetchHandler>()
-  private readonly channelListeners = new Set<(channel: string, active: boolean) => void>()
 
   /**
-   * Provide the carrier-neutral Host half.
+   * Provide the Host half over the active HTTP server.
    * @param ctx - owning Connection plugin context.
+   * @param trustedHosts - deployment authorities accepted by the Host/Origin fence.
+   * @param browserAuth - process token and persistent browser-session owner.
    */
-  constructor(ctx: Context) {
+  constructor(
+    ctx: Context,
+    private readonly trustedHosts: readonly string[],
+    private readonly browserAuth: BrowserAuth,
+  ) {
     super(ctx, 'connection')
   }
 
@@ -81,6 +93,22 @@ export class HostConnectionService extends Service implements HostConnectionHand
     }
   }
 
+  /** Apply the configured Host/Origin fence, then browser authentication. */
+  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection {
+    if (!isTrustedApiRequest(request, this.trustedHosts)) return 403
+    return this.browserAuth.isAuthenticated(request) ? undefined : 401
+  }
+
+  /** Authenticate an index request through the process-token exchange or cookie. */
+  authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean {
+    return this.browserAuth.authorizeIndex(request, response)
+  }
+
+  /** Add this process's launch token to the clean application URL. */
+  authenticatedUrl(baseUrl: string): string {
+    return this.browserAuth.authenticatedUrl(baseUrl)
+  }
+
   /**
    * Compose one shared-channel Fetch handler from exact routes and its interceptor.
    * @param channel - shared channel mounted by Connection.
@@ -90,6 +118,10 @@ export class HostConnectionService extends Service implements HostConnectionHand
     channel: '/api',
   ): ConnectionFetchHandler {
     return {
+      requestBodyMode: ({ method, url }) => {
+        const route = this.fetchRoutes.get(url.pathname)
+        return route?.methods.has(method) === true ? route.requestBody : 'buffered'
+      },
       fetch: (request) => {
         const pathname = new URL(request.url).pathname
         const route = this.fetchRoutes.get(pathname)
@@ -104,22 +136,6 @@ export class HostConnectionService extends Service implements HostConnectionHand
     }
   }
 
-  /** Compose one ordinary registered channel as a transport-neutral Fetch handler. */
-  createFetchHandler(channel: string): ConnectionFetchHandler {
-    assertChannel(channel)
-    return {
-      fetch: request => this.channels.get(channel)?.fetch(request)
-        ?? Promise.resolve(new Response('not found', { status: 404 })),
-    }
-  }
-
-  /** Subscribe a physical carrier to logical channel registration changes. */
-  observeRpcChannels(listener: (channel: string, active: boolean) => void): () => void {
-    this.channelListeners.add(listener)
-    for (const channel of this.channels.keys()) listener(channel, true)
-    return () => { this.channelListeners.delete(listener) }
-  }
-
   private registerFetchRoute(
     owner: Context,
     route: ConnectionFetchRoute,
@@ -127,6 +143,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     assertFetchRoute(route)
     const registered: RegisteredFetchRoute = {
       methods: new Set(route.methods),
+      requestBody: route.requestBody,
       fetch: route.fetch,
     }
     return owner.effect(() => {
@@ -145,17 +162,23 @@ export class HostConnectionService extends Service implements HostConnectionHand
   ): () => Promise<void> {
     assertChannel(channel)
     const fetchHandler = rpcFetchHandler(channel, handler)
-    return owner.effect(() => {
-      if (this.channels.has(channel)) {
-        throw new Error(`connection: RPC channel ${JSON.stringify(channel)} is already registered`)
-      }
-      this.channels.set(channel, fetchHandler)
-      this.publishChannel(channel, true)
-      return () => {
-        if (!this.channels.delete(channel)) return
-        this.publishChannel(channel, false)
-      }
-    }, `client-connection: ${channel} rpc channel`)
+    const route: WebRoute = {
+      kind: 'prefix',
+      path: channel,
+      handler: async (req, res) => {
+        const rejection = this.requestRejection(req)
+        if (rejection !== undefined) {
+          res.writeHead(rejection)
+          res.end(rejection === 401 ? 'unauthorized' : 'forbidden')
+          return
+        }
+        await bridge(req, res, fetchHandler)
+      },
+    }
+    return owner.effect(
+      () => owner.webServer.register(route),
+      `client-connection: ${channel} rpc channel`,
+    )
   }
 
   private registerInterceptor(
@@ -181,24 +204,14 @@ export class HostConnectionService extends Service implements HostConnectionHand
       }
     }, `client-connection: ${channel} rpc interceptor`)
   }
-
-  private publishChannel(channel: string, active: boolean): void {
-    for (const listener of [...this.channelListeners]) {
-      try {
-        listener(channel, active)
-      } catch (error) {
-        this.ctx.logger.error(error)
-      }
-    }
-  }
-
 }
 
 function rpcFetchHandler(
   channel: string,
   handler: ConnectionRpcHandler,
-): FetchHandler {
+): ConnectionFetchHandler {
   return {
+    requestBodyMode: () => 'buffered',
     async fetch(request: Request): Promise<Response> {
       const endpoint = endpointFromPath(channel, new URL(request.url).pathname)
       if (request.method !== 'POST' || endpoint === undefined) {

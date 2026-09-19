@@ -5,16 +5,20 @@ import type {
 import { isAppendSurfaceEvent, isReplacementSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { InboxState } from './inbox.ts'
 import { chatNode } from './common.ts'
-import { contextForm, contextProvenance } from './event-projection.ts'
+import { contextForm, contextProducer } from './event-projection.ts'
 
 interface ReferencedUserMessageNode extends UserMessageNode {
   /** Labels cited by the immediately following session-reference context. */
   readonly referenceLabels?: readonly string[]
+  /** Skill names the same step's `skill-invocation` injections loaded. */
+  readonly skillNames?: readonly string[]
 }
 
 interface ReferencedSteeringMessageNode extends SteeringMessageNode {
   /** Labels cited by the immediately following session-reference context. */
   readonly referenceLabels?: readonly string[]
+  /** Skill names the same step's `skill-invocation` injections loaded. */
+  readonly skillNames?: readonly string[]
 }
 
 type MessageNode = ReferencedUserMessageNode | ReferencedSteeringMessageNode | ContextMessageNode
@@ -36,12 +40,6 @@ function isCompactionCheckpoint(event: Parameters<ConversationNodeDefinition['ma
   return source.kind === 'plugin' && source.plugin === 'compact'
 }
 
-/** Whether a context source is the internal image-recognition record hidden from Chat. */
-function isImageRecognitionSource(source: unknown): boolean {
-  return typeof source === 'object' && source !== null
-    && (source as { kind?: unknown }).kind === 'image-recognition'
-}
-
 /** User, steering, and injected-context message classification Definition. */
 export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
@@ -61,7 +59,7 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
         time: event.time,
         content: event.data.content,
         source: event.data.source,
-        provenance: contextProvenance(event.data.source),
+        producer: contextProducer(event.data.source),
         form: contextForm(event.data.source),
       }
     }
@@ -87,7 +85,6 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   update: context => context.state,
   buildViewNode: (context) => {
     if (context.state === undefined) return null
-    if (context.state.kind === 'context' && isImageRecognitionSource(context.state.source)) return null
     return chatNode(context, context.state.kind, context.state.seq, context.state)
   },
 }

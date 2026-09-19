@@ -21,6 +21,9 @@
       "path": "../../client/connection/tsconfig.client.json"
     },
     {
+      "path": "../../client/file-upload/tsconfig.client.json"
+    },
+    {
       "path": "../../credentials/credentials"
     },
     {
@@ -45,6 +48,9 @@
       "path": "../../interaction/commands"
     },
     {
+      "path": "../../interaction/permission-presets"
+    },
+    {
       "path": "../../llm/llm"
     },
     {
@@ -66,22 +72,31 @@
       "path": "../session-controller/tsconfig.client.json"
     },
     {
+      "path": "../workspace-files/tsconfig.client.json"
+    },
+    {
       "path": "../settings-controller"
     },
     {
       "path": "../workspace-controller/tsconfig.client.json"
     },
     {
-      "path": "../usage-controller/tsconfig.client.json"
-    },
-    {
       "path": "../../typert/protocol"
     },
     {
-      "path": "../../network/network"
+      "path": "../../feedback/command-feedback"
     },
     {
-      "path": "../vpn-controller/tsconfig.client.json"
-    }
+      "path": "../terminal-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../boot/plugin-manager"
+    },
+    {
+      "path": "../../document/office-to-pdf"
+    },
+    {"path":"../usage-controller/tsconfig.client.json"},
+    {"path":"../../network/network"},
+    {"path":"../vpn-controller/tsconfig.client.json"}
   ]
 }

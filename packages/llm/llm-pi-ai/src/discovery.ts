@@ -13,8 +13,11 @@
  * metadata the surface offers for adoption. `settings.yaml` remains the only
  * thing that decides what a route serves.
  *
- * OpenAI-compatible and Anthropic Messages endpoints expose a readable model
- * listing. Other protocols require manual model entry.
+ * OpenAI-compatible and Anthropic Messages protocols are interrogated through
+ * their native model-listing endpoints. The parser accepts the standard
+ * `data` array and the enriched `models` map some compatible gateways expose.
+ * Every other protocol reports that it cannot be interrogated so the surface
+ * falls back to hand-entry rather than guessing its response fields.
  *
  * @module dsh-llm-pi-ai/discovery
  */
@@ -25,15 +28,26 @@ import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { catalogModels } from './catalog.ts'
 
 /**
- * OpenAI's GET /models uses bearer auth; Anthropic's GET /v1/models uses
- * x-api-key and anthropic-version. Other protocols need authentication or
- * listing parameters that the discovery request does not declare.
+ * Protocols whose model listing this module can read. OpenAI protocols use
+ * bearer auth at `GET {baseURL}/models`; Anthropic Messages uses `x-api-key`
+ * and `anthropic-version` at its native `GET /v1/models`. Azure is absent
+ * despite its OpenAI lineage — it authenticates with an `api-key` header and
+ * requires an `api-version` query — and Codex authenticates through OAuth;
+ * guessing at either would report an authentication failure as a provider
+ * with no models. pi-ai's remaining protocols are absent for the same reason.
  */
 const LISTABLE_PROTOCOLS: ReadonlySet<string> = new Set([
+  'anthropic-messages',
   'openai-completions',
   'openai-responses',
   'anthropic-messages',
 ])
+
+/** Stable API version required by Anthropic's model-listing endpoint. */
+const ANTHROPIC_VERSION = '2023-06-01'
+
+/** Largest model-list page accepted by Anthropic's public endpoint; discovery reads one page and does not follow `has_more`. */
+const ANTHROPIC_MODEL_LIMIT = 1000
 
 /**
  * Endpoint replies larger than this are refused. The endpoint is whatever URL
@@ -44,16 +58,34 @@ const LISTABLE_PROTOCOLS: ReadonlySet<string> = new Set([
  */
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
-/** One entry of an OpenAI-compatible `GET /models` reply. */
+/** Capacity fields nested by enriched model-directory replies. */
+interface ListingLimit {
+  context?: unknown
+  output?: unknown
+}
+
+/** Per-route capacities OpenRouter nests under each entry. */
+interface ListingTopProvider {
+  max_completion_tokens?: unknown
+}
+
+/** One entry of a supported `GET /models` reply. */
 interface ListingEntry {
   id?: unknown
   /** Common gateway extensions; absent from the official listings. */
   name?: unknown
   display_name?: unknown
+  displayName?: unknown
+  contextWindow?: unknown
   context_window?: unknown
   context_length?: unknown
+  max_input_tokens?: unknown
+  maxOutputTokens?: unknown
   max_tokens?: unknown
   max_output_tokens?: unknown
+  maxTokens?: unknown
+  limit?: ListingLimit | null
+  top_provider?: ListingTopProvider | null
 }
 
 /** A positive integer field of a listing entry, or `undefined` when absent or unusable. */
@@ -73,13 +105,21 @@ function label(...candidates: readonly unknown[]): string | undefined {
 }
 
 /**
- * Join the endpoint base with the listing path. The base is treated as a
- * prefix rather than a URL to resolve against, so a deployment path such as
- * `https://gateway.example/openai/v1` keeps its segments instead of losing
- * them to `URL` resolution.
+ * Join the endpoint base with the protocol's listing path. The base is
+ * treated as a prefix rather than a URL to resolve against, so a deployment
+ * path such as `https://gateway.example/openai/v1` keeps its segments instead
+ * of losing them to `URL` resolution. OpenAI protocols list at
+ * `{baseURL}/models`. Anthropic lists at `{root}/v1/models`, where the root is
+ * the base without trailing slashes and without one trailing `/v1` segment:
+ * gateway documentation publishes both spellings of the same root. Only this
+ * listing URL normalizes that segment; model requests receive the configured
+ * `baseURL` unchanged.
  */
 function listingUrl(baseURL: string, api: string): string {
-  return `${baseURL.replace(/\/+$/, '')}${api === 'anthropic-messages' ? '/v1/models' : '/models'}`
+  const base = baseURL.replace(/\/+$/, '')
+  if (api !== 'anthropic-messages') return `${base}/models`
+  const root = base.endsWith('/v1') ? base.slice(0, -3) : base
+  return `${root}/v1/models?limit=${String(ANTHROPIC_MODEL_LIMIT)}`
 }
 
 /**
@@ -126,29 +166,63 @@ async function readBounded(response: Response, url: string): Promise<string> {
 }
 
 /**
- * Read one OpenAI-compatible listing reply. Entries without a usable id are
- * skipped rather than failing the whole interrogation: a single malformed row
- * should not deny the user the rest of a working endpoint's catalog.
+ * Read one supported model-listing reply. The standard `data` array takes
+ * precedence when both supported formats are present. An enriched `models`
+ * map uses each property key as the endpoint-facing id; its nested `id` is
+ * only a fallback for an empty key because gateways may put a canonical model
+ * identity there instead of the alias they accept on requests. Only
+ * object-valued map entries are models; primitive properties are ignored
+ * because they may be directory metadata rather than model records.
+ *
+ * Entries without a usable id are skipped rather than failing the whole
+ * interrogation: a single malformed row should not deny the user the rest of
+ * a working endpoint's catalog. Missing names fall back to the adopted id so
+ * the Web form receives a complete human-readable row.
  */
 function readListing(body: unknown): LlmDiscoveredModel[] {
-  const data = (body as { data?: unknown } | null)?.data
-  if (!Array.isArray(data)) {
-    throw new LlmError(
-      'the endpoint\'s model listing has no "data" array; enter this provider\'s models by hand',
-      'DISCOVERY_FAILED',
-    )
+  const listing = body as { data?: unknown; models?: unknown } | null
+  const data = listing?.data
+  let listed: { readonly key?: string; readonly raw: unknown }[]
+  if (Array.isArray(data)) {
+    const rows = data as readonly unknown[]
+    listed = rows.map(raw => ({ raw }))
+  } else {
+    const models = listing?.models
+    if (models === null || typeof models !== 'object' || Array.isArray(models)) {
+      throw new LlmError(
+        'the endpoint\'s model listing has neither a "data" array nor a "models" object; '
+        + 'enter this provider\'s models by hand',
+        'DISCOVERY_FAILED',
+      )
+    }
+    listed = Object.entries(models as Record<string, unknown>)
+      .filter(([, raw]) => raw !== null && typeof raw === 'object' && !Array.isArray(raw))
+      .map(([key, raw]) => ({ key, raw }))
   }
   const models: LlmDiscoveredModel[] = []
-  for (const raw of data) {
+  for (const { key, raw } of listed) {
     const entry = raw as ListingEntry | null
-    const id = label(entry?.id)
+    const id = label(key, entry?.id)
     if (id === undefined) continue
-    const name = label(entry?.name, entry?.display_name)
-    const contextWindow = capacity(entry?.context_window, entry?.context_length)
-    const maxTokens = capacity(entry?.max_output_tokens, entry?.max_tokens)
+    const name = label(entry?.name, entry?.display_name, entry?.displayName) ?? id
+    const contextWindow = capacity(
+      entry?.contextWindow,
+      entry?.context_window,
+      entry?.context_length,
+      entry?.max_input_tokens,
+      entry?.limit?.context,
+    )
+    const maxTokens = capacity(
+      entry?.maxOutputTokens,
+      entry?.max_output_tokens,
+      entry?.maxTokens,
+      entry?.max_tokens,
+      entry?.limit?.output,
+      entry?.top_provider?.max_completion_tokens,
+    )
     models.push({
       id,
-      ...name === undefined ? {} : { name },
+      name,
       ...contextWindow === undefined ? {} : { contextWindow },
       ...maxTokens === undefined ? {} : { maxTokens },
     })
@@ -267,9 +341,11 @@ export async function discoverModels(
     const headers = new Headers(stored?.headers === undefined ? undefined : Object.entries(stored.headers))
     headers.set('accept', 'application/json')
     if (api === 'anthropic-messages') {
-      headers.set('anthropic-version', '2023-06-01')
+      headers.set('anthropic-version', ANTHROPIC_VERSION)
       if (apiKey !== undefined) headers.set('x-api-key', apiKey)
-    } else if (apiKey !== undefined) headers.set('authorization', `Bearer ${apiKey}`)
+    } else if (apiKey !== undefined) {
+      headers.set('authorization', `Bearer ${apiKey}`)
+    }
     for (const [name, value] of Object.entries(attributionHeaders())) headers.set(name, value)
     response = await fetchRequest(url, {
       method: 'GET',

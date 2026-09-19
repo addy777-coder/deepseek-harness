@@ -39,9 +39,6 @@ export async function buildModelCatalog(
           id: model.id,
           name: model.name,
           ...(model.description === undefined ? {} : { description: model.description }),
-          ...(resolved.inputModalities === undefined
-            ? {}
-            : { inputModalities: [...resolved.inputModalities] }),
           ...(reasoning === undefined ? {} : { reasoning }),
         }
       }))

@@ -1,5 +1,5 @@
 ---
-description: "Ready-made dsh profile bundles for the shared core, shared GUI, Web and Desktop carriers, one-shot task, ACP, and SDK application surfaces."
+description: "Ready-made dsh profile bundles for the shared core, browser GUI, one-shot task, ACP, and SDK application surfaces."
 kind: "package-group"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This group maps the installable patch layers used by `dsh --profile`. Each package declares `dsh.bundle.patch`; the launcher stacks those patch documents to assemble a named profile. The `web` and `desktop` profiles combine `dsh-base`, `dsh-gui-app`, and one carrier, while `headless`, `acp`, and `sdk` add their application layer directly over base. `sdk-minimal` supplies its complete tree in one bundle. Domain packages can declare additional layers outside this directory.
+This group maps the installable patch layers used by `dsh --profile`. Each package declares `dsh.bundle.patch`; the launcher stacks those patch documents to assemble a named profile. The `web`, `headless`, `acp`, and `sdk` profiles build on `dsh-base`, while `sdk-minimal` supplies its complete tree in one bundle. Domain packages can declare additional layers outside this directory.
 
 ## Table of Contents
 
@@ -23,8 +23,6 @@ This group maps the installable patch layers used by `dsh --profile`. Each packa
 | Package | Role | ctx key |
 |---|---|---|
 | [`base`](base/README.md) | Shared core for base-backed profiles | — (patch only) |
-| [`gui-app`](gui-app/README.md) | Shared interactive GUI composition for Web and Desktop | mounts GUI Host and Client rows |
-| [`desktop-app`](desktop-app/README.md) | Windows Electron carrier over the shared GUI | mounts MessagePort and Desktop rows |
 | [`acp-app`](acp-app/README.md) | Automation-only ACP stdio application over base | mounts the ACP bridge |
 | [`web-app`](web-app/README.md) | Browser application layer over base | mounts Web rows |
 | [`headless`](headless/README.md) | One-shot command-line task application over base | `headless-runner` |

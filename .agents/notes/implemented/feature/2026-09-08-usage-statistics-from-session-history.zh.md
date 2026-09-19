@@ -12,9 +12,9 @@ Status: implemented
 
 ## 决策
 
-[使用统计控制器](../../../../packages/api/usage-controller/README.zh.md)拥有 Host 聚合与独立的无 React Client 模型。其生成的 `usage.get` Remote 读取优先使用运行中会话的 `sessionQuery` 观察，无需附加智能体或传输原始历史。[共享 GUI 组合](../../../../packages/bundle/gui-app/README.zh.md)选择四个并发读取和 256 个会话摘要缓存；必填的插件 Config 字段允许部署修改两个限制。缓存复用检查观察身份、序号或持久化修订号，以及时区。不设置持久分析索引。
+[使用统计控制器](../../../../packages/api/usage-controller/README.zh.md)拥有 Host 聚合与独立的无 React Client 模型。其生成的 `usage.get` Remote 读取优先使用运行中会话的 `sessionQuery` 观察，无需附加智能体或传输原始历史。[Web 组合](../../../../packages/bundle/web-app/README.zh.md)选择四个并发读取和 256 个会话摘要缓存；必填的插件 Config 字段允许部署修改两个限制。缓存复用检查观察身份、序号或持久化修订号，以及时区。不设置持久分析索引。
 
-精确总量复用 token-meter 归一化。一次请求保留最后一个有效的已报告采样，最终用量替换较早的流式采样，已开始的重试分别计数。失败或取消不会抹去已报告用量。已记录的压缩与子智能体用量计入 token，而活动仅由主会话用户消息产生。提供方/模型组合决定归属；排除继承事件时仍可使用继承的请求头。这保留了 [token 记账决策](../architecture/2026-07-29-projected-token-usage-and-request-context.zh.md)，同时不从其逐会话累计投影派生日历序列。
+精确总量复用官方 token-meter 归一化。每条已结算的 `assistant/message` 或 `assistant/attempt` 最多贡献一个来自最终消息用量或内嵌流的采样。最终用量即使无效也具有优先权；不完整计数记为缺失，不用更早采样替换。重试保持独立，失败或取消的尝试保留其已结算用量。已记录的压缩与子智能体用量计入 token，而活动仅由主会话用户消息产生。提供方/模型组合决定归属；排除继承事件时仍可使用继承的请求头。这保留了 [token 记账决策](../architecture/2026-07-29-projected-token-usage-and-request-context.zh.md)，同时不从其逐会话累计投影派生日历序列。
 
 查看者提供当前 IANA 时区。Host 聚合应用该时区的历史规则，在所选 7/30 天范围中包含今天，并独立计算 365 个活动日期与不受范围限制的当前连续天数。未知或不完整用量不作估算，无法读取的会话产生明确的部分结果。无法枚举会话集合，或非空集合中的全部会话都无法读取时拒绝查询；空集合返回零统计。
 

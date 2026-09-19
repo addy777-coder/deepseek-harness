@@ -74,23 +74,12 @@ describe('application entrypoints', () => {
     ])
   })
 
-  it('excludes bundled executables from Desktop installer artifacts', () => {
+  it('rejects a packaging dispatcher owned by the CLI workspace', () => {
     const root = fixture()
-    write(root, 'apps/desktop/dist-electron/win-unpacked/resources/pnpm/bin/pnpm.cjs', '#!/usr/bin/env node\n')
-
-    expect(applicationEntrypointViolations(root)).toEqual([])
-  })
-
-  it.each([
-    'apps/desktop/src/rogue.mjs',
-    'apps/desktop/src/dist-electron/rogue.mjs',
-    'apps/example/dist-electron/rogue.mjs',
-  ])('rejects unclassified source outside Desktop artifacts: %s', (path) => {
-    const root = fixture()
-    write(root, path, '#!/usr/bin/env node\n')
+    write(root, 'apps/cli/src/runtime-bootstrap.ts', '#!/usr/bin/env node\n')
 
     expect(applicationEntrypointViolations(root)).toEqual([
-      `${path}: executable source has no application/build/test classification`,
+      'apps/cli/src/runtime-bootstrap.ts: executable source has no application/build/test classification',
     ])
   })
 

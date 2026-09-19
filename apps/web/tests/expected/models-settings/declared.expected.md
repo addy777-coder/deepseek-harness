@@ -7,31 +7,21 @@
     - button "模型":
       - img
       - text: 模型
-    - button "插件":
+    - button "内置插件":
       - img
-      - text: 插件
+      - text: 内置插件
     - button "Agent 预设":
       - img
       - text: Agent 预设
-    - button "使用统计":
+    - button "已归档会话":
       - img
-      - text: 使用统计
+      - text: 已归档会话
   - button "打开配置文件"
   - button "关闭":
     - img
     - text: 关闭
   - heading "模型" [level=2]
   - paragraph: 填入各提供方的 API 密钥即可使用其模型。
-  - region "图片识别":
-    - text: 图片识别 视觉
-    - paragraph: 会话模型仅支持文本时，图片会发送给此模型，并将其事实描述提供给会话模型。图片会发送到该模型的提供方。
-    - text: 图片识别模型
-    - combobox "图片识别模型":
-      - option "未配置" [selected]
-      - option "minimax-cn · MiniMax-M3"
-      - option "Acme Gateway · acme-large"
-    - button "取消"
-    - button "保存图片识别模型" [disabled]
   - list:
     - listitem:
       - text: minimax-cn

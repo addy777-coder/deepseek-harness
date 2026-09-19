@@ -80,7 +80,7 @@ function Initialize-VpnSources {
   $root = Get-VpnRoot
   $pins = Get-Content -LiteralPath (Join-Path $root 'deps/pins.json') -Raw | ConvertFrom-Json
   $sourceRoot = Join-Path $root '.cache/sources'
-  $sourceRecord = Join-Path $root '.cache/source-provenance.json'
+  $sourceRecord = Join-Path $root '.cache/source-build-record.json'
   if (Test-Path -LiteralPath $sourceRecord -PathType Leaf) {
     $record = Get-Content -LiteralPath $sourceRecord -Raw | ConvertFrom-Json
     foreach ($name in @('openvpn3', 'lwip', 'vcpkg')) {

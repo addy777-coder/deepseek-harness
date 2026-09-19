@@ -205,6 +205,7 @@ export class OpenVpnNetwork extends NetworkService {
       const result = await proxyFetch(url, { method: request.method, headers: Object.fromEntries(headers),
         // Node Fetch and undici use the same WHATWG streams at runtime; their declarations come from separate libraries.
         ...request.body === null ? {} : { body: request.body as NonNullable<UndiciRequestInit['body']> },
+        // proxy-exempt: Selected VPN requests require the authenticated application tunnel, with no host-proxy fallback.
         duplex: 'half', signal, redirect: 'error', dispatcher: run.dispatcher })
       return new Response(result.body as ReadableStream<Uint8Array> | null, {
         status: result.status, statusText: result.statusText, headers: Object.fromEntries(result.headers),
@@ -342,6 +343,7 @@ export class OpenVpnNetwork extends NetworkService {
       run.session = session
       const port = await session.ready
       if (this.runCancelled(run)) return
+      // proxy-exempt: This agent reaches only the owned loopback VPN helper and must ignore unrelated proxy settings.
       run.dispatcher = new ProxyAgent({ uri: `http://127.0.0.1:${port}`, token: `Bearer ${proxyToken}` })
       this.retryCount = 0
       this.publish('connected')

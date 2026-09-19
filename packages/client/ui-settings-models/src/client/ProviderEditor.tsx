@@ -33,7 +33,6 @@ import {
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
-import type { ProbeTarget } from './ModelListEditor.tsx'
 import { NetworkField } from './NetworkField.tsx'
 import { deriveKeyRef, protocolChoices } from './store.ts'
 import type { ModelsOperations } from './operations.ts'
@@ -44,8 +43,7 @@ import styles from './ModelsSection.module.css'
 /** Per-adapter-family curated field sets (unknown namespaces get the hint alone). */
 type EditorLayout = 'deepseek' | 'pi-ai' | 'unknown'
 
-/** The public DeepSeek endpoint shown as the deepseek base-URL placeholder. */
-const DEEPSEEK_PUBLIC_BASE_URL = 'https://api.deepseek.com'
+
 
 /** Props of {@link ProviderEditor}. */
 export interface ProviderEditorProps {
@@ -75,8 +73,6 @@ export interface ProviderEditorProps {
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
   readOnly: boolean
-  /** Current saved recognition route whose image capability this provider must preserve. */
-  protectedImageRecognition?: { provider: string; model: string } | null
   /** Render only the credential field and actions, without provider settings. */
   credentialOnly?: boolean
   /** Require a newly entered credential before this editor can submit. */
@@ -218,18 +214,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // The model list is validated by the same per-row checker for both families,
   // so a bad row is named by its position rather than by a blanket message.
   const modelFailure = validateDeepSeekModels(schema.getPath(draft, ['models']))
-  const draftModels = schema.getPath(draft, ['models'])
-  const originalModels = schema.getPath(committedOriginal, ['models'])
-  const protectedRecognitionFailure = props.credentialOnly !== true
-    && props.protectedImageRecognition?.provider === props.provider
-    && JSON.stringify(draftModels) !== JSON.stringify(originalModels)
-    && (() => {
-      const target = props.protectedImageRecognition
-      const model = modelDrafts(draftModels).find(entry => entry['id'] === target.model)
-      if (model === undefined) return true
-      const modalities = model[layout === 'deepseek' ? 'inputModalities' : 'input']
-      return Array.isArray(modalities) && !modalities.includes('image')
-    })()
   const keyFailure = apiKeyFailure(keyDraft)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
@@ -247,17 +231,17 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const probeBaseURL = stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL')
   const network = (stringAt(draft, 'network') ?? stringAt(fallback, 'network')) === 'vpn' ? 'vpn' : 'direct'
   const savedNetwork = stringAt(fallback, 'network') === 'vpn' ? 'vpn' : 'direct'
-  const unsavedNetwork = network !== savedNetwork || (network === 'vpn'
-    && (probeBaseURL !== stringAt(fallback, 'baseURL') || probeApi !== stringAt(fallback, 'api')))
-  const probe: ProbeTarget = {
+  const networkNeedsSave = network === 'vpn' && (savedNetwork !== 'vpn'
+    || probeBaseURL !== stringAt(fallback, 'baseURL') || probeApi !== stringAt(fallback, 'api'))
+  const probe = {
     settingsNs: namespace.ns,
     // Naming the route lets an adapter that already describes it answer from
     // its own registry — better metadata, no network call, no endpoint needed.
     provider: props.provider,
+    ...network === 'vpn' || savedNetwork === 'vpn' ? { network } : {},
     ...probeBaseURL === undefined ? {} : { baseURL: probeBaseURL },
     ...probeApi === undefined ? {} : { api: probeApi },
     ...keyValue.length === 0 ? {} : { apiKey: keyValue },
-    ...layout === 'pi-ai' && (network === 'vpn' || savedNetwork === 'vpn') ? { network } : {},
   }
   /**
    * The write for this card, or a failure message. Every edit travels as
@@ -363,6 +347,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const models = modelDrafts(modelsOverridden ? customModels : inheritedModels())
     const defaultContextWindow = schema.getPath(fallback, ['defaultContextWindow'])
     const defaultMaxTokens = schema.getPath(fallback, ['maxTokens'])
+    const defaultInput = schema.getPath(fallback, ['defaultInput'])
     const keyPlaceholder = keyLocked
       ? t('keyEnvLocked')
       : keyState?.configured === true && props.credentialRequired !== true
@@ -435,21 +420,21 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 type="text"
                 value={stringAt(draft, 'baseURL') ?? ''}
                 placeholder={family === 'deepseek'
-                  ? DEEPSEEK_PUBLIC_BASE_URL
+                  ? t(stringAt(fallback, 'protocol') === 'messages' ? 'deepSeekMessagesBaseUrl' : 'deepSeekChatBaseUrl')
                   : stringAt(fallback, 'baseURL') ?? t('baseUrlDefault')}
+                aria-describedby={family === 'deepseek' ? `${props.provider}-endpoint-hint` : undefined}
                 aria-label={t('baseUrl')}
                 disabled={disabled}
                 onChange={(event) => {
                   setField('baseURL', event.target.value === '' ? undefined : event.target.value)
                 }}
               />
+              {family === 'deepseek' ? <span id={`${props.provider}-endpoint-hint`} className={styles['advancedHint']}>{t('deepSeekEndpointHint')}</span> : null}
             </div>
+            {ownsIdentity ? <NetworkField value={network} onChange={(value) => { setField('network', value) }} disabled={disabled} t={t} /> : null}
             {/* The protocol sits beside the endpoint it describes, as it does
                 on the create card. */}
-            {family === 'pi-ai'
-              ? <NetworkField value={network} onChange={(value) => { setField('network', value) }} disabled={disabled} t={t} />
-              : null}
-            {ownsIdentity || (family === 'pi-ai' && network === 'vpn')
+            {ownsIdentity
               ? (
                 <div className={styles['field']}>
                   <span className={styles['fieldLabel']}>{t('customApi')}</span>
@@ -488,8 +473,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               : (
                 <ModelListEditor
                   {...catalogProps}
+                  catalogProvider={props.declared === true ? undefined : props.provider}
+                  defaultInput={Array.isArray(defaultInput) ? defaultInput : undefined}
                   probe={probe}
-                  probeBlocked={keyFailure ?? (unsavedNetwork ? 'networkSaveBeforeFetch' : undefined)}
+                  probeBlocked={networkNeedsSave ? 'networkSaveBeforeFetch' : keyFailure}
                   operations={operations}
                 />
               )}
@@ -522,15 +509,11 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {`${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`}
           </p>
         )}
-      {protectedRecognitionFailure
-        ? <p className={styles['advancedHint']}>{t('recognitionProtected')}</p>
-        : null}
       <EditorFooter
         t={t}
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
-          || protectedRecognitionFailure
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}

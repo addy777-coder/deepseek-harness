@@ -17,13 +17,13 @@ import { afterEach, describe, expect, it, onTestFailed } from 'vitest'
 import type { ReplayOverrideDoc } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
-  assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
+  acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/turn-tail-actions', import.meta.url))
-const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
+const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 // Three goldens for the same message: parked mid-turn, aborted, and completed.
 const RUNNING_EXPECTED = join(SNAPSHOT_DIR, 'running.expected.md')
 const SETTLED_EXPECTED = join(SNAPSHOT_DIR, 'settled.expected.md')
@@ -64,7 +64,8 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
   /** Boot scaffold + page, materializing the sidecar before the replay row installs. */
   async function launch(
     buildOverride?: (sidecarHome: string) => ReplayOverrideDoc,
-    paceMs?: number,
+    // Throughput snapshots require a nonzero interval between replayed chunks.
+    paceMs = 1,
   ): Promise<void> {
     sessionEvents = []
     let overridePath: string | undefined
@@ -80,7 +81,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
           replayFixture: FIXTURE,
           ...(overridePath === undefined ? {} : { replayOverride: overridePath }),
           compareReplaySession: overridePath === undefined,
-          ...(paceMs === undefined ? {} : { paceMs }),
+          paceMs,
         },
     )
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
@@ -168,7 +169,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
   }, 120_000)
 
   it.skipIf(MODE === 'record')('shows exact completed-Turn usage and expands its available facts', async () => {
-    await launch()
+    await launch(undefined, 5)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-turn-usage-expanded'))
     const { settled } = await sendPrompt(120_000)
     await settled
@@ -179,7 +180,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     // The usage pill carries the icon and the turn total; the time pill beside
     // it carries the run time, and both keep their details dialog-only.
     expect(await trigger.textContent()).toBe('Usage 15.8K tok')
-    const timeTrigger = page.locator('[data-turn-tail]').getByRole('button', { name: /^Ran for \S+$/ })
+    const timeTrigger = page.getByRole('button', { name: /^Ran for \S+$/ })
     expect(await timeTrigger.count()).toBe(1)
     expect(await page.locator('[data-turn-tail]').getByText(/tok\/s|TTFT/).count()).toBe(0)
     expect(await page.getByRole('dialog').count()).toBe(0)
@@ -200,19 +201,28 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await timeTrigger.click()
     const timeDialog = page.getByRole('dialog', { name: 'Turn time and speed' })
     expect(await timeDialog.count()).toBe(1)
-    expect(await timeDialog.getByText(/tok\/s/).count()).toBe(1)
-    expect(await timeDialog.getByText('Time to first token (TTFT)', { exact: true }).count()).toBe(1)
+    expect(await timeDialog.getByText(/tok\/s/).count()).toBe(0)
+    expect(await timeDialog.getByText('Time to first token (TTFT)', { exact: true }).count()).toBe(0)
     await page.keyboard.press('Escape')
     await trigger.click()
 
     const expanded = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(USAGE_EXPANDED_EXPECTED, expanded, MODE)
+
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await expect.poll(() => timeTrigger.count(), { timeout: 15_000 }).toBe(1)
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    await timeTrigger.click()
+    expect(await timeDialog.count()).toBe(1)
+    expect(await timeDialog.getByText(/tok\/s/).count()).toBe(0)
+    expect(await timeDialog.getByText('Time to first token (TTFT)', { exact: true }).count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 120_000)
 
   it.skipIf(MODE === 'record')('folds the Turn process after the completed reply becomes the answer', async () => {
-    await launch()
+    await launch(undefined, 5)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-turn-tail-actions-completed'))
     const { settled } = await sendPrompt()
     await settled
@@ -220,7 +230,6 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     const process = page.locator('[data-turn-process]')
     await expect.poll(() => process.count(), { timeout: 10_000 }).toBe(1)
     expect(await process.getAttribute('aria-expanded')).toBe('false')
-    expect(await process.textContent()).toMatch(/^Ran for \d+(?:m \d+)?s$/)
     expect(await process.evaluate(element => getComputedStyle(element).borderBottomWidth)).toBe('1px')
     const processBottom = await process.evaluate(element =>
       element.closest<HTMLElement>('[data-chat-flow-kind="turn-process"]')?.getBoundingClientRect().bottom)
@@ -292,9 +301,8 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await assertFixtureInventory(
       SNAPSHOT_DIR,
       [
-        'completed.expected.md', 'focused.expected.md', 'running.expected.md', 'session.jsonl',
+        'completed.expected.md', 'focused.expected.md', 'running.expected.md', 'session.v3.jsonl',
         'settled.expected.md', 'usage-expanded.expected.md',
-        'history-collapsed.expected.md', 'history-expanded.expected.md',
       ],
     )
   })

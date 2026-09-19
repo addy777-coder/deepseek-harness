@@ -17,6 +17,7 @@ import * as native from '../src/native.ts'
 
 class Helper implements SubprocessHandle {
   readonly pid = 1
+  readonly control = undefined
   readonly stdout = new PassThrough()
   readonly stderr = new PassThrough()
   readonly collected = {}
@@ -48,6 +49,7 @@ class Processes extends SubprocessRuntime {
     helper.event({ event: 'profile-evaluated', accepted: true }); helper.finish()
   }
   async resolveExecutable(command: string): Promise<string> { return command }
+  async terminalEnvironment(): Promise<never> { throw new Error('No terminal environment in the VPN process fixture') }
   async spawnTerminal(): Promise<never> { throw new Error('No terminals in the VPN protocol') }
   spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
     const helper = new Helper(spec, (child) => {

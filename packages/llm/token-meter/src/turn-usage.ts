@@ -1,3 +1,4 @@
+import { lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type { AssistantMessage, TokenUsage } from '@deepseek-ai/dsh-llm/types'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
@@ -15,9 +16,9 @@ export interface TurnTokenUsage {
   readonly outputTokens: number
   /** Exact aggregate prompt plus output total across all attempts. */
   readonly totalTokens: number
-  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
+  /** Present only when every attempt reported the bucket. */
   readonly cacheReadTokens?: number
-  /** The Turn fold always includes this sum, counting omitted attempt buckets as zero. */
+  /** Present only when every attempt reported the bucket. */
   readonly cacheWriteTokens?: number
   /** Output subset, present only when every attempt reported it. */
   readonly reasoningTokens?: number
@@ -25,7 +26,7 @@ export interface TurnTokenUsage {
   readonly routes?: readonly TurnTokenUsageRoute[]
 }
 
-/** One exact, internally consistent provider usage sample with optional attribution. */
+/** Exact token buckets for one provider-reported request attempt. */
 export interface NormalizedTokenUsage {
   readonly inputTokens: number
   readonly outputTokens: number
@@ -74,11 +75,15 @@ function messageRoute(message: AssistantMessage): TurnTokenUsageRoute | undefine
   return provider.length > 0 && model.length > 0 ? { provider, model } : undefined
 }
 
+function streamUsage(stream: SessionEvent<'assistant/message'>['data']['stream']): TokenUsage | undefined {
+  return lastAssistantStreamChunk(stream, 'usage')?.usage
+}
+
 /**
- * Validate reported totals or derive them only from complete disjoint buckets.
- * @param usage - provider usage recorded in a session event.
- * @param route - optional provider and model attribution.
- * @returns exact usage, or undefined for incomplete or contradictory accounting.
+ * Normalize one usage sample without inferring unreported cache buckets.
+ * @param usage - Provider-reported token counts.
+ * @param route - Optional provider and model attribution.
+ * @returns Exact counts, or undefined when the sample is incomplete or inconsistent.
  */
 export function normalizeTokenUsage(usage: TokenUsage, route?: TurnTokenUsageRoute): NormalizedTokenUsage | undefined {
   const {
@@ -132,12 +137,14 @@ function aggregateAttempts(attempts: readonly NormalizedTokenUsage[]): TurnToken
   const totalTokens = safeSum(attempts.map(attempt => attempt.totalTokens))
   if (inputTokens === undefined || outputTokens === undefined || totalTokens === undefined) return undefined
 
+  const cacheRead = attempts.map(attempt => attempt.cacheReadTokens)
+  const cacheWrite = attempts.map(attempt => attempt.cacheWriteTokens)
   const reasoning = attempts.map(attempt => attempt.reasoningTokens)
-  // Each normalized cache bucket is bounded by its attempt's total, so the
-  // validated aggregate total also bounds these sums.
-  const cacheReadTokens = attempts.reduce((sum, attempt) => sum + (attempt.cacheReadTokens ?? 0), 0)
-  const cacheWriteTokens = attempts.reduce((sum, attempt) => sum + (attempt.cacheWriteTokens ?? 0), 0)
+  const cacheReadTokens = cacheRead.every(isCount) ? safeSum(cacheRead) : undefined
+  const cacheWriteTokens = cacheWrite.every(isCount) ? safeSum(cacheWrite) : undefined
   const reasoningTokens = reasoning.every(isCount) ? safeSum(reasoning) : undefined
+  // A present cache bucket is bounded by exact prompt, and reasoning is bounded
+  // by output. Safe required aggregates therefore imply safe optional sums.
 
   let routes: readonly TurnTokenUsageRoute[] | undefined
   const attributed = attempts.map(attempt => attempt.route)
@@ -151,8 +158,8 @@ function aggregateAttempts(attempts: readonly NormalizedTokenUsage[]): TurnToken
     uncachedInputTokens: inputTokens,
     outputTokens,
     totalTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
+    ...cacheReadTokens === undefined ? {} : { cacheReadTokens },
+    ...cacheWriteTokens === undefined ? {} : { cacheWriteTokens },
     ...reasoningTokens === undefined ? {} : { reasoningTokens },
     ...routes === undefined ? {} : { routes },
   }
@@ -223,20 +230,17 @@ export function deriveTurnTokenUsage(events: readonly SessionEvent[]): TurnToken
       else state = { kind: 'open', turn, step: event.data.step }
       continue
     }
-    if (event.type === 'assistant/chunk') {
+    if (event.type === 'assistant/attempt') {
       if (event.data.turn !== turn
         || state.kind !== 'open'
         || !sameAttempt(state, event.data.turn, event.data.step)) {
         invalid = true
         continue
       }
-      if (event.data.chunk.type === 'usage') {
-        state = { ...state, sample: event.data.chunk.usage }
-      } else if (event.data.chunk.type === 'finish'
-        && (event.data.chunk.reason.kind === 'error' || event.data.chunk.reason.kind === 'aborted')) {
-        if (!closeOpen()) invalid = true
-        else state = { kind: 'finishClosed', turn, step: event.data.step }
-      }
+      const sample: TokenUsage | undefined = streamUsage(event.data.stream) ?? state.sample
+      state = { kind: 'open', turn, step: event.data.step, ...(sample === undefined ? {} : { sample }) }
+      if (!closeOpen()) invalid = true
+      else state = { kind: 'finishClosed', turn, step: event.data.step }
       continue
     }
     if (event.type === 'assistant/message') {
@@ -246,7 +250,8 @@ export function deriveTurnTokenUsage(events: readonly SessionEvent[]): TurnToken
         invalid = true
         continue
       }
-      if (event.data.usage !== undefined) state = { ...state, sample: event.data.usage }
+      const sample = event.data.usage ?? streamUsage(event.data.stream)
+      if (sample !== undefined) state = { ...state, sample }
       if (!closeOpen(messageRoute(event.data.message))) invalid = true
       else state = { kind: 'settled', turn, step: event.data.step, by: 'message' }
       continue
