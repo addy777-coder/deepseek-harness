@@ -21,8 +21,8 @@
   - img
   - img
   - text: System prompt
-- button "6 tool calls":
-  - text: 6 tool calls
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph:
   - strong: Turn 1 / 2
@@ -50,8 +50,8 @@
   - img
   - img
   - text: System prompt
-- button "5 tool calls · 2 messages":
-  - text: 5 tool calls · 2 messages
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: 两个 turn 都完成了 ✅
 - paragraph:

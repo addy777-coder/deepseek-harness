@@ -10,6 +10,13 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-sto
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 
+/**
+ * Browser-local expansion key for the default area — the permanent region that
+ * owns every Workspace no custom section claims. It has no durable section id,
+ * so folding it needs this reserved key.
+ */
+export const DEFAULT_SECTION_KEY = '__default_section__'
+
 /** Session-list grouping mode: workspace sections or one flat recency list. */
 export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
@@ -70,7 +77,9 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
       setSectionExpanded: (d, key: string, expanded: boolean) => { d.sectionExpansion[key] = expanded },
       retainSectionKeys: (d, keys: readonly string[]) => {
-        const retained = new Set(keys)
+        // The default area always keeps its folding state: its key is not a
+        // section id, so a caller listing durable sections cannot retain it.
+        const retained = new Set([DEFAULT_SECTION_KEY, ...keys])
         d.sectionExpansion = Object.fromEntries(Object.entries(d.sectionExpansion).filter(([key]) => retained.has(key)))
       },
       retainAccountKeys: (d, workspaceKeys: readonly string[]) => {

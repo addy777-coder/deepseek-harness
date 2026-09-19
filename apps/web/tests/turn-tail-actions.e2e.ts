@@ -179,7 +179,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     // The usage pill carries the icon and the turn total; the time pill beside
     // it carries the run time, and both keep their details dialog-only.
     expect(await trigger.textContent()).toBe('Usage 15.8K tok')
-    const timeTrigger = page.getByRole('button', { name: /^Ran for \S+$/ })
+    const timeTrigger = page.locator('[data-turn-tail]').getByRole('button', { name: /^Ran for \S+$/ })
     expect(await timeTrigger.count()).toBe(1)
     expect(await page.locator('[data-turn-tail]').getByText(/tok\/s|TTFT/).count()).toBe(0)
     expect(await page.getByRole('dialog').count()).toBe(0)
@@ -220,6 +220,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     const process = page.locator('[data-turn-process]')
     await expect.poll(() => process.count(), { timeout: 10_000 }).toBe(1)
     expect(await process.getAttribute('aria-expanded')).toBe('false')
+    expect(await process.textContent()).toMatch(/^Ran for \d+(?:m \d+)?s$/)
     expect(await process.evaluate(element => getComputedStyle(element).borderBottomWidth)).toBe('1px')
     const processBottom = await process.evaluate(element =>
       element.closest<HTMLElement>('[data-chat-flow-kind="turn-process"]')?.getBoundingClientRect().bottom)
@@ -293,6 +294,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
       [
         'completed.expected.md', 'focused.expected.md', 'running.expected.md', 'session.jsonl',
         'settled.expected.md', 'usage-expanded.expected.md',
+        'history-collapsed.expected.md', 'history-expanded.expected.md',
       ],
     )
   })

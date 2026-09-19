@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-交互式 GUI 原本假定存在 HTTP server、浏览器导航、cookie 与单个浏览器窗口。Windows 桌面应用需要原生窗口、托盘与协议集成、专注 Session 窗口、通知和本地插件管理，同时不能给 Renderer Node 权限，也不能暴露 loopback 端口。重写对话 UI 会拆分产品行为；把 Host 放进 Electron 主进程则会让模型请求和凭据与操作系统集成处于同一进程。
+交互式 GUI 原本假定存在 HTTP server、浏览器导航、cookie 与单个浏览器窗口。Windows 桌面应用需要原生窗口、托盘与协议集成、通知和本地插件管理，同时不能给 Renderer Node 权限，也不能暴露 loopback 端口。重写对话 UI 会拆分产品行为；把 Host 放进 Electron 主进程则会让模型请求和凭据与操作系统集成处于同一进程。
 
 ## 决策
 
@@ -30,9 +30,9 @@ Renderer 导航与弹窗创建都会被拒绝。HTTP 与 HTTPS 目标交给系�
 
 ### Desktop 生命周期
 
-一个主窗口保留导航与设置。一个 Session 最多拥有一个专注任务窗口，后者隐藏侧栏与设置；关闭它会让 Host 任务继续运行。Host 启动有 120 秒 ready 预算，其中包含冷 profile reconciliation 与 Loader 完全加载；超时诊断会指出最后上报的阶段，并包含有界 Host stderr 尾部。关闭主窗口或选择托盘退出会销毁全部窗口、请求 Host 停止、等待最多五秒，再终止剩余进程树。Host 意外退出时，窗口会保留诊断页，直到用户请求重启；工作绝不会自动重放。
+一个主窗口保留导航与设置。Session 链接与通知点击会在该窗口选择对应 Session；[Session 导航与导出决策](../bug-fix/2026-09-19-desktop-session-navigation-and-export.zh.md)负责单窗口行为与载体下载。Host 启动有 120 秒 ready 预算，其中包含冷 profile reconciliation 与 Loader 完全加载；超时诊断会指出最后上报的阶段，并包含有界 Host stderr 尾部。关闭主窗口或选择托盘退出会销毁全部窗口、请求 Host 停止、等待最多五秒，再终止剩余进程树。Host 意外退出时，窗口会保留诊断页，直到用户请求重启；工作绝不会自动重放。
 
-主窗口会恢复可见 bounds 与共享 Client 选择。任务窗口不持久化。`dsh://new` 与 `dsh://session/<base64url-session-id>` 不接受 query、fragment、提示词或路径数据。已安装构建在包格式支持桌面集成时注册协议。Windows 和 macOS 支持登录后启动；Linux 禁用该偏好，Windows 便携版不能注册协议。任一聚焦窗口显示受影响 Session 时，完成通知会被抑制。
+主窗口会恢复可见 bounds 与共享 Client 选择。`dsh://new` 与 `dsh://session/<base64url-session-id>` 不接受 query、fragment、提示词或路径数据。已安装构建在包格式支持桌面集成时注册协议。Windows 和 macOS 支持登录后启动；Linux 禁用该偏好，Windows 便携版不能注册协议。任一聚焦窗口显示受影响 Session 时，完成通知会被抑制。
 
 Electron Utility Process 的 `process.execPath` 指向 `electron.exe`。内部 Windows ACL 与原生对话框 Node helper 因此只在其 runner 环境中接收 `ELECTRON_RUN_AS_NODE=1`。ACL runner 会在启动用户命令前删除它，所以 Electron Node mode 绝不会泄漏进 agent shell 环境。
 
@@ -46,7 +46,7 @@ POSIX 关闭会在正常退出请求前记录后代，使独立命令组在父�
 
 ### 验证
 
-单元覆盖拥有帧校验、关联、abort、stream 背压、深链、bounds、快捷键冲突、插件脚本拒绝、Client row 校验、陈旧 transaction、profile 替换与回滚。真实 Electron 场景使用私有 Harness home、user-data 与工作区根；它证明 Host 没有 TCP listener，并覆盖一元与流式 IPC、模型与 PowerShell 工具回合、审批、图片附件、主／任务同步、通知抑制与点击路由、第二实例深链去重、真实本地插件安装、启动失败回滚、Host 手动恢复与静止退出。Windows snapshot 适配器通过同一 Electron 与 MessagePort 路径回放已提交 PowerShell Session。Pull Request 的 Windows CI 会构建打包布局、运行该 Electron 场景，并在 Electron Node ABI 下加载 node-pty、Koffi 与 Sharp；可信 real-API 工作流会运行其简短的 DeepSeek live 模式。
+单元覆盖拥有帧校验、关联、abort、stream 背压、深链、bounds、快捷键冲突、插件脚本拒绝、Client row 校验、陈旧 transaction、profile 替换与回滚。真实 Electron 场景使用私有 Harness home、user-data 与工作区根；它证明 Host 没有 TCP listener，并覆盖一元与流式 IPC、模型与 PowerShell 工具回合、审批、图片附件、Session ZIP 下载、主窗口选择、通知抑制与点击路由、第二实例深链去重、真实本地插件安装、启动失败回滚、Host 手动恢复与静止退出。Windows snapshot 适配器通过同一 Electron 与 MessagePort 路径回放已提交 PowerShell Session。Pull Request 的 Windows CI 会构建打包布局、运行该 Electron 场景，并在 Electron Node ABI 下加载 node-pty、Koffi 与 Sharp；可信 real-API 工作流会运行其简短的 DeepSeek live 模式。
 
 ## 已考虑的替代方案
 

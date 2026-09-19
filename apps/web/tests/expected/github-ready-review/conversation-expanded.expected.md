@@ -24,8 +24,8 @@
   - img
   - img
   - text: System prompt
-- button "Thought for a while" [expanded]:
-  - text: Thought for a while
+- button "Ran for {{duration}}" [expanded]:
+  - text: Ran for {{duration}}
   - img
 - button "Context injection webhook github webhook handled by review-pr-when-ready":
   - img

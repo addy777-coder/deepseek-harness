@@ -329,9 +329,8 @@ describe('web e2e: agent-preset selection', () => {
   it('labels a resumed session with the preset it was created under', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header'))
     // The seeded session's cwd is the scaffold root rather than the connected
-    // workspace, so it lists under Ungrouped; the group collapses by default.
-    await page.getByRole('treeitem', { name: /^Ungrouped/ }).click()
-    await page.locator('[role="treeitem"]').last().click()
+    // workspace, so it lists as one plain row in the trailing Ungrouped run.
+    await page.locator(`[data-session-id="${SEED_ID}"]`).click()
     await page.getByText('Seeded turn.').waitFor({ timeout: 15_000 })
 
     const snapshot = await captureStableAria(page, '[class*="titleRow"]', scaffold.workspaceCwd)

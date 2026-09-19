@@ -1,8 +1,10 @@
 /**
  * The workspace/session browsing region filling the sidebar shell's
- * `sidebar.workspaces` hole: section header (title + view options + add
- * workspace), search, the grouped tree or flat list, and the workspace
- * dialogs. Wide state renders the full browser; rail state renders the two
+ * `sidebar.workspaces` hole: section header (title + new section, view options,
+ * add workspace), search, the grouped tree or flat list, and the workspace
+ * dialogs. Custom sections and the default area that trails them both fold;
+ * Sessions outside every Workspace render as one headerless run inside the
+ * default area. Wide state renders the full browser; rail state renders the two
  * region icons (search / add workspace) as 36px controls on the shell's shared
  * rail entry path, each requesting expansion through the owner share. Adding
  * is the header button's one action, so it raises the directory flow with no
@@ -21,12 +23,12 @@ import type {
 import type { SidebarSection, SidebarSectionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SidebarActions, WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { SessionNode, SessionOrderBy } from '../tree.ts'
+import type { GroupNode, SessionNode, SessionOrderBy, WorkspaceGroupNode } from '../tree.ts'
 import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import type { PlacementActions } from './Rows.tsx'
 import { SectionModal, SidebarSectionHeader, type SectionDialog } from './Sections.tsx'
-import { FLAT_SESSION_ORDER_KEY } from '../stores.ts'
+import { DEFAULT_SECTION_KEY, FLAT_SESSION_ORDER_KEY } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
@@ -327,7 +329,10 @@ function SessionTree({
     : (workspaces.find(w => w.sessionIds.includes(current))?.workspaceId as string | undefined)
       ?? UNGROUPED_KEY
   useEffect(() => {
-    if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
+    // Only a real Workspace group folds: the headerless Ungrouped run always
+    // shows its rows, so revealing the selection there records nothing.
+    if (current === undefined || currentGroup === undefined || currentGroup === UNGROUPED_KEY) return
+    if (Object.hasOwn(groupExpansion, currentGroup)) return
     setGroupExpanded(currentGroup, true)
   }, [current, currentGroup, setGroupExpanded, groupExpansion])
   const expandedGroups = useMemo(
@@ -541,11 +546,40 @@ function SessionTree({
       default: return assertNever(activeDrag)
     }
   }
-  const renderGroup = (group: (typeof groups)[number]) => {
+  /**
+   * Header row and Workspace drag wiring for one real Workspace group. The
+   * Ungrouped run never reaches it: that bucket has no backing Workspace, so it
+   * has no title to rename, no directory to start a Session in, and no
+   * Workspace order to edit. Its Sessions keep their own browser-local order.
+   */
+  const renderWorkspaceHeader = (group: WorkspaceGroupNode) => (
+    <ProjectRowItem group={group} home={home} t={t}
+      onToggle={() => {
+        if (group.expanded) setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
+        setGroupExpanded(group.key, !group.expanded)
+      }}
+      onCreate={() => { setGroupExpanded(group.key, true); startSession(group.workspaceId) }}
+      drag={layoutPending ? undefined : {
+        start: () => {
+          workspaceDropCommitted.current = false
+          setSectionTarget(undefined)
+          setWorkspaceDrag({ workspaceId: group.workspaceId, over: null })
+        },
+        end: endDrag,
+      }}
+      placement={workspacePlacement(group.workspaceId)}
+      actions={{
+        rename: () => { onRenameRequest(group.workspaceId, group.label) },
+        delete: () => { onDeleteRequest(group.workspaceId, group.label) },
+      }} />
+  )
+  const renderGroup = (group: GroupNode) => {
     const workspaceId = group.workspaceId
     const collapsed = collapsedSessionRows(group.sessions)
     const sessionsExpanded = expandedSessionGroups.includes(group.key)
-    const marker = workspaceDrag?.over?.id === workspaceId ? workspaceDrag?.over?.half : null
+    const marker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
+      ? workspaceDrag.over.half
+      : null
     const canRestore = drag !== null && sessionSections.has(drag.sessionId)
       && workspaceId !== undefined && workspaces.some(workspace =>
       workspace.workspaceId === workspaceId && workspace.sessionIds.includes(drag.sessionId))
@@ -575,27 +609,7 @@ function SessionTree({
           restoreSession(drag.sessionId)
         } else endDrag()
       }}>
-        <ProjectRowItem group={group} home={home} t={t}
-          onToggle={() => {
-            if (group.expanded) setExpandedSessionGroups(keys => keys.filter(key => key !== group.key))
-            setGroupExpanded(group.key, !group.expanded)
-          }}
-          onCreate={() => {
-            if (workspaceId !== undefined) { setGroupExpanded(group.key, true); startSession(workspaceId) }
-          }}
-          drag={workspaceId === undefined || layoutPending ? undefined : {
-            start: () => {
-              workspaceDropCommitted.current = false
-              setSectionTarget(undefined)
-              setWorkspaceDrag({ workspaceId, over: null })
-            },
-            end: endDrag,
-          }}
-          placement={workspaceId === undefined ? undefined : workspacePlacement(workspaceId)}
-          actions={workspaceId === undefined ? undefined : {
-            rename: () => { onRenameRequest(workspaceId, group.label) },
-            delete: () => { onDeleteRequest(workspaceId, group.label) },
-          }} />
+        {workspaceId === undefined ? null : renderWorkspaceHeader(group)}
         {(sessionsExpanded ? group.sessions : collapsed.rows).map((node) => {
           const sameGroup = drag !== null && drag.accountKey === group.key
           return (
@@ -629,7 +643,9 @@ function SessionTree({
   const defaultGroups = groups.filter(group => group.workspaceId === undefined || !workspaceSections.has(group.workspaceId))
   const renderSection = (section: SidebarSection | null, index: number) => {
     const sectionId = section?.id ?? null
-    const expanded = section === null || sectionExpansion[section.id] !== false
+    // The default area has no durable section id, so its fold rides the store's reserved key.
+    const expansionKey = section?.id ?? DEFAULT_SECTION_KEY
+    const expanded = sectionExpansion[expansionKey] !== false
     const sectionGroups = section === null ? defaultGroups : section.workspaceIds.flatMap((id) => {
       const group = groupMap.get(id)
       return group === undefined ? [] : [group]
@@ -657,7 +673,7 @@ function SessionTree({
           dropInSection(sectionId, 'after')
         }}>
         {headingVisible && <SidebarSectionHeader title={section?.title ?? t('section.default')} expanded={expanded}
-          onToggle={() => { if (section !== null) setSectionExpanded(section.id, !expanded) }}
+          onToggle={() => { setSectionExpanded(expansionKey, !expanded) }}
           onRename={section === null ? undefined : () => { onSectionDialog({ type: 'rename', section }) }}
           onDelete={section === null ? undefined : () => { onSectionDialog({ type: 'delete', section }) }}
           onUp={section === null || index === 0 ? undefined : () => {

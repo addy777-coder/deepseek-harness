@@ -128,7 +128,7 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     await injectionFlow.waitFor({ state: 'attached', timeout: 15_000 })
     await page.getByText('USER_INVOKE_REPLY', { exact: false }).first().waitFor({ timeout: 20_000 })
     await settled
-    const process = page.getByRole('button', { name: 'Thought for a while', exact: true })
+    const process = page.locator('[data-turn-process]')
     await process.waitFor({ state: 'visible', timeout: 10_000 })
     await expandOwningTurnProcess(page, injectionFlow)
     const injectionRow = page.getByRole('button', { name: `Context injection ${SKILL_NAME}` })

@@ -16,8 +16,8 @@
 - text: Begin your reply with the plain sentence "Reading the workspace now." as text, and in that same message call the bash tool with the command "echo alpha". After the tool result, reply with the single word DONE and stop. {{clock}}
 - button "Copy":
   - img
-- button "1 tool call · 1 message" [expanded]:
-  - text: 1 tool call · 1 message
+- button "Ran for {{duration}}" [expanded]:
+  - text: Ran for {{duration}}
   - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img

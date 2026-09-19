@@ -30,13 +30,13 @@ Ubuntu 24.04 的 DEB 安装会配置 Chromium 沙箱需要的 AppArmor 权限。
 
 打开 DSH Desktop，确认测试声明并选择工作区。如果共享 Harness home 尚未保存 API key，请打开**设置 → 模型**进行保存。像使用 Web UI 一样在输入框中输入任务。
 
-主窗口保留工作区与 Session 导航。选择**在新窗口打开当前会话**可创建不带侧栏与设置的专注任务窗口。同一 Session 会复用已有任务窗口；关闭该窗口不会停止工作。关闭主窗口会退出 DSH Desktop 并关闭所有任务窗口。
+主窗口保留工作区与 Session 导航。在侧栏选择 Session 可以切换任务，也可以使用标题栏的**新建任务**。**Session 日志**会将当前 Session、子 Session 与附件下载为 ZIP。关闭主窗口会退出 DSH Desktop。
 
 ## Desktop 集成
 
 打开**设置 → 常规 → Desktop 集成**可修改或禁用默认 `Ctrl+Shift+Space` 快捷键。该快捷键会聚焦主窗口并打开新任务视图。冲突会显示在设置中，但不会阻止应用运行。
 
-已注册协议处理的 Windows 或 macOS 安装构建可以启用登录后启动；Linux 不提供该设置。托盘菜单可以显示主窗口、打开新任务或退出。仅当没有聚焦的 DSH Desktop 窗口显示对应 Session 时，才会出现完成或失败通知；选择通知会打开其任务窗口。
+已注册协议处理的 Windows 或 macOS 安装构建可以启用登录后启动；Linux 不提供该设置。托盘菜单可以显示主窗口、打开新任务或退出。仅当没有聚焦的 DSH Desktop 窗口显示对应 Session 时，才会出现完成或失败通知；选择通知会在主窗口打开对应 Session。
 
 支持的链接有意保持严格：
 
@@ -72,7 +72,6 @@ DSH Desktop 使用 pnpm 11.7.0 在临时 profile 中解析候选，并且不执�
 - 不包含 Windows/Linux ARM64、Linux RPM 包与远端 Host。
 - 不包含账号登录、发布者签名、Apple 公证或插件市场搜索。
 - 首版无法安装依赖安装脚本的插件。
-- 应用重启后不会恢复任务窗口。
 
 ## 继续
 

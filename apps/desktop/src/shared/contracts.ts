@@ -1,20 +1,23 @@
 import type { DesktopWindowId } from '@deepseek-ai/dsh-desktop-transport'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Per-window bootstrap facts supplied by the Electron main process. */
 export interface DesktopWindowBootstrap {
   readonly windowId: DesktopWindowId
-  readonly kind: 'main' | 'task'
   readonly sessionId?: string
   readonly installed: boolean
   readonly version: string
   readonly hostError?: string
 }
 
+/** Navigation delivered after the shared Client has subscribed. */
+export type DesktopIntent =
+  | { readonly type: 'new-task' }
+  | { readonly type: 'open-session'; readonly sessionId: SessionId }
+
 /** Low-frequency shell operations exposed through the context-isolated preload. */
 export interface DesktopShellApi {
   bootstrap(): Promise<DesktopWindowBootstrap>
-  openSession(sessionId: string): Promise<void>
-  openMain(): Promise<void>
   newTask(): Promise<void>
   reportSelection(sessionId: string | undefined): void
   notifyTaskSettled(sessionId: string, title: string): void
@@ -31,7 +34,7 @@ export interface DesktopShellApi {
   installUpdate(): Promise<DesktopUpdateState>
   cancelUpdate(): Promise<DesktopUpdateState>
   openReleases(): Promise<void>
-  onIntent(listener: (intent: { readonly type: 'new-task' }) => void): () => void
+  onIntent(listener: (intent: DesktopIntent) => void): () => void
   onHostFailure(listener: (message: string) => void): () => void
   onUpdateState(listener: (state: DesktopUpdateState) => void): () => void
 }

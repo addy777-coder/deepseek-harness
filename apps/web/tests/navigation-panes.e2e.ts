@@ -50,6 +50,18 @@ async function assertBaselineSucceeded(response: Response, method: string): Prom
   expect(body.result?.ok, `${method} baseline RPC result`).toBe(true)
 }
 
+/**
+ * Wait for the seeded Session row itself. The frame mounts before the
+ * asynchronous session-list baseline lands, and an unattached Session renders
+ * as one plain sidebar row, so that row is the user-visible barrier before a
+ * scenario addresses the list.
+ * @param page - the page under test.
+ */
+async function waitForSeedRow(page: Page): Promise<void> {
+  await page.locator('[role="tree"][aria-label="Sessions"] [data-session-id]').first()
+    .waitFor({ timeout: 30_000 })
+}
+
 async function ensureSeedOpen(page: Page): Promise<void> {
   const welcome = page.locator('[class*="onboardingOverlay"]')
   if (await welcome.count() > 0) {
@@ -121,9 +133,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     // The frame mounts before the asynchronous session-list baseline lands.
     // Search must target the settled seeded row, not the startup input that
-    // the ready projection replaces (the compact layout dropped group session
-    // counts; the Ungrouped bucket row is the barrier).
-    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+    // the ready projection replaces.
+    await waitForSeedRow(page)
   }, 120_000)
 
   afterEach(async () => {
@@ -179,9 +190,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
     // The API baselines can settle before React commits their projection. The
-    // seeded Ungrouped bucket row is the final user-visible barrier before
-    // editing search (the compact layout dropped group session counts).
-    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+    // seeded sidebar row is the final user-visible barrier before editing search.
+    await waitForSeedRow(page)
     // Search is a collapsed header action; expand it so the input is actionable.
     const searchButton = page.getByRole('button', { name: 'Search sessions' })
     if (await searchButton.getAttribute('aria-expanded') !== 'true') await searchButton.click()
@@ -331,7 +341,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       observerSessionBaseline,
     ])
     await assertBaselineSucceeded(observerSessionResponse, 'observer session.list')
-    await observer.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+    await waitForSeedRow(observer)
     await ensureSeedOpen(observer)
 
     try {

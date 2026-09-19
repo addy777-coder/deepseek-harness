@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startMockLlmServer, type MockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
+import { strFromU8, unzipSync } from 'fflate'
 import type {} from '../src/shared/contracts.ts'
 import { assertNativeDirectoryPicker } from './native-directory-picker.ts'
 
@@ -660,18 +661,41 @@ try {
       assert.match(JSON.stringify(mockServer.requests[0]?.body), /image_url|data:image\/png/u)
     }
 
-    const taskPromise = application.waitForEvent('window')
-    await main.evaluate(async (sessionId) => { await window.dshDesktop.openSession(sessionId) }, currentSessionId)
-    const task = await taskPromise
+    assert.equal(await main.getByRole('button', { name: 'Open current session in a new window', exact: true }).count(), 0)
+    assert.equal(await main.evaluate(() => Reflect.has(window.dshDesktop, 'openSession')), false)
+    const exportPath = join(workspace, 'session-export.zip')
+    await application.evaluate(({ session }, path) => {
+      session.defaultSession.once('will-download', (_event, item) => {
+        item.setSavePath(path)
+        item.once('done', (_event, state) => {
+          Reflect.set(globalThis, '__dshExportDownload', { state, filename: item.getFilename() })
+        })
+      })
+    }, exportPath)
+    await main.getByRole('button', { name: 'Session log', exact: true }).click()
+    const exportDialog = main.getByRole('dialog', { name: 'Session download started', exact: true })
     try {
-      await task.getByRole('button', { name: 'Return to main window', exact: true }).waitFor()
+      await exportDialog.waitFor({ timeout: 10_000 })
     } catch (error) {
-      throw new Error(`desktop Electron e2e: task window ${task.url()} did not boot: ${await task.locator('body').innerText()}`, { cause: error })
+      throw new Error(`Session export did not start: ${await main.locator('body').innerText()}`, { cause: error })
     }
-    await main.evaluate(async (sessionId) => { await window.dshDesktop.openSession(sessionId) }, currentSessionId)
-    assert.equal(application.windows().length, 2, 'one Session must own at most one task window')
-    await task.close()
-    assert.equal(application.windows().length, 1, 'closing a task window must keep the main window alive')
+    const download = await waitFor(async () => await application!.evaluate(() =>
+      Reflect.get(globalThis, '__dshExportDownload') as { readonly state: string; readonly filename: string } | undefined),
+    (value): value is { readonly state: string; readonly filename: string } => value !== undefined,
+    'Session archive download did not finish')
+    assert.equal(download.state, 'completed')
+    assert.equal(download.filename, `dsh-session-${currentSessionId.replace(/[^A-Za-z0-9_-]/g, '_')}.zip`)
+    const archive = unzipSync(await readFile(exportPath))
+    assert.ok(archive['session.jsonl'])
+    const log = strFromU8(archive['session.jsonl'])
+    assert.ok(log.split('\n')[0]?.includes(currentSessionId))
+    assert.ok(log.includes(toolPrompt))
+    assert.ok(log.includes(expectedReply))
+    assert.ok(log.includes('tool/result'))
+    await exportDialog.getByRole('button', { name: 'Close', exact: true }).last().click()
+    await main.getByRole('button', { name: 'New task', exact: true }).click()
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === undefined, 'new task did not clear the current Session')
 
     const link = `dsh://session/${Buffer.from(currentSessionId).toString('base64url')}`
     const deliveredLink = application.evaluate(({ app }) => new Promise<string[]>((resolvePromise, reject) => {
@@ -684,19 +708,26 @@ try {
     await runSecondInstance(link)
     const deliveredArgv = await deliveredLink
     assert.equal(deliveredArgv.includes(link), true, `the second instance must forward its deep link: ${JSON.stringify(deliveredArgv)}`)
-    const linkedTask = await waitFor(
-      async () => application!.windows().find(window => window !== main),
-      (value): value is Page => value !== undefined,
-      'deep link did not open a task window',
-    )
-    try {
-      await linkedTask.getByRole('button', { name: 'Return to main window', exact: true }).waitFor()
-    } catch (error) {
-      throw new Error(`desktop Electron e2e: deep-link window ${linkedTask.url()} did not boot: ${await linkedTask.locator('body').innerText()}`, { cause: error })
-    }
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === currentSessionId, 'deep link did not select the Session in the main window')
+    await main.getByText(expectedReply, { exact: true }).waitFor()
     await runSecondInstance(link)
-    assert.equal(application.windows().length, 2, 'duplicate deep links must reuse one task window')
-    await linkedTask.close()
+    assert.equal(application.windows().length, 1, 'deep links must reuse the main window')
+
+    await main.getByRole('button', { name: 'New task', exact: true }).click()
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === undefined, 'new task did not clear selection before reload')
+    await application.evaluate(({ app, BrowserWindow }, url) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      window.webContents.once('did-start-loading', () => {
+        app.emit('second-instance', {}, [url], '', {})
+      })
+      window.webContents.reload()
+    }, link)
+    await main.getByText(expectedReply, { exact: true }).waitFor({ timeout: 30_000 })
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === currentSessionId, 'Session link received during reload was lost')
+    assert.equal(application.windows().length, 1, 'a queued Session link must reuse the main window')
 
     await application.evaluate(({ Notification }) => {
       const notifications: object[] = []
@@ -713,24 +744,27 @@ try {
       Boolean,
       'main window did not receive focus',
     )
-    await settleRendererIpc(main, 'desktop-e2e-notification', {
-      sessionId: 'desktop-e2e-notification',
+    await settleRendererIpc(main, currentSessionId, {
+      sessionId: currentSessionId,
       title: 'Foreground task',
     })
     assert.equal(await notificationCount(application), 0, 'a focused Session window must suppress notifications')
+    await main.getByRole('button', { name: 'New task', exact: true }).click()
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === undefined, 'new task did not clear selection before the notification')
     await settleRendererIpc(main, null, {
-      sessionId: 'desktop-e2e-notification',
+      sessionId: currentSessionId,
       title: 'Background task',
     })
     assert.equal(await notificationCount(application), 1, 'an unfocused Session must publish one notification')
-    const notificationTaskPromise = application.waitForEvent('window')
     await application.evaluate(() => {
       const notifications = Reflect.get(globalThis, '__dshE2eNotifications') as Array<{ emit(event: string): void }>
       notifications.at(-1)?.emit('click')
     })
-    const notificationTask = await notificationTaskPromise
-    await notificationTask.getByRole('button', { name: 'Return to main window', exact: true }).waitFor()
-    await notificationTask.close()
+    await waitFor(async () => (await main.evaluate(() => window.dshDesktop.bootstrap())).sessionId,
+      value => value === currentSessionId, 'notification did not select its Session in the main window')
+    await main.getByText(expectedReply, { exact: true }).waitFor()
+    assert.equal(application.windows().length, 1, 'notification clicks must reuse the main window')
 
     if (!replayMode) {
       await application.evaluate(({ dialog }) => {
@@ -829,7 +863,7 @@ try {
   await waitFor(async () => !(await processExists(exitHostPid)), Boolean, 'Host survived application exit')
   assert.doesNotMatch(stderr, /Object has been destroyed/u)
   console.log(
-    `desktop Electron e2e: ${packagedExecutable === undefined ? 'source' : 'packaged'} ${liveMode ? 'real DeepSeek smoke' : replayMode ? 'recorded-session replay' : 'transport, model, tool, approval, attachment, terminal, windows, deep links, notifications, plugins, updates, Host recovery'}, and graceful exit passed`,
+    `desktop Electron e2e: ${packagedExecutable === undefined ? 'source' : 'packaged'} ${liveMode ? 'real DeepSeek smoke' : replayMode ? 'recorded-session replay' : 'transport, model, tool, approval, attachment, terminal, export, main-window navigation, deep links, notifications, plugins, updates, Host recovery'}, and graceful exit passed`,
   )
 } catch (error) {
   console.error(`desktop Electron e2e: main stderr\n${stderr}`)

@@ -1,5 +1,5 @@
 ---
-description: "Web Session-log ZIP export: Host streaming, the authenticated download route, the Session Header action, and the /export command."
+description: "Web and Desktop Session-log ZIP export: Host streaming, the authenticated download route, the Session Header action, and the /export command."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-session-log-export` lets the Web interface download a session's full history: a `Session log` button in the Session Header and an `/export` slash command both hand the session tree — the session, its sub-sessions, and attachments — to the browser as a ZIP download. The package owns the Host archive stream, its authenticated Fetch route, and the browser controls and feedback. The browser chooses the download destination. Setup and usage come first; implementation details follow.
+`dsh-session-log-export` lets the Web and Desktop interfaces download a session's full history: a `Session log` button in the Session Header and an `/export` slash command both hand the session tree — the session, its sub-sessions, and attachments — to the browser as a ZIP download. The package owns the Host archive stream, its authenticated Fetch route, and the browser controls and feedback. The browser chooses the download destination. Setup and usage come first; implementation details follow.
 
 ## Table of Contents
 
@@ -25,11 +25,11 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use this package when the Web bundle should let users export a session log. It requires Connection, the command registry, Session query and persistence, and attachments. Mount the plugin, then click `Session log` in the Session Header or type `/export`; the browser downloads `dsh-session-<id>.zip`.
+Use this package when the GUI bundle should let users export a session log. It requires Connection, the command registry, Session query and persistence, and attachments. Mount the plugin, then click `Session log` in the Session Header or type `/export`; the browser downloads `dsh-session-<id>.zip`.
 
 ### When to choose it
 
-Choose it for a Web deployment that needs user-facing session export with a visible download dialog. Avoid it when a programmatic or Host-side export is needed: this package produces a browser download, not a Host path write. The logs are serialized from persistence read handles, so any mounted backend is supported.
+Choose it for a Web or Desktop deployment that needs user-facing session export with a visible download dialog. Avoid it when a programmatic or Host-side export is needed: this package produces a browser download, not a Host path write. The logs are serialized from persistence read handles, so any mounted backend is supported.
 
 ### Composition
 
@@ -38,7 +38,7 @@ Choose it for a Web deployment that needs user-facing session export with a visi
   name: '@deepseek-ai/dsh-session-log-export'
 ```
 
-The Web bundle mounts the package with Connection, `dsh-commands`, `dsh-client-ui-commands`, and `dsh-client-ui-conversation`.
+The shared GUI bundle mounts the package with Connection, `dsh-commands`, `dsh-client-ui-commands`, and `dsh-client-ui-conversation`.
 
 ### Configuration
 
@@ -59,7 +59,7 @@ The dialog reports three phases: preparing, download started, or failed. Closing
 
 ### Failures
 
-The dialog shows a preparation error when the preflight fails before ZIP streaming starts — for example an unreachable or misconfigured host endpoint. A descendant or attachment read failure after the browser accepts the GET is reported by the browser download manager, not by the dialog.
+The dialog reports request failures, including an unreachable or misconfigured Host endpoint. Desktop also reports archive read failures in the dialog before saving the ZIP. In Web, a descendant or attachment read failure after the browser accepts the GET is reported by the browser download manager.
 
 -----
 
@@ -77,7 +77,7 @@ The package has two halves. The Host half ([`src/index.ts`](src/index.ts)) regis
 
 ### Download flow
 
-Both entry paths issue a `HEAD` preflight to `GET /api/session.export?...`, then hand the GET URL to the browser download manager without buffering the ZIP in JavaScript. One controller owns one in-flight download per session, collapses concurrent gestures into that operation, and cancels the preflight on plugin disposal. Modal state lives in a snapshot store keyed by session, so the button and the command share one dialog per session.
+On Web, both entry paths issue a `HEAD` preflight, then hand the GET URL to the browser download manager without buffering the ZIP in JavaScript. With an internal carrier, including Desktop MessagePort, the controller fetches the ZIP through that carrier and saves a local Blob URL; the virtual Host URL never reaches browser HTTP or navigation. The Blob URL is released after the download gesture. One controller owns one in-flight download per session, shares its dialog between both controls, and aborts active requests on plugin disposal.
 
 The Host route is a feature-owned exact Fetch contribution. Connection applies its Host/Origin and browser-session checks and bridges the streaming `Response`; this package owns query validation, live-session flushes, handle-based log reads and attachment reads, ZIP generation, and HTTP status semantics.
 
@@ -122,7 +122,8 @@ None. The log-only command lifecycle and browser download do not change the deri
 These limits define when this package is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
 - **Browser download, not a Host-path writer** — the browser chooses the local destination; no Host path or native folder action is returned.
-- **Preflight reports only pre-stream failures** — a descendant or attachment failure after the browser accepts the GET is reported by the browser download manager, not by the dialog.
+- **Web preflight reports only pre-stream failures** — a descendant or attachment failure after the browser accepts the GET is reported by the browser download manager, not by the dialog.
+- **Desktop buffers the ZIP** — the internal carrier and Renderer hold the archive bytes before Chromium saves the file; large archives require memory proportional to the ZIP size.
 
 <a id="dev-note"></a>
 ### Dev Note

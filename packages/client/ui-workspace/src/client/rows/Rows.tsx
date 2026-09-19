@@ -17,7 +17,7 @@ import {
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+import type { SearchResultNode, SessionNode, WorkspaceGroupNode } from '../tree.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -133,10 +133,10 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
 
 /**
  * Project (workspace) header row: folder + title;
- * hover reveals the chevron and create button, and dwelling on a real
- * Workspace shows its hover card (the ungrouped bucket has none).
- * `containsCurrent` arrives on the node (derivation fact, no renderer scan).
- * @param props.group - derived group node.
+ * hover reveals the chevron and create button, and dwelling shows the
+ * Workspace hover card. `containsCurrent` arrives on the node (derivation
+ * fact, no renderer scan).
+ * @param props.group - derived real-Workspace group node.
  * @param props.onToggle - expand/collapse the group.
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
@@ -145,11 +145,11 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @returns the row element.
  */
 export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, placement, home, t }: {
-  group: GroupNode
+  group: WorkspaceGroupNode
   onToggle: () => void
   onCreate: () => void
-  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  /** Real-Workspace row verbs (rename / delete). */
+  actions: { rename: () => void; delete: () => void }
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   placement?: PlacementActions | undefined
@@ -157,9 +157,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, place
   home?: string | undefined
   t: RowTranslate
 }) {
-  const row = group
-  // The ungrouped bucket has no workspace title: its label is dictionary copy.
-  const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
+  const label = group.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
@@ -171,7 +169,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, place
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
       role="treeitem"
-      aria-expanded={row.expanded}
+      aria-expanded={group.expanded}
       tabIndex={0}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onToggle() } }}
       onClick={onToggle}
@@ -180,50 +178,48 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, place
         ? undefined
         : (e) => {
           e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/plain', row.key)
+          e.dataTransfer.setData('text/plain', group.key)
           drag.start()
         }}
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
+        {group.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
-        <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
+        <IconTriangleRightFill14 className={clsx(css.arrow, group.expanded && css.arrowOpen)} />
       </span>
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
       </span>
       <span className={css.rowActions}>
-        {actions !== undefined && (
-          <Menu
-            open={menuOpen}
-            onClose={() => { setMenuOpen(false) }}
-            items={workspaceMenuItems}
-            onSelect={(id) => {
-              setMenuOpen(false)
-              selectPlacement(id, placement)
-              // Unknown ids leave before the dispatch: a future menu row must
-              // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
-              else actions.delete()
-            }}
-            portal
-            closeOnPointerLeave
-            anchor={(
-              <button
-                type="button"
-                className={css.iconButton}
-                aria-label={t('actions.workspace.aria', { name: label })}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
-              >
-                <IconEllipsisOutline16 />
-              </button>
-            )}
-          />
-        )}
+        <Menu
+          open={menuOpen}
+          onClose={() => { setMenuOpen(false) }}
+          items={workspaceMenuItems}
+          onSelect={(id) => {
+            setMenuOpen(false)
+            selectPlacement(id, placement)
+            // Unknown ids leave before the dispatch: a future menu row must
+            // not inherit the destructive branch as an else fallback.
+            /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
+            if (id !== 'rename' && id !== 'delete') return
+            if (id === 'rename') actions.rename()
+            else actions.delete()
+          }}
+          portal
+          closeOnPointerLeave
+          anchor={(
+            <button
+              type="button"
+              className={css.iconButton}
+              aria-label={t('actions.workspace.aria', { name: label })}
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
+            >
+              <IconEllipsisOutline16 />
+            </button>
+          )}
+        />
         <button
           type="button"
           className={css.iconButton}
@@ -235,19 +231,17 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, place
       </span>
     </div>
   )
-  // The ungrouped bucket has no backing Workspace: no card to show.
-  if (row.createdAt === undefined) return ownRow
   return (
     <HoverCard
       anchor={ownRow}
       content={<WorkspaceHoverContent
-        label={row.label}
-        cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
-        createdAt={row.createdAt}
+        label={group.label}
+        cwd={group.cwd === undefined ? undefined : abbreviateHomePath(group.cwd, home)}
+        createdAt={group.createdAt}
         t={t}
       />}
       disabled={menuOpen}
-      copyText={row.cwd}
+      copyText={group.cwd}
       copyLabel={t('copy')}
       copiedLabel={t('hover.copied')}
     />

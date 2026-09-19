@@ -3,8 +3,8 @@
     - button "Ask a research subagent to"
     - text: /
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
-    - button "1 subagent":
-      - text: 1 subagent
+    - button "Ran for {{duration}}":
+      - text: Ran for {{duration}}
       - img
   - img
   - text: Standard mode
@@ -24,8 +24,8 @@
 - text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy":
   - img
-- button "Thought for a while":
-  - text: Thought for a while
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy":
@@ -47,8 +47,8 @@
 - text: Now give the same explanation to a human reader. {{clock}}
 - button "Copy":
   - img
-- button "Thought for a while":
-  - text: Thought for a while
+- button "Ran for {{duration}}":
+  - text: Ran for {{duration}}
   - img
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
 - button "Copy":

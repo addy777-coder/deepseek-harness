@@ -10,7 +10,7 @@ import type { SessionPendingInteractionSnapshot } from '@deepseek-ai/dsh-client-
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
-import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
+import { DEFAULT_SECTION_KEY, createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -485,17 +485,19 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
-  it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ is inert', () => {
+  it('renders loose Sessions as a headerless run with no bucket row and no fold record', () => {
     const startSession = vi.fn()
-    mount({
+    const b = mount({
       useSessions: hook(sessionState([summary('loose', 1)], { current: sid('loose') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
       startSession,
     })
-    // The loose session's group is UNGROUPED_KEY: expanded by the effect.
     expect(screen.getByText('loose')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
+    // No bucket header: no label, no section menu, no create control.
+    expect(screen.queryByText('未分组')).toBeNull()
+    expect(screen.queryByRole('button', { name: /未分组/ })).toBeNull()
+    // Nothing folds this run, so revealing the selection records no expansion.
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
     expect(startSession).not.toHaveBeenCalled()
   })
 
@@ -1025,7 +1027,6 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([])),
       insertSessionBefore,
     })
-    fireEvent.click(screen.getByText('未分组'))
 
     const dragAfter = (sourceTitle: string, targetTitle: string): void => {
       const source = screen.getByText(sourceTitle).closest('[role="treeitem"]') as HTMLElement
@@ -1059,7 +1060,8 @@ describe('WorkspaceBrowser', () => {
       insertSessionBefore,
     })
     expect(restored.store.getSnapshot().sessionOrderByAccount[UNGROUPED_KEY]).toEqual(['two', 'three', 'one'])
-    expect(screen.getAllByRole('treeitem').slice(1).map(row => row.textContent)).toEqual([
+    // The run carries no header row: every treeitem is a Session.
+    expect(screen.getAllByRole('treeitem').map(row => row.textContent)).toEqual([
       expect.stringContaining('two'),
       expect.stringContaining('three'),
       expect.stringContaining('one'),
@@ -1242,7 +1244,7 @@ describe('WorkspaceBrowser', () => {
     const dialog = screen.getByRole('dialog', { name: '删除工作区' })
     expect(dialog.textContent).toContain('将把“Alpha”从工作区列表中移除')
     expect(dialog.textContent).toContain('文件夹与会话记录会保留')
-    expect(dialog.textContent).toContain('其会话将显示在“未分组”下')
+    expect(dialog.textContent).toContain('其会话仍会显示在侧栏')
 
     const confirm = screen.getByRole<HTMLButtonElement>('button', { name: '删除工作区' })
     fireEvent.click(confirm)
@@ -1323,6 +1325,26 @@ function sectioned(items: readonly WorkspaceView[], sections: readonly SidebarSe
 }
 
 describe('WorkspaceBrowser custom sections', () => {
+  it('folds the default area through its reserved key and keeps that fold through the section prune', () => {
+    const alpha = workspace('alpha', [])
+    const work = section('Work')
+    const b = mount({ useWorkspaces: hook(sectioned([alpha], [work])) })
+    const heading = screen.getByRole('button', { name: '未分区' })
+    expect(heading.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('alpha')).toBeTruthy()
+
+    fireEvent.click(heading)
+    expect(b.store.getSnapshot().sectionExpansion[DEFAULT_SECTION_KEY]).toBe(false)
+    expect(screen.getByRole('button', { name: '未分区' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('alpha')).toBeNull()
+
+    // The prune keeps only durable section ids, so the reserved key survives on
+    // its own and the folded area stays folded.
+    rerender(b, { useWorkspaces: hook(sectioned([alpha], [work, section('Other')])) })
+    expect(b.store.getSnapshot().sectionExpansion[DEFAULT_SECTION_KEY]).toBe(false)
+    expect(screen.queryByText('alpha')).toBeNull()
+  })
+
   it('creates a trimmed unique section without a directory picker and expands it after acceptance', async () => {
     const existing = section('Existing')
     const created = section('Created')

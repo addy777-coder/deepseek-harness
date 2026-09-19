@@ -16,7 +16,7 @@ Workspace 注册表在版本 3 的领域中拥有单层自定义分区。分区�
 
 分组侧栏只提交有效落点，Escape 或在外部松手会取消拖动。菜单支持无需拖动的移动和排序。保存被拒时保留已确认布局并显示重试。独立 Session 保持手动顺序；折叠状态保存在浏览器本地。单列表与搜索中每个 Session 只显示一次。
 
-[Workspace 侧边栏顺序与折叠](2026-08-11-workspace-sidebar-order-and-folding.zh.md)继续拥有 Workspace 折叠和按记账活动排序的决策。本文拥有分组视图的拖动取消以及已提交分区和布局的传递规则。
+[Workspace 侧边栏顺序与折叠](2026-08-11-workspace-sidebar-order-and-folding.zh.md)继续拥有 Workspace 折叠和按记账活动排序的决策。[无标题 Ungrouped 段与可折叠默认区域](2026-09-18-headerless-ungrouped-run-and-default-area-folding.zh.md)拥有默认区域自身的折叠，以及不属于任何 Workspace 的会话行。本文拥有分组视图的拖动取消以及已提交分区和布局的传递规则。
 
 ## 考虑过的替代方案
 

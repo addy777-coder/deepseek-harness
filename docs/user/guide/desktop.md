@@ -30,13 +30,13 @@ Removing the application retains the Harness home: `%USERPROFILE%\.dsh` on Windo
 
 Open DSH Desktop, acknowledge the testing notice, and choose a workspace. Open **Settings → Models** to save an API key if the shared Harness home does not already contain one. Enter a task in the composer exactly as you would in the Web UI.
 
-The main window keeps workspace and Session navigation. Select **Open current session in a new window** to create a focused task window without the sidebar or Settings. The same Session reuses its existing task window; closing that window does not stop work. Closing the main window exits DSH Desktop and all task windows.
+The main window keeps workspace and Session navigation. Select a Session in the sidebar to switch tasks, or use **New task** in the title bar. **Session log** downloads the current Session, its descendants, and attachments as a ZIP. Closing the main window exits DSH Desktop.
 
 ## Desktop integration
 
 Open **Settings → General → Desktop integration** to change or disable the default `Ctrl+Shift+Space` shortcut. The shortcut focuses the main window and opens the new-task view. A conflict is shown in Settings and does not prevent the application from running.
 
-An installed Windows or macOS build with registered protocol handling can enable launch at sign-in; Linux does not offer that setting. The tray menu can show the main window, open a new task, or exit. A completion or failure notification appears only when no focused DSH Desktop window shows that Session; selecting the notification opens its task window.
+An installed Windows or macOS build with registered protocol handling can enable launch at sign-in; Linux does not offer that setting. The tray menu can show the main window, open a new task, or exit. A completion or failure notification appears only when no focused DSH Desktop window shows that Session; selecting the notification opens its Session in the main window.
 
 Supported links are deliberately narrow:
 
@@ -72,7 +72,6 @@ Applying requires a native confirmation because runtime plugin code has the same
 - Windows/Linux ARM64, Linux RPM packages, and remote Hosts are not included.
 - No account login, publisher signing, Apple notarization, or plugin marketplace search.
 - Plugins that require installation scripts cannot be installed in the first release.
-- Task windows are not restored after an application restart.
 
 ## Continue
 

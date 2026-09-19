@@ -36,6 +36,34 @@ const SEED_ID = 'workspace-management-web-e2e'
 // that value if the shared setting changes.
 const POINTER_TRANSIT_MS = 300
 const POINTER_HOLD_MS = 600
+/** The wide sidebar header's actions, in render order. */
+const HEADER_ACTIONS = ['New section', 'View options', 'Add workspace'] as const
+
+/**
+ * Report every header action the header's own clip cuts away or covers. The
+ * region header clips its trailing action cluster (`overflow: hidden`) so the
+ * inline search can take that room, and a control the cluster cannot fit keeps
+ * its DOM node, its accessible name, and its box while vanishing from the
+ * header — only the clip ancestry and the hit test report it as unreachable.
+ * @param page - page holding the sidebar.
+ * @returns one entry per unreachable action; empty when all of them are visible.
+ */
+function clippedHeaderActions(page: Page): Promise<string[]> {
+  return page.evaluate(names => names.flatMap((name) => {
+    const button = document.querySelector<HTMLElement>(`button[aria-label="${name}"]`)
+    if (button === null) return [`${name}: no control`]
+    const box = button.getBoundingClientRect()
+    let clip = button.parentElement
+    while (clip !== null && getComputedStyle(clip).overflow === 'visible') clip = clip.parentElement
+    const outer = clip?.getBoundingClientRect()
+    const inside = outer === undefined
+      || (box.left >= outer.left - 0.5 && box.right <= outer.right + 0.5
+        && box.top >= outer.top - 0.5 && box.bottom <= outer.bottom + 0.5)
+    const hit = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2)
+    if (inside && hit !== null && (hit === button || button.contains(hit))) return []
+    return [`${name}: box ${box.left}-${box.right} against clip ${outer === undefined ? 'none' : `${outer.left}-${outer.right}`}`]
+  }), [...HEADER_ACTIONS])
+}
 
 describe('web e2e: workspace management (create / rename / flat view / hover affordances)', () => {
   let scaffold: WebScaffold
@@ -102,6 +130,17 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   }
 
   /**
+   * The seeded Session's own sidebar row. A Session no Workspace accounts for
+   * renders as one plain row in the trailing Ungrouped run, so the row itself —
+   * not a bucket header — is the evidence that it is listed.
+   * @param page - the page under test.
+   * @returns the seeded row locator.
+   */
+  function seedRow(page: Page): Locator {
+    return page.locator(`[role="treeitem"][data-session-id="${SEED_ID}"]`)
+  }
+
+  /**
    * Reveal and click a row action, re-hovering if a projection update replaces
    * the row before its hover-only button becomes visible.
    */
@@ -133,6 +172,16 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await browser?.close()
     await scaffold?.close()
   })
+
+  it('keeps every sidebar header action visible inside the clipping header', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-header-actions'))
+    for (const name of HEADER_ACTIONS) {
+      await page.getByRole('button', { name, exact: true }).waitFor({ state: 'attached', timeout: 10_000 })
+    }
+    // Presence is not evidence: Playwright clicks a clipped control by
+    // scrolling it out of the clip, so a user-facing assertion has to measure.
+    await expect.poll(() => clippedHeaderActions(page), { timeout: 10_000 }).toEqual([])
+  }, 30_000)
 
   it('adds two workspaces through the dialog, each on a folder it created', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-create'))
@@ -246,7 +295,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     const copy = await dialog.textContent()
     expect(copy).toContain('workspace list')
     expect(copy).toContain('folder and session logs will be kept')
-    expect(copy).toContain('sessions will appear under Ungrouped')
+    expect(copy).toContain('sessions stay listed in the sidebar')
     await dialog.getByRole('button', { name: 'Delete workspace' }).click()
     await expect.poll(() => dialog.count(), { timeout: 10_000 }).toBe(0)
 
@@ -255,8 +304,9 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       () => page.getByRole('button', { name: `Workspace actions for ${workspace.title}` }).count(),
       { timeout: 10_000 },
     ).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
-      .toBeGreaterThanOrEqual(1)
+    // Its Session keeps a plain sidebar row once the deleted Workspace stops
+    // accounting for it.
+    await expect.poll(() => seedRow(page).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 10_000 },
@@ -283,8 +333,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       { timeout: 10_000 },
     ).not.toEqual([])
     expect(reregistered?.sessionIds).not.toContain(SEED_ID)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
-      .toBeGreaterThanOrEqual(1)
+    await expect.poll(() => seedRow(page).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
     await stat(seededLogPath)
 
@@ -301,8 +350,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
-      .toBeGreaterThanOrEqual(1)
+    await expect.poll(() => seedRow(page).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
       { timeout: 15_000 },
@@ -371,16 +419,16 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it('switches to the flat "In one list" view and persists the preference', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-flat'))
-    // Grouped default: workspace group rows render (the seeded session sits
-    // under Ungrouped; the created workspaces are empty groups).
+    // Grouped default: workspace group rows render (the seeded session sits in
+    // the trailing Ungrouped run; the created workspaces are empty groups).
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     // Grouping and ordering moved into the View options menu.
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'In one list' }).click()
     // Flat mode: the section label flips and the seeded session is a
-    // top-level row with no group headers above it.
+    // top-level row with no group containers above it.
     await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-workspace-id]').count(), { timeout: 5_000 }).toBe(0)
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v6'))).toContain('flat')
     // Persisted across reload; then restore grouped for inter-spec hygiene.
@@ -388,10 +436,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-workspace-id]').count(), { timeout: 15_000 }).toBe(0)
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'WorkSpace' }).click()
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => seedRow(page).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -463,24 +511,13 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   }, 60_000)
 
   /**
-   * Expand Ungrouped and return its seeded session row. The only visible child
-   * is the non-blank persisted Session; the blank Session created while
-   * adopting the Workspace stays hidden.
-   * @returns the session row locator, already present.
+   * The seeded Session's row, already present. Every seeded session is
+   * unattached, so it renders as one plain row in the trailing Ungrouped run;
+   * the blank Session created while adopting the Workspace stays hidden.
+   * @returns the session row locator.
    */
   async function seededSessionRow() {
-    const ungroupedRow = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
-    const ungroupedSection = ungroupedRow.locator('..')
-    // Initial-current auto-expansion can race this gesture; converge on
-    // expanded rather than assuming which update wins first.
-    await expect.poll(async () => {
-      if (await ungroupedRow.getAttribute('aria-expanded') !== 'true') {
-        await page.getByText('Ungrouped', { exact: true }).click()
-        await page.waitForTimeout(50)
-      }
-      return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
-    const row = ungroupedSection.locator('[role="treeitem"]').nth(1)
+    const row = seedRow(page)
     await row.waitFor({ timeout: 10_000 })
     return row
   }
@@ -552,23 +589,14 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it('archives the seeded session from its row menu, hiding it durably across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-archive'))
-    // The seeded session lives under Ungrouped (expanded by the hover-card
-    // test's gesture; converge again for order independence).
-    const ungroupedRow = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
-    const ungroupedSection = ungroupedRow.locator('..')
-    await expect.poll(async () => {
-      if (await ungroupedRow.getAttribute('aria-expanded') !== 'true') {
-        await page.getByText('Ungrouped', { exact: true }).click()
-        await page.waitForTimeout(50)
-      }
-      return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
-    // Anchor on session rows (the rows carrying a session actions button),
-    // not a positional index, and assert the single-stray assumption loudly
-    // so a fixture gaining a second stray fails here instead of archiving
-    // the wrong row. CSS attribute match, not getByRole: the button is
-    // display:none until its row hovers, and role queries skip hidden nodes.
-    const sessionRows = ungroupedSection.locator('[role="treeitem"]')
+    // Anchor on session rows (the rows carrying a session actions button)
+    // inside the Ungrouped run, not a positional index, and assert the
+    // single-stray assumption loudly so a fixture gaining a second stray fails
+    // here instead of archiving the wrong row. CSS attribute match, not
+    // getByRole: the button is display:none until its row hovers, and role
+    // queries skip hidden nodes.
+    const ungroupedRun = page.locator('[data-workspace-id=""]')
+    const sessionRows = ungroupedRun.locator('[role="treeitem"]')
       .filter({ has: page.locator('button[aria-label^="Session actions for "]') })
     await expect.poll(() => sessionRows.count(), { timeout: 10_000 }).toBe(1)
     const sessionRow = sessionRows.first()
@@ -577,10 +605,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // without a confirmation dialog (non-destructive: log + accounting stay).
     await clickHoverAction(sessionRow, `Session actions for ${rowTitle}`)
     await page.getByRole('menuitem', { name: 'Archive session' }).click()
-    // The row disappears on the archive-set echo; with no other visible
-    // stray, the whole Ungrouped bucket withdraws.
+    // The row disappears on the archive-set echo; with no other visible stray,
+    // the whole headerless run withdraws.
     await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => ungroupedRun.count(), { timeout: 10_000 }).toBe(0)
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
     expect([...scaffold.ctx.workspaceRegistry.archivedSessionIds]).toEqual([SessionId(SEED_ID)])
@@ -591,7 +619,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    // The archived row must not resurface (the Ungrouped bucket itself may
+    // The archived row must not resurface (the headerless run itself may
     // reappear if selection restore lands on another stray — not this test's
     // concern).
     expect(await page.getByText(rowTitle, { exact: true }).count()).toBe(0)

@@ -131,17 +131,9 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
 
-    const ungrouped = page.getByText('Ungrouped', { exact: true })
-    const ungroupedRow = ungrouped.locator('..').locator('..')
-    const ungroupedSection = ungroupedRow.locator('..')
-    await expect.poll(async () => {
-      if (await ungroupedRow.getAttribute('aria-expanded') !== 'true') {
-        await ungrouped.click()
-        await page.waitForTimeout(50)
-      }
-      return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
-    const seeded = ungroupedSection.locator('[role="treeitem"]').nth(1)
+    // The seeded Session is unattached, so it renders as one plain row in the
+    // trailing Ungrouped run instead of behind a bucket header.
+    const seeded = page.locator('[data-session-id="details-session-lifecycle-seed"]')
     await seeded.click()
     await page.getByText('DONE', { exact: true }).waitFor({ timeout: 15_000 })
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)

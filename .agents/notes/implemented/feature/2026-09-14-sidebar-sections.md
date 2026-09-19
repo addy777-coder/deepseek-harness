@@ -16,7 +16,7 @@ Section edits use the registry write queue and one global write. A durable layou
 
 The grouped sidebar commits only valid drops and cancels Escape or outside releases. Menu actions support moving and reordering without dragging. A rejected save retains the committed layout and exposes Retry. Independent Session order is manual; folding remains browser-local. Flat browsing and search show each Session once.
 
-[Workspace Sidebar Order and Folding](2026-08-11-workspace-sidebar-order-and-folding.md) retains the Workspace folding and per-account activity-order decisions. This note owns grouped-view drop cancellation and committed section/layout delivery.
+[Workspace Sidebar Order and Folding](2026-08-11-workspace-sidebar-order-and-folding.md) retains the Workspace folding and per-account activity-order decisions. [Headerless Ungrouped Run and Foldable Default Area](2026-09-18-headerless-ungrouped-run-and-default-area-folding.md) owns the default area's own fold and the Session rows outside every Workspace. This note owns grouped-view drop cancellation and committed section/layout delivery.
 
 ## Alternatives considered
 

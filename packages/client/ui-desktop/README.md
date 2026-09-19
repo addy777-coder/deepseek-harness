@@ -1,5 +1,5 @@
 ---
-description: "Desktop-only GUI presentation for DSH Desktop: integrated title bar, focused task windows, native notifications, preferences, and profile plugin management."
+description: "Desktop-only GUI presentation for DSH Desktop: integrated title bar, native notifications, preferences, and profile plugin management."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-desktop` adapts the shared GUI to Electron without replacing the conversation interface. It adds the DSH Desktop title bar and brand, keeps main-window navigation, gives focused task windows a conversation-only layout, and connects session state to native notifications. The main window also receives global-shortcut, launch-at-sign-in, transactional plugin-management settings, and the About page that drives the in-app update lifecycle. The package requires the fixed preload API supplied by `apps/desktop` and fails outside that shell.
+`dsh-client-ui-desktop` adapts the shared GUI to Electron without replacing the conversation interface. It adds the DSH Desktop title bar and brand, keeps main-window navigation and connects session state to native notifications. The main window also receives global-shortcut, launch-at-sign-in, transactional plugin-management settings, and the About page that drives the in-app update lifecycle. The package requires the fixed preload API supplied by `apps/desktop` and fails outside that shell.
 
 ## Table of Contents
 
@@ -37,11 +37,11 @@ Choose this plugin only for windows loaded by DSH Desktop. A browser profile use
 - name: '@deepseek-ai/dsh-client-ui-desktop'
 ```
 
-The plugin has no configuration fields. Its main/task distinction and initial Session id come from the main-process bootstrap payload.
+The plugin has no configuration fields. The main-process bootstrap supplies the installed application version.
 
 ### Window behavior
 
-The main window retains the sidebar and Settings. A task window hides both and binds its initial selection to one Session; the title-bar action returns to the main window. Completion transitions originate from the main window only, which prevents duplicate native notifications when several windows observe the same Session.
+The main window retains the sidebar and Settings. The title bar creates a new task; Session links and notification clicks select their Session in this same window. The preload delivers navigation after the Client subscribes, including links received during startup or reload. Completion transitions request native notifications.
 
 The About page keeps cancellation available while a download is pending and permits another download after cancellation completes. Update failures display the main process's diagnostic; preload request failures also appear on the page.
 
@@ -57,8 +57,8 @@ The node half is empty and exists only as a Loader row. The Client half fills sh
 
 | File | Role |
 |---|---|
-| [`src/client/index.ts`](src/client/index.ts) | Slot registration, main/task selection, shell intents, and notification transitions |
-| [`src/client/TitleBar.tsx`](src/client/TitleBar.tsx) | Integrated caption content and task-window navigation |
+| [`src/client/index.ts`](src/client/index.ts) | Slot registration, shell navigation intents, and notification transitions |
+| [`src/client/TitleBar.tsx`](src/client/TitleBar.tsx) | Integrated caption content and new-task action |
 | [`src/client/DesktopPreferences.tsx`](src/client/DesktopPreferences.tsx) | Shortcut and launch-at-sign-in settings |
 | [`src/client/PluginManager.tsx`](src/client/PluginManager.tsx) | Resolve, review, apply, and cancel plugin transactions |
 | [`src/client/AboutSection.tsx`](src/client/AboutSection.tsx) | Installed version, update check/download/install, and the releases link |
@@ -74,7 +74,7 @@ The node half is empty and exists only as a Loader row. The Client half fills sh
 
 - [Desktop user guide](../../../docs/user/guide/desktop.md) — window, shortcut, recovery, and plugin workflows.
 - [Desktop carrier bundle](../../bundle/desktop-app/README.md) — Host and Client rows that activate this plugin.
-- [UI layout](../ui-layout/README.md) — title-bar and focused-layout slots.
+- [UI layout](../ui-layout/README.md) — title-bar and panel slots.
 - [Desktop transport](../../desktop/transport/README.md) — Renderer-to-Host delivery.
 - [Desktop architecture decision](../../../.agents/notes/implemented/architecture/2026-09-03-windows-desktop-client.md) — main-process authority and security choices.
 
@@ -95,8 +95,6 @@ None; title bars, notifications, and settings do not change request prefixes.
 
 These constraints keep the first Desktop surface aligned with the Windows shell.
 
-- **Task windows do not survive application restart** — only the main window and the shared Session selection persist.
-- **Plugin management is main-window only** — focused task windows intentionally omit Settings and management operations.
 - **Notification delivery depends on Windows settings** — the application suppresses a notice for a focused Session window but cannot override system notification policy.
 - **Portable builds cannot enable launch at sign-in** — the setting is available only when the installed application owns the `dsh://` protocol registration.
 

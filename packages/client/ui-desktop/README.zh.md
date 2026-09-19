@@ -1,5 +1,5 @@
 ---
-description: "DSH Desktop 专用 GUI 呈现：融合标题栏、专注任务窗口、原生通知、偏好设置与 profile 插件管理。"
+description: "DSH Desktop 专用 GUI 呈现：融合标题栏、原生通知、偏好设置与 profile 插件管理。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-desktop` 在不替换对话界面的前提下，让共享 GUI 适配 Electron。它添加 DSH Desktop 标题栏与品牌，保留主窗口导航，为专注任务窗口提供仅对话布局，并把 Session 状态连接到原生通知。主窗口还会获得全局快捷键、登录后启动、事务式插件管理设置，以及驱动应用内更新生命周期的关于页面。本包要求 `apps/desktop` 提供固定 preload API，在该外壳之外会失败。
+`dsh-client-ui-desktop` 在不替换对话界面的前提下，让共享 GUI 适配 Electron。它添加 DSH Desktop 标题栏与品牌，保留主窗口导航，并把 Session 状态连接到原生通知。主窗口还会获得全局快捷键、登录后启动、事务式插件管理设置，以及驱动应用内更新生命周期的关于页面。本包要求 `apps/desktop` 提供固定 preload API，在该外壳之外会失败。
 
 ## 目录
 
@@ -37,11 +37,11 @@ Desktop 载体 bundle 会挂载两侧，并在 Client Loader 启动前提供 Ele
 - name: '@deepseek-ai/dsh-client-ui-desktop'
 ```
 
-本插件没有配置字段。主／任务窗口区别与初始 Session id 来自主进程 bootstrap payload。
+本插件没有配置字段。主进程 bootstrap 提供已安装应用的版本。
 
 ### 窗口行为
 
-主窗口保留侧栏与设置。任务窗口隐藏两者，并把初始选择绑定到一个 Session；标题栏操作可返回主窗口。完成状态转换只由主窗口发起，因此多个窗口观察同一 Session 时不会生成重复原生通知。
+主窗口保留侧栏与设置。标题栏可创建新任务；Session 链接与通知点击会在同一窗口选择对应 Session。preload 在 Client 订阅后投递导航，包括启动或重新加载期间收到的链接。完成状态转换会请求原生通知。
 
 关于页面在下载期间保持取消操作可用，取消完成后允许再次下载。更新失败会显示主进程的诊断；preload 请求失败也会显示在页面上。
 
@@ -57,8 +57,8 @@ node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享
 
 | 文件 | 职责 |
 |---|---|
-| [`src/client/index.ts`](src/client/index.ts) | slot 注册、主／任务选择、shell intent 与通知转换 |
-| [`src/client/TitleBar.tsx`](src/client/TitleBar.tsx) | 融合 caption 内容与任务窗口导航 |
+| [`src/client/index.ts`](src/client/index.ts) | slot 注册、shell 导航 intent 与通知转换 |
+| [`src/client/TitleBar.tsx`](src/client/TitleBar.tsx) | 融合 caption 内容与新建任务操作 |
 | [`src/client/DesktopPreferences.tsx`](src/client/DesktopPreferences.tsx) | 快捷键与登录后启动设置 |
 | [`src/client/PluginManager.tsx`](src/client/PluginManager.tsx) | 解析、审阅、应用与取消插件 transaction |
 | [`src/client/AboutSection.tsx`](src/client/AboutSection.tsx) | 已安装版本、更新检查／下载／安装与发行版链接 |
@@ -74,7 +74,7 @@ node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享
 
 - [Desktop 用户指南](../../../docs/user/guide/desktop.zh.md)——窗口、快捷键、恢复与插件工作流。
 - [Desktop 载体 bundle](../../bundle/desktop-app/README.zh.md)——启用本插件的 Host 与 Client 配置项。
-- [UI layout](../ui-layout/README.zh.md)——标题栏与专注布局 slot。
+- [UI layout](../ui-layout/README.zh.md)——标题栏与面板 slot。
 - [Desktop 传输](../../desktop/transport/README.zh.md)——Renderer 到 Host 的投递。
 - [Desktop 架构决策](../../../.agents/notes/implemented/architecture/2026-09-03-windows-desktop-client.zh.md)——主进程权限与安全选择。
 
@@ -95,8 +95,6 @@ node 半侧为空，只作为 Loader 配置项存在。Client 半侧填充共享
 
 这些约束使首版 Desktop 表层与 Windows 外壳保持一致。
 
-- **任务窗口不会跨应用重启保留**——只有主窗口和共享 Session 选择会持久化。
-- **插件管理仅在主窗口可用**——专注任务窗口有意省略设置与管理操作。
 - **通知投递依赖 Windows 设置**——应用会为已聚焦的 Session 窗口抑制通知，但不能覆盖系统通知策略。
 - **便携构建不能启用登录后启动**——仅当已安装应用拥有 `dsh://` 协议注册时才提供该设置。
 

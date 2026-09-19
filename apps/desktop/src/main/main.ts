@@ -17,8 +17,9 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron'
 import type { DesktopWindowId } from '@deepseek-ai/dsh-desktop-transport'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
-  DesktopPreferenceMutation, DesktopPreferences, DesktopWindowBootstrap,
+  DesktopIntent, DesktopPreferenceMutation, DesktopPreferences, DesktopWindowBootstrap,
 } from '../shared/contracts.ts'
 import { channels } from './channels.ts'
 import { deepLinkFromArgv, type DesktopDeepLink } from './deep-link.ts'
@@ -54,13 +55,13 @@ const localeCopy = {
 
 interface WindowRecord {
   readonly id: DesktopWindowId
-  readonly kind: 'main' | 'task'
   readonly window: BrowserWindow
   sessionId: string | undefined
+  intentReady: boolean
+  pendingIntent: DesktopIntent | undefined
 }
 
 let mainWindow: WindowRecord | undefined
-const taskWindows = new Map<string, WindowRecord>()
 const windowsByWebContents = new Map<number, WindowRecord>()
 let tray: Tray | undefined
 let hostReady = false
@@ -133,6 +134,7 @@ function registerWindow(record: WindowRecord): void {
   const webContentsId = record.window.webContents.id
   windowsByWebContents.set(webContentsId, record)
   configureNavigation(record.window)
+  record.window.webContents.on('did-start-loading', () => { record.intentReady = false })
   record.window.webContents.on('did-finish-load', () => {
     if (!hostReady || record.window.isDestroyed()) return
     try {
@@ -143,11 +145,7 @@ function registerWindow(record: WindowRecord): void {
   })
   record.window.on('closed', () => {
     windowsByWebContents.delete(webContentsId)
-    if (record.kind === 'task') {
-      for (const [sessionId, task] of taskWindows) {
-        if (task === record) taskWindows.delete(sessionId)
-      }
-    } else if (mainWindow === record) {
+    if (mainWindow === record) {
       mainWindow = undefined
     }
   })
@@ -177,9 +175,10 @@ async function createMainWindow(): Promise<WindowRecord> {
   })
   const record: WindowRecord = {
     id: randomUUID() as DesktopWindowId,
-    kind: 'main',
     window,
     sessionId: undefined,
+    intentReady: false,
+    pendingIntent: undefined,
   }
   mainWindow = record
   registerWindow(record)
@@ -193,61 +192,31 @@ async function createMainWindow(): Promise<WindowRecord> {
   return record
 }
 
-function createTaskWindow(sessionId: string): WindowRecord {
-  const existing = taskWindows.get(sessionId)
-  if (existing !== undefined && !existing.window.isDestroyed()) {
-    existing.window.show()
-    existing.window.focus()
-    return existing
-  }
-  const window = new BrowserWindow({
-    width: 960,
-    height: 760,
-    minWidth: 640,
-    minHeight: 480,
-    show: false,
-    title: PRODUCT_NAME,
-    icon: icon(),
-    titleBarStyle: process.platform === 'darwin' ? 'default' : 'hidden',
-    ...(process.platform === 'darwin' ? {} : {
-      titleBarOverlay: { color: '#00000000', symbolColor: '#6b7280', height: 40 },
-    }),
-    webPreferences: {
-      preload: preloadPath(),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webSecurity: true,
-    },
-  })
-  const record: WindowRecord = { id: randomUUID() as DesktopWindowId, kind: 'task', window, sessionId }
-  taskWindows.set(sessionId, record)
-  registerWindow(record)
-  window.once('ready-to-show', () => { if (!window.isDestroyed()) window.show() })
-  void window.loadFile(rendererPath())
-  return record
-}
-
-function focusMainWithNewTask(): void {
+function focusMain(intent?: DesktopIntent): void {
   const record = mainWindow
   if (record === undefined || record.window.isDestroyed()) return
   if (record.window.isMinimized()) record.window.restore()
   record.window.show()
   record.window.focus()
-  record.window.webContents.send(channels.intent, { type: 'new-task' })
+  if (intent === undefined) return
+  if (record.intentReady) record.window.webContents.send(channels.intent, intent)
+  else record.pendingIntent = intent
+}
+
+function focusMainWithNewTask(): void {
+  focusMain({ type: 'new-task' })
 }
 
 function routeDeepLink(link: DesktopDeepLink | undefined): void {
   if (link === undefined) {
-    mainWindow?.window.show()
-    mainWindow?.window.focus()
+    focusMain()
     return
   }
   if (link.kind === 'new') {
     focusMainWithNewTask()
     return
   }
-  createTaskWindow(link.sessionId).window.focus()
+  focusMain({ type: 'open-session', sessionId: link.sessionId as SessionId })
 }
 
 function routeSecondInstance(argv: readonly string[]): void {
@@ -372,22 +341,18 @@ function installIpcHandlers(): void {
     const record = recordForSender(event)
     return {
       windowId: record.id,
-      kind: record.kind,
       ...(record.sessionId === undefined ? {} : { sessionId: record.sessionId }),
       installed: app.isPackaged,
       version: app.getVersion(),
       ...(hostError === undefined ? {} : { hostError }),
     }
   })
-  ipcMain.handle(channels.openSession, (event, sessionId: unknown) => {
-    recordForSender(event)
-    if (!validSessionId(sessionId)) throw new TypeError('desktop shell: invalid Session id')
-    createTaskWindow(sessionId)
-  })
-  ipcMain.handle(channels.openMain, (event) => {
-    recordForSender(event)
-    mainWindow?.window.show()
-    mainWindow?.window.focus()
+  ipcMain.on(channels.intentReady, (event) => {
+    const record = recordForSender(event)
+    record.intentReady = true
+    const intent = record.pendingIntent
+    record.pendingIntent = undefined
+    if (intent !== undefined) record.window.webContents.send(channels.intent, intent)
   })
   ipcMain.handle(channels.newTask, (event) => {
     recordForSender(event)
@@ -398,37 +363,34 @@ function installIpcHandlers(): void {
     await restartHost()
   })
   ipcMain.handle(channels.pluginList, async (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop plugins: management is available in the main window only')
+    recordForSender(event)
     return await pluginManager.list()
   })
   ipcMain.handle(channels.pluginStage, async (event, request: unknown) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop plugins: management is available in the main window only')
+    recordForSender(event)
     return await pluginManager.stage(parseDesktopPluginRequest(request))
   })
   ipcMain.handle(channels.pluginApply, async (event, token: unknown) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main' || typeof token !== 'string' || token.length > 128) {
+    recordForSender(event)
+    if (typeof token !== 'string' || token.length > 128) {
       throw new TypeError('desktop plugins: invalid apply request')
     }
     await pluginManager.apply(token)
   })
   ipcMain.handle(channels.pluginCancel, async (event, token: unknown) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main' || typeof token !== 'string' || token.length > 128) {
+    recordForSender(event)
+    if (typeof token !== 'string' || token.length > 128) {
       throw new TypeError('desktop plugins: invalid cancel request')
     }
     await pluginManager.cancel(token)
   })
   ipcMain.handle(channels.preferencesGet, (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop preferences: available in the main window only')
+    recordForSender(event)
     return preferenceSnapshot()
   })
   ipcMain.handle(channels.preferencesSet, async (event, request: unknown) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main' || typeof request !== 'object' || request === null) {
+    recordForSender(event)
+    if (typeof request !== 'object' || request === null) {
       throw new TypeError('desktop preferences: invalid request')
     }
     const mutation = request as Record<string, unknown>
@@ -443,34 +405,28 @@ function installIpcHandlers(): void {
     throw new TypeError('desktop preferences: invalid mutation')
   })
   ipcMain.handle(channels.updateGet, (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     return updater.snapshot()
   })
   ipcMain.handle(channels.updateCheck, async (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     return await updater.check()
   })
   ipcMain.handle(channels.updateDownload, async (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     return await updater.download()
   })
   ipcMain.handle(channels.updateInstall, async (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     return await updater.install()
   })
   ipcMain.handle(channels.updateCancel, (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     updater.cancel()
     return updater.snapshot()
   })
   ipcMain.handle(channels.updateOpenReleases, (event) => {
-    const record = recordForSender(event)
-    if (record.kind !== 'main') throw new Error('desktop update: available in the main window only')
+    recordForSender(event)
     updater.openReleases()
   })
   ipcMain.on(channels.reportSelection, (event, sessionId: unknown) => {
@@ -478,8 +434,8 @@ function installIpcHandlers(): void {
     record.sessionId = sessionId === undefined ? undefined : validSessionId(sessionId) ? sessionId : record.sessionId
   })
   ipcMain.on(channels.notify, (event, value: unknown) => {
-    const source = recordForSender(event)
-    if (source.kind !== 'main' || typeof value !== 'object' || value === null) return
+    recordForSender(event)
+    if (typeof value !== 'object' || value === null) return
     const payload = value as Record<string, unknown>
     const sessionId = payload.sessionId
     const title = payload.title
@@ -488,7 +444,7 @@ function installIpcHandlers(): void {
       record.sessionId === sessionId && record.window.isFocused())
     if (visible || !Notification.isSupported()) return
     const notification = new Notification({ title: title || PRODUCT_NAME, body: copy().completed, icon: icon() })
-    notification.on('click', () => { createTaskWindow(sessionId).window.focus() })
+    notification.on('click', () => { focusMain({ type: 'open-session', sessionId: sessionId as SessionId }) })
     notification.show()
   })
 }

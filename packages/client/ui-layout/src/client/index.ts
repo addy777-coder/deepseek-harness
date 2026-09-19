@@ -109,12 +109,6 @@ export interface ConvOwnerProps {}
 /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Layout facts selected by the static application shell before Client boot. */
-export interface LayoutInjected {
-  /** Hide the navigation column for a focused desktop task window. */
-  focused?: boolean
-}
-
 /** Required services (cordis fiber inject — the loader passes all module exports as an object plugin). */
 export const inject = ['slots', 'theme', 'locale']
 
@@ -126,8 +120,6 @@ export const inject = ['slots', 'theme', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
-  const desktop = (globalThis as { __DSH_DESKTOP__?: { readonly kind?: unknown } }).__DSH_DESKTOP__
-  const focused = desktop?.kind === 'task'
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
     const disposeRegistration = ctx.slots.register({
@@ -147,7 +139,7 @@ export function apply(ctx: ClientContext): void {
       // conversation business actions belong to their registrants.
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
-        return { ...(focused ? { focused: true } : {}) } satisfies LayoutInjected
+        return {}
       },
     }, AppFrame)
     return () => {

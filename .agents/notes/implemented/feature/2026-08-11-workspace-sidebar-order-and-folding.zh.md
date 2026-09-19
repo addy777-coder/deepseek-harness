@@ -20,7 +20,7 @@ Workspace 注册表持有持久 `workspaceIds` 顺序，并提供采用 DOM `ins
 
 ### Session 折叠与视图顺序
 
-每个 Workspace 持久化一项浏览器本地打开状态：关闭表示零条 Session 行，打开表示最多五条非空白行，再把当前选中的空白“新会话”作为一条临时额外行。**展开其余**只在当前挂载期间显示仍被隐藏的条目；关闭整个 Workspace 会清除此临时展开，因此重新打开时恢复为有界折叠投影。只有在用户尚未为该 Workspace 存储明确状态时，当前 Session 所在分组才会自动打开。从 Workspace 行创建 Session 时会在启动 Session 前打开目标分组，使状态传播完成后新行保持可见。就绪的 Workspace 基线发生变化后，浏览器会移除基线中不存在 id 的展开状态、顺序和已观察时间戳记录，同时保留 Ungrouped 和单列表记账。
+每个 Workspace 持久化一项浏览器本地打开状态：关闭表示零条 Session 行，打开表示最多五条非空白行，再把当前选中的空白“新会话”作为一条临时额外行。**展开其余**只在当前挂载期间显示仍被隐藏的条目；关闭整个 Workspace 会清除此临时展开，因此重新打开时恢复为有界折叠投影。只有在用户尚未为该 Workspace 存储明确状态时，当前 Session 所在分组才会自动打开。从 Workspace 行创建 Session 时会在启动 Session 前打开目标分组，使状态传播完成后新行保持可见。就绪的 Workspace 基线发生变化后，浏览器会移除基线中不存在 id 的展开状态、顺序和已观察时间戳记录，同时保留 Ungrouped 和单列表的 Session 顺序记账；无标题的 Ungrouped 段不保留展开记录（见[无标题 Ungrouped 段与可折叠默认区域](2026-09-18-headerless-ungrouped-run-and-default-area-folding.zh.md)）。
 
 组合视图菜单在分组和单列表呈现中都提供**手动排序**和**最近更新**，每个记账各自持有一份浏览器本地持久顺序。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化；Ungrouped 和跨 Workspace 的单列表从最近更新时间顺序初始化，且没有 Host Session 记账。进入最近更新时会执行一次完整的时间排序；后续 user prompt 或 steer 会将对应 Session 置顶一次，拖拽仍可编辑所得顺序。返回手动排序会保留当前顺序，只停用后续活动置顶。真实 Workspace 在手动模式下的拖拽还会写入 Host Session 记账，而 Ungrouped 和单列表的拖拽与活动置顶保留在浏览器本地。单列表没有父级层次，因此不显示空的左侧状态槽；存在可见状态时仍保留该槽。
 
